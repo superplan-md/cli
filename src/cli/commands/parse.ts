@@ -19,6 +19,7 @@ interface ParseDiagnostic {
 interface ParsedTask {
   task_id: string;
   status: string;
+  priority: 'high' | 'medium' | 'low';
   depends_on_all: string[];
   depends_on_any: string[];
   description: string;
@@ -56,12 +57,14 @@ function parseStringArray(value: string): string[] {
 function parseFrontmatter(lines: string[]): {
   task_id: string;
   status: string;
+  priority: 'high' | 'medium' | 'low';
   depends_on_all: string[];
   depends_on_any: string[];
   contentStartIndex: number;
 } {
   let taskId = '';
   let status = '';
+  let priority: 'high' | 'medium' | 'low' = 'medium';
   let dependsOnAll: string[] = [];
   let dependsOnAny: string[] = [];
 
@@ -69,6 +72,7 @@ function parseFrontmatter(lines: string[]): {
     return {
       task_id: taskId,
       status,
+      priority,
       depends_on_all: dependsOnAll,
       depends_on_any: dependsOnAny,
       contentStartIndex: 0,
@@ -88,6 +92,10 @@ function parseFrontmatter(lines: string[]): {
         taskId = value;
       } else if (key === 'status') {
         status = value;
+      } else if (key === 'priority') {
+        if (value === 'high' || value === 'medium' || value === 'low') {
+          priority = value;
+        }
       } else if (key === 'depends_on_all') {
         dependsOnAll = parseStringArray(value);
       } else if (key === 'depends_on_any') {
@@ -101,6 +109,7 @@ function parseFrontmatter(lines: string[]): {
   return {
     task_id: taskId,
     status,
+    priority,
     depends_on_all: dependsOnAll,
     depends_on_any: dependsOnAny,
     contentStartIndex: index < lines.length ? index + 1 : lines.length,
@@ -243,6 +252,7 @@ function buildTask(lines: string[], filePath: string): { task: ParsedTask; diagn
   const task: ParsedTask = {
     task_id: frontmatter.task_id,
     status: frontmatter.status,
+    priority: frontmatter.priority,
     depends_on_all: frontmatter.depends_on_all,
     depends_on_any: frontmatter.depends_on_any,
     description,
@@ -339,7 +349,7 @@ async function resolveDefaultTaskFiles(changesDir: string): Promise<string[]> {
 }
 
 export async function parse(args: string[], _options: ParseOptions): Promise<ParseResult> {
-  const positionalArgs = args.filter(arg => arg !== '--json');
+  const positionalArgs = args.filter(arg => arg !== '--json' && arg !== '--quiet');
   const inputPath = positionalArgs[0] ?? 'changes';
   const resolvedInputPath = path.resolve(process.cwd(), inputPath);
 

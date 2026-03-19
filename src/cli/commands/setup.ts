@@ -16,6 +16,7 @@ type AgentScope = 'project' | 'global';
 
 export interface SetupOptions {
   json?: boolean;
+  quiet?: boolean;
 }
 
 export type SetupResult =
@@ -27,14 +28,42 @@ export type SetupResult =
         scope: InstallScope;
         agents: AgentEnvironment[];
         message?: string;
+        verified?: boolean;
       };
     }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
+
+interface VerificationIssue {
+  code: string;
+  message: string;
+}
 
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
     await fs.access(targetPath);
     return true;
+  } catch {
+    return false;
+  }
+}
+
+async function directoryHasAtLeastOneFile(dirPath: string): Promise<boolean> {
+  try {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const entryPath = path.join(dirPath, entry.name);
+
+      if (entry.isFile()) {
+        return true;
+      }
+
+      if (entry.isDirectory() && await directoryHasAtLeastOneFile(entryPath)) {
+        return true;
+      }
+    }
+
+    return false;
   } catch {
     return false;
   }
@@ -322,6 +351,89 @@ function getScopePaths(scope: InstallScope, globalConfigPath: string, globalSkil
   };
 }
 
+function getAgentVerificationPath(agent: AgentEnvironment): string {
+  if (agent.install_kind === 'skills_namespace') {
+    return path.join(agent.install_path, 'using-superplan', 'SKILL.md');
+  }
+
+  return agent.install_path;
+}
+
+async function verifySetup(scope: InstallScope, paths: {
+  globalConfigPath: string;
+  globalSkillsDir: string;
+  localConfigPath: string;
+  localSkillsDir: string;
+  localChangesDir: string;
+  homeAgents: AgentEnvironment[];
+  repoAgents: AgentEnvironment[];
+}): Promise<VerificationIssue[]> {
+  const issues: VerificationIssue[] = [];
+
+  if (scope === 'global' || scope === 'both') {
+    if (!await pathExists(paths.globalConfigPath)) {
+      issues.push({
+        code: 'GLOBAL_CONFIG_MISSING',
+        message: 'Global config was not installed correctly.',
+      });
+    }
+
+    const globalSkillsInstalled = await pathExists(paths.globalSkillsDir)
+      && await directoryHasAtLeastOneFile(paths.globalSkillsDir);
+    if (!globalSkillsInstalled) {
+      issues.push({
+        code: 'GLOBAL_SKILLS_MISSING',
+        message: 'Global skills were not installed correctly.',
+      });
+    }
+
+    for (const agent of paths.homeAgents) {
+      if (!await pathExists(getAgentVerificationPath(agent))) {
+        issues.push({
+          code: 'GLOBAL_AGENT_INSTALL_MISSING',
+          message: `Global ${agent.name} integration was not installed correctly.`,
+        });
+      }
+    }
+  }
+
+  if (scope === 'local' || scope === 'both') {
+    if (!await pathExists(paths.localConfigPath)) {
+      issues.push({
+        code: 'LOCAL_CONFIG_MISSING',
+        message: 'Local config was not installed correctly.',
+      });
+    }
+
+    const localSkillsInstalled = await pathExists(paths.localSkillsDir)
+      && await directoryHasAtLeastOneFile(paths.localSkillsDir);
+    if (!localSkillsInstalled) {
+      issues.push({
+        code: 'LOCAL_SKILLS_MISSING',
+        message: 'Local skills were not installed correctly.',
+      });
+    }
+
+    if (!await pathExists(paths.localChangesDir)) {
+      issues.push({
+        code: 'LOCAL_CHANGES_MISSING',
+        message: 'Local changes directory was not created correctly.',
+      });
+    }
+
+    for (const agent of paths.repoAgents) {
+      if (!await pathExists(getAgentVerificationPath(agent))) {
+        issues.push({
+          code: 'LOCAL_AGENT_INSTALL_MISSING',
+          message: `Local ${agent.name} integration was not installed correctly.`,
+        });
+      }
+    }
+  }
+
+  return issues;
+}
+
 function getNoAgentsMessage(scope: InstallScope, agentCount: number): string | undefined {
   if (agentCount > 0 || scope === 'skip') {
     return undefined;
@@ -340,7 +452,7 @@ function getNoAgentsMessage(scope: InstallScope, agentCount: number): string | u
 
 export async function setup(options: SetupOptions): Promise<SetupResult> {
   try {
-    if (options.json) {
+    if (options.json && !options.quiet) {
       return {
         ok: false,
         error: {
@@ -365,7 +477,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
     const localChangesDir = path.join(cwd, 'changes');
 
     const alreadySetup = await pathExists(globalConfigPath) || await pathExists(localSuperplanDir);
-    if (alreadySetup) {
+    if (alreadySetup && !options.quiet) {
       const reinstall = await confirm({ message: 'Superplan is already set up. Reinstall?' });
       if (!reinstall) {
         return {
@@ -379,15 +491,17 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
       }
     }
 
-    const scope = await select<InstallScope>({
-      message: 'Where do you want to install Superplan?',
-      choices: [
-        { name: 'Global (machine-level)', value: 'global' },
-        { name: 'Local (current repository)', value: 'local' },
-        { name: 'Both', value: 'both' },
-        { name: 'Skip', value: 'skip' },
-      ],
-    });
+    const scope = options.quiet
+      ? 'global'
+      : await select<InstallScope>({
+          message: 'Where do you want to install Superplan?',
+          choices: [
+            { name: 'Global (machine-level)', value: 'global' },
+            { name: 'Local (current repository)', value: 'local' },
+            { name: 'Both', value: 'both' },
+            { name: 'Skip', value: 'skip' },
+          ],
+        });
 
     if (scope === 'skip') {
       return {
@@ -400,7 +514,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
       };
     }
 
-    const proceed = await confirm({ message: 'Proceed with setup?' });
+    const proceed = options.quiet ? true : await confirm({ message: 'Proceed with setup?' });
     if (!proceed) {
       return {
         ok: false,
@@ -438,8 +552,32 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
       }
     }
 
+    const verificationIssues = await verifySetup(scope, {
+      globalConfigPath,
+      globalSkillsDir,
+      localConfigPath,
+      localSkillsDir,
+      localChangesDir,
+      homeAgents,
+      repoAgents,
+    });
+    if (verificationIssues.length > 0) {
+      return {
+        ok: false,
+        error: {
+          code: 'SETUP_VERIFICATION_FAILED',
+          message: verificationIssues.map(issue => issue.message).join(' '),
+          retryable: false,
+        },
+      };
+    }
+
     const installedAgents = [...homeAgents, ...repoAgents];
-    const message = getNoAgentsMessage(scope, installedAgents.length);
+    const noAgentsMessage = getNoAgentsMessage(scope, installedAgents.length);
+    const quietMessage = options.quiet ? ' Quiet mode used default scope: global.' : '';
+    const message = noAgentsMessage
+      ? `${noAgentsMessage} Setup verification passed.${quietMessage}`
+      : `Setup verification passed.${quietMessage}`;
 
     return {
       ok: true,
@@ -447,6 +585,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
         ...getScopePaths(scope, globalConfigPath, globalSkillsDir, localConfigPath, localSkillsDir),
         scope,
         agents: installedAgents,
+        verified: true,
         ...(message ? { message } : {}),
       },
     };
