@@ -4,30 +4,63 @@
 
 - "Implement this feature and keep the work organized."
 - "Set this repo up so future agent work is trackable."
+- "Continue the next ready task."
+- "Is T-003 actually done?"
+- "I want to use Superplan in this repo."
 
 ## Should Stay Out
 
 - "Explain this function."
 - "Summarize this paragraph."
+- "What does this regex mean?" with no durable workflow value
+- "Translate this message."
+- casual conversation with no repo work or durable value
 
 ## Ambiguous Boundary
 
 - "Fix this tiny typo."
 - "Look into this bug."
+- "Write a quick recommendation doc."
 
 ## Overlap Boundary
 
 - confirm it routes to `route-work` rather than choosing `brainstorming` or `systematic-debugging` as the entry lane
+- confirm "continue T-003" routes to `execute-task-graph`, not `route-work`
+- confirm "is this task done?" routes to `review-task-against-ac`, not `execute-task-graph`
 
 ## Handoff Check
 
-- if readiness is missing, handoff is `context-bootstrap-sync`
+- if setup or init is missing, the output is readiness guidance rather than a workflow handoff
+- if context is the missing readiness layer, handoff is `context-bootstrap-sync`
 - if engagement is warranted but depth is unknown, handoff is `route-work`
+- if work is already shaped and should continue, handoff is `execute-task-graph`
+- if the request is completion authority, handoff is `review-task-against-ac`
+
+## Readiness Matrix
+
+- CLI missing in a host that expects Superplan: give readiness guidance for installation or availability
+- setup missing but repo work requested: guide `superplan setup`
+- user starts with `superplan init` before setup: explain the shortcut order `superplan setup`, then `superplan init`
+- setup present but repo not initialized: guide `superplan init`
+- init present but serious brownfield context missing: route `context-bootstrap-sync`
+
+## Workspace Precedence
+
+- repo already has a working verification or orchestration harness: inspect it and defer to it instead of inventing a generic Superplan helper
+- repo already exposes a custom skill or script for the relevant workflow: Superplan should coordinate around it, not replace it
+
+## Metadata Check
+
+- description should stay trigger-only and should not summarize routing flow or inner workflow phases
+- metadata should remain sharp enough for auto-triggering in hosts that index only `name` and `description`
 
 ## Pressure Scenario
 
 - repo work request arrives in a partially initialized brownfield repo where Superplan may help, but a direct answer might still be enough if no durable value is created
+- request arrives inside a bounded execution subagent and the skill must skip top-level rerouting
+- repo instructions conflict with a default Superplan habit and the skill must honor repo instructions
+- repo has a strong user-owned workflow and the skill must supervise rather than seize control
 
 ## Pass Condition
 
-The skill stays brief, does not shape artifacts itself, distinguishes workflow skills from support skills, and routes cleanly to `route-work` or `context-bootstrap-sync` when appropriate.
+The skill stays brief, does not shape artifacts itself, distinguishes workflow skills from support skills, preserves outer entry discipline, keeps metadata trigger-only, handles CLI vs setup vs init vs context readiness distinctly, defers to user-owned workflows, and routes cleanly to the owning workflow phase.

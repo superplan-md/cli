@@ -17,12 +17,15 @@
 
 - confirm it shapes trajectory and artifacts without drifting into live execution
 - confirm structural uncertainty produces investigation or decision-gate work rather than fake certainty
+- confirm it distinguishes current CLI commands from future CLI hooks
+- confirm it does not claim `tasks.md` is currently parsed by the CLI
 
 ## Handoff Check
 
 - execution-ready frontier hands off to `execute-task-graph`
 - invalid depth discovery routes back to `route-work`
 - approval-sensitive shaping pauses for user review
+- current CLI validation path is named explicitly before execution handoff
 
 ## Pressure Scenario
 
@@ -30,4 +33,4 @@
 
 ## Pass Condition
 
-The skill produces a concrete trajectory, explicit frontier, verification plan, interruption points, re-shape triggers, and a clear execution handoff without forcing unnecessary ceremony.
+The skill produces a concrete trajectory, explicit frontier, verification plan, interruption points, re-shape triggers, an honest current-CLI validation path, and a clear execution handoff without forcing unnecessary ceremony.

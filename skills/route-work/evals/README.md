@@ -1,32 +1,26 @@
 # Route Work Evals
 
-## Should Trigger
+Use these scenarios to test whether `route-work` chooses the smallest useful depth without silently shaping or executing.
 
-- structured repo work where Superplan already engaged
+## Eval Set
 
-## Should Stay Out
+- `01-stay-out-explanation.md`
+- `02-direct-lightweight-task.md`
+- `03-task-bounded-bugfix.md`
+- `04-slice-bounded-multistep.md`
+- `05-program-multi-workstream.md`
+- `06-context-first-brownfield.md`
 
-- simple explanation requests
+## Pass Criteria
 
-## Ambiguous Boundary
+- chooses `stay_out`, `direct`, `task`, `slice`, `program`, or context-first for defensible reasons
+- notes the expected artifact pattern
+- hands off to `shape-work` or `context-bootstrap-sync` instead of absorbing adjacent responsibilities
+- preserves graph-aware language for `slice` and `program`
 
-- tiny but real edits where `direct` versus `task` is debatable
+## Failure Signs
 
-## Overlap Boundary
-
-- confirm it chooses depth and hands off to `shape-work` instead of silently shaping artifacts itself
-- confirm context gaps route to `context-bootstrap-sync` rather than being misread as a depth decision alone
-
-## Handoff Check
-
-- `stay_out` ends with no further Superplan action
-- structural engagement hands off to `shape-work`
-- context blocker hands off to `context-bootstrap-sync`
-
-## Pressure Scenario
-
-- brownfield work request sounds important, context is partial, and the system must avoid over-shaping into `program` when `task` or `slice` may be enough
-
-## Pass Condition
-
-The skill chooses the smallest useful depth, preserves stay-out behavior, handles brownfield context correctly, and does not silently absorb shaping.
+- over-shapes simple work into `slice` or `program`
+- under-shapes graph-shaped work into `task`
+- routes to context work because the repo is large rather than because context is the blocker
+- answers the scenario by authoring artifacts instead of routing

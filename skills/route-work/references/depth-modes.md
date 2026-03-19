@@ -1,34 +1,113 @@
 # Depth Modes
 
 Structure depth is a workflow choice.
+Choose the smallest mode that preserves trust, visibility, and correct downstream shaping.
 
 ## `stay_out`
 
-- direct answer
-- no durable artifact
-- use when structure adds no supervision value
+Use when:
+
+- the user wants a direct answer or explanation
+- no durable artifact or reusable context would help
+- the work is conversational or one-shot
+
+Examples:
+
+- "Explain this regex."
+- "Summarize this paragraph."
+- "What does this function do?"
+
+Result:
+
+- answer directly
+- create no Superplan artifacts
 
 ## `direct`
 
-- direct answer or one lightweight task
-- use when minimal tracking helps but fuller shaping would be ceremony
+Use when:
+
+- the work is tiny, obvious, and low-risk
+- a lightweight trace still helps visibility
+- fuller shaping would be ceremony
+
+Examples:
+
+- fix a typo in one docs file
+- make one obvious config rename
+- update one small copy string in the app
+
+Result:
+
+- usually create `tasks.md` plus one lightweight task contract
+- then hand off for immediate execution
 
 ## `task`
 
-- one bounded task contract
-- use when one reviewable, executable unit is enough
+Use when:
+
+- one bounded, reviewable unit is enough
+- the work needs a normal task contract and clear acceptance criteria
+- graph structure is not the main coordination problem
+
+Examples:
+
+- fix one contained bug in a single service
+- add one small feature with clear AC
+- refactor one isolated module without branching work
+
+Result:
+
+- `tasks.md`
+- one normal task contract
 
 ## `slice`
 
-- usually `plan.md` plus tasks
-- add specs only when target misunderstanding is the main risk
-- use for bounded multi-step work
+Use when:
+
+- the work is bounded but non-trivial
+- sequencing or decomposition matters
+- one workstream contains multiple meaningful steps
+
+Examples:
+
+- add a feature that needs UI, API, and one migration in a coordinated order
+- refactor a subsystem with a short execution path and a few dependent tasks
+- ship one bounded workflow that needs planning more than spec clarification
+
+Result:
+
+- usually `plan.md`
+- `tasks.md`
+- `tasks/T-*.md`
+- specs only when target misunderstanding is the bigger risk than sequencing
 
 ## `program`
 
-- graph-aware plan plus tasks, and specs where multiple truths need capture
-- use for large, ambiguous, or multi-workstream work
+Use when:
+
+- the work is broad, ambiguous, or multi-workstream
+- multiple interfaces or product truths need durable alignment
+- richer artifact structure is needed before execution stays trustworthy
+
+Examples:
+
+- redesign a major cross-surface workflow
+- multi-service architecture work with several dependency branches
+- large brownfield initiative where multiple teams or workstreams could diverge
+
+Result:
+
+- `plan.md`
+- `tasks.md`
+- `tasks/T-*.md`
+- one or more specs where durable clarification is needed
 
 ## Graph Reminder
 
-For `slice` and `program`, keep graph truth separate from per-task contract truth and runtime truth.
+For `slice` and `program`, preserve:
+
+- graph truth in the graph/index layer
+- task-contract truth in task files
+- runtime truth in execution state
+
+Do not flatten graph-shaped work into a pile of task files.

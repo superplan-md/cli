@@ -8,6 +8,9 @@ Record recurring shaping failures here.
 - uncertainty is repeatedly hidden behind overconfident plans
 - specs repeatedly drift into pseudocode
 - a repo pattern keeps misleading artifact selection
+- the product target `tasks.md` graph is repeatedly mistaken for current CLI-validated truth
+- `superplan doctor` keeps getting treated as artifact validation
+- future CLI commands keep getting referenced as if they already exist
 
 ## A Surprise Becomes A Gotcha When
 

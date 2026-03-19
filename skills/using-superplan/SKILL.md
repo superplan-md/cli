@@ -7,10 +7,39 @@ description: Use when Superplan is active in the current host or repo and the sy
 
 ## Overview
 
-Universal entrypoint for Superplan.
+Universal outer workflow layer for Superplan.
+Internal category: `workflow-control` / `execution-orchestration`.
 
-Keep this skill small.
-Its job is to decide whether Superplan should meaningfully participate, not to do downstream shaping, execution, or review.
+This skill replaces the entry discipline that `using-superpowers` used to provide.
+
+Keep it small.
+Its job is to decide whether Superplan should meaningfully participate, whether readiness is missing, and which workflow phase owns the next responsibility.
+
+## Subagent Guard
+
+If you were dispatched as a bounded subagent to execute, investigate, or verify a specific task, skip this skill.
+
+Do not rerun top-level Superplan entry routing from inside a task-owned subagent unless the assignment explicitly says to reevaluate engagement.
+
+## Instruction Priority
+
+Follow this order:
+
+1. direct user instructions and repo instructions such as `AGENTS.md`, `CLAUDE.md`, or equivalent host guidance
+2. `using-superplan` entry discipline
+3. generic default behavior
+
+If a repo instruction conflicts with a default Superplan habit, obey the user or repo instruction.
+
+## Workspace Precedence
+
+Inspect the repo first before suggesting generic Superplan helpers.
+
+Prefer the workspace's current harnesses, scripts, custom skills, and repo-native workflows when they already provide a better path.
+
+Use Superplan to coordinate and supervise that setup, not to replace it.
+
+Do not modify or outrank a working user-owned workflow unless the user explicitly asks.
 
 ## Trigger
 
@@ -20,6 +49,7 @@ Use when:
 - the request may involve meaningful repo work
 - the user asks for structured work, execution help, tracking, visibility, or durable context
 - the system must decide whether Superplan adds value before deeper workflow work begins
+- the request may refer to already shaped work that should resume or be reviewed rather than routed from scratch
 
 In practice, this is the default entry layer in Superplan mode.
 
@@ -30,6 +60,7 @@ Stay conversational when:
 - the user wants a simple explanation or answer
 - no durable artifact would help
 - no visibility or supervision value would be created
+- no reusable context would be captured
 - the request is casual, ephemeral, or already fully satisfied
 
 If Superplan stays out, answer directly and do not create workflow artifacts.
@@ -41,22 +72,42 @@ Inputs:
 - user request
 - current repository and working directory
 - whether Superplan appears active in this repo or host
+- whether setup, init, and durable context appear present
 - whether `.superplan/` exists
 - whether useful workspace context exists already
+- whether existing task or runtime artifacts suggest the work is already in a later workflow phase
 
 Assumptions:
 
 - users should not need to think about which skill comes next
-- the workspace's current scripts, harnesses, and custom skills stay authoritative
+- host environments may auto-trigger this skill
 - Superplan should improve the workflow, not hijack it
 
 ## Allowed Actions
 
 - inspect the repo briefly for readiness and context
+- inspect repo-native workflows, scripts, harnesses, and custom skills before suggesting generic Superplan helpers
+- inspect whether work is already shaped and should resume in a later phase
 - decide whether to stay out or continue
 - route to `route-work`
 - route to `context-bootstrap-sync` when missing context is the real blocker
+- route to `execute-task-graph` when tracked work is already shaped and should move forward
+- route to `review-task-against-ac` when the real request is completion authority
 - give brief readiness guidance when setup or initialization is missing
+
+## Entry Decision Order
+
+Apply this order:
+
+1. respect direct user and repo instructions
+2. honor the subagent guard and skip top-level routing inside bounded task subagents
+3. stay out if Superplan adds no durable structure, visibility, or reusable context
+4. inspect the repo's existing workflows and prefer them over new Superplan-specific helpers
+5. check readiness layers: CLI availability, setup, init, and context
+6. if the request targets already shaped work, resume the owning workflow phase directly
+7. if the request is new or the structure decision is still open, route to `route-work`
+
+Do not bounce already shaped work back through `route-work` just because the current message is short.
 
 ## Routing Model
 
@@ -87,23 +138,45 @@ Examples:
 - execution trouble routes toward the workflow path that may invoke `systematic-debugging`
 - completion claims route toward the workflow path that may invoke `verification-before-completion`
 
+Process-first rule:
+
+- choose the owning workflow phase first
+- only then let that phase invoke the right support discipline
+
+## Direct Resume Routes
+
+Route directly to the owning phase when the work is already past entry routing:
+
+- `execute-task-graph` for "continue", "pick the next task", "resume T-003", or other already-shaped execution work
+- `review-task-against-ac` for "is this task actually done?", "can this unblock?", or evidence-review requests
+- `context-bootstrap-sync` when serious brownfield work is blocked by missing or stale durable context
+- `route-work` when the engagement or depth choice is still unresolved
+
+See `references/routing-boundaries.md`.
+
 ## Forbidden Behavior
 
 - doing full planning here
 - authoring `specs`, `plan.md`, or task artifacts here
 - doing broad execution here
 - reviewing completion here
+- bypassing the owning workflow phase just because a support skill feels relevant
+- sending already shaped work back to `route-work` by reflex
 - forcing engagement when Superplan adds no value
 - turning every request into tracked work
 
 ## Readiness Rules
 
-- If Superplan is unavailable or clearly not initialized, give brief readiness guidance and stop.
-- If the repo is brownfield and context is clearly missing or stale, route to `context-bootstrap-sync` before deeper shaping.
+- If the `superplan` CLI itself appears missing, give brief installation or availability guidance and stop.
+- If the CLI exists but host or agent integration appears missing, guide `superplan setup` and stop.
+- If the repo is not initialized, give readiness guidance for `superplan init` and stop.
+- If the user starts from `superplan init` but setup is missing too, call out the shortcut order clearly: `superplan setup`, then `superplan init`.
+- If the repo is initialized but serious brownfield context is missing or stale, route to `context-bootstrap-sync`.
+- If the request targets existing tracked work, resume the owning later phase instead of forcing a fresh routing pass.
 - If the request is repo work but the structure decision is still open, route to `route-work`.
 - If a process discipline is needed, route first to the workflow skill that owns that phase rather than bypassing the workflow spine.
 
-See `references/readiness.md` and `references/routing-boundaries.md`.
+See `references/entry-discipline.md`, `references/readiness.md`, `references/routing-boundaries.md`, and `references/setup-config.md`.
 
 ## Decision And Gotcha Rules
 
@@ -113,16 +186,21 @@ Do not write tiny entrypoint observations there.
 
 If you discover a recurring trap in how entry routing goes wrong for this repo or host, record it in `.superplan/gotchas.md`.
 
-See `references/gotchas.md`.
+See `references/gotchas.md` and `references/memory-and-measurement.md`.
 
 ## Outputs
 
 One of:
 
 - direct answer with Superplan staying out
-- readiness guidance
+- readiness guidance with the concrete missing layer called out
+- installation or availability guidance for the `superplan` CLI
+- `superplan setup` guidance
+- `superplan init` guidance
 - route to `context-bootstrap-sync`
 - route to `route-work`
+- route to `execute-task-graph`
+- route to `review-task-against-ac`
 
 The output should be brief and legible.
 
@@ -132,14 +210,18 @@ Likely handoffs:
 
 - `route-work`
 - `context-bootstrap-sync`
+- `execute-task-graph`
+- `review-task-against-ac`
 - no further Superplan action
 
-## Future CLI Hooks
+## CLI Hooks
 
-- `superplan doctor --readiness`
+- `superplan doctor`
+- `superplan setup`
 - `superplan init`
-- `superplan status`
-- `superplan context status`
+- `superplan parse --json`
+- `superplan task next`
+- `superplan task show`
 
 ## Validation Cases
 
@@ -149,6 +231,8 @@ Should trigger:
 - "Help me execute this refactor with structure."
 - "I want to use Superplan in this repo."
 - any repo work request in a host configured for Superplan
+- "Continue the next ready task."
+- "Is T-003 actually done?"
 
 Should stay out:
 
@@ -156,6 +240,17 @@ Should stay out:
 - "Explain TypeScript generics."
 - "Summarize this paragraph."
 - casual conversation with no durable repo value
+
+Should route directly to execution:
+
+- "Continue T-003."
+- "Pick the next ready task."
+- "Resume the tracked work from where we left off."
+
+Should route directly to completion review:
+
+- "Review whether this task can be marked done."
+- "Check whether the evidence really satisfies the AC."
 
 Ambiguous:
 

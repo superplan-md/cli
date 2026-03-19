@@ -77,6 +77,31 @@ Canonical rule:
 
 Do not force all artifacts to exist for every request.
 
+## CLI Alignment Now
+
+Align shaping to the CLI that exists today, not only to future command ideas.
+
+Product target:
+
+- `changes/<slug>/tasks.md` is the human-readable graph/index surface
+- `changes/<slug>/tasks/T-xxx.md` are the executable task contracts
+
+Current CLI reality:
+
+- `superplan init` creates `.superplan/` and `changes/`
+- `superplan parse [path] --json` parses task contract files, not `tasks.md`
+- `superplan task list|show|next` computes current task validity and readiness from task files plus runtime state
+- `superplan doctor` checks setup and installation readiness, not shaped work correctness
+
+Therefore:
+
+- use `tasks.md` when graph visibility materially helps, but do not pretend the CLI validates it yet
+- keep current executable truth in task contract files the CLI can parse today
+- choose current CLI validation commands explicitly during shaping
+- distinguish current CLI commands from future CLI hooks
+
+See `references/cli-authoring-now.md`.
+
 ## Workspace Precedence Rule
 
 Treat the workspace's existing setup as the default operating surface.
@@ -91,12 +116,17 @@ Treat the workspace's existing setup as the default operating surface.
 - create one normal task for `task`
 - create `plan.md` plus tasks for `slice` when sequencing matters
 - create specs when misunderstanding the target is a bigger risk than sequencing
+- create `changes/<slug>/tasks.md` as a human graph/index when dependency visibility is useful
 - create a richer graph, plan, spec, and task set for `program` when the work genuinely needs all layers
 - classify sub-work as `parallel-safe`, `serial`, or `wait-for-clarity`
 - create investigation or uncertainty-reduction tasks
 - create explicit decision gates when user judgment or product tradeoff is the real blocker
 - define the initial executable frontier
 - choose the best available verification loop using repo resources first
+- choose the current CLI validation path:
+  - `superplan doctor` for install/setup readiness
+  - `superplan parse [path] --json` for task contract validity
+  - `superplan task show`, `superplan task list`, or `superplan task next` for current ready-frontier inspection
 - choose an autonomy class:
   - `autopilot`
   - `checkpointed autopilot`
@@ -113,6 +143,9 @@ Treat the workspace's existing setup as the default operating surface.
 - creating specs that do not materially help
 - turning specs into pseudocode by default
 - performing broad execution here
+- claiming the current CLI validates `tasks.md` graph truth
+- claiming `superplan doctor` validates shaped task artifacts
+- using future commands as if they already exist
 - pretending uncertain work is already cleanly decomposed
 - pushing all ambiguity downstream into execution
 - replacing a working repo-native workflow with a Superplan-specific one by default
@@ -136,6 +169,7 @@ Every shaped output should make the following explicit:
 - dependency logic
 - parallelization assessment
 - verification plan
+- current CLI validation path
 - interruption points
 - re-shape triggers
 - expected evidence for completion
@@ -168,13 +202,25 @@ Internal support-skill usage may include:
 - `brainstorming`
 - `writing-plans`
 
-## Future CLI Hooks
+Execution handoff should name the exact CLI checks that make the frontier legible now.
+
+## CLI Hooks
+
+Current CLI:
+
+- `superplan init`
+- `superplan doctor`
+- `superplan parse [path] --json`
+- `superplan task list`
+- `superplan task show [task_id]`
+- `superplan task next`
+
+Future CLI hooks:
 
 - `superplan change create`
 - `superplan task add`
 - `superplan plan init`
 - `superplan spec add`
-- `superplan doctor`
 
 ## Validation Cases
 
@@ -201,6 +247,12 @@ Should create investigation or decision-gate tasks:
 - debugging with unknown root cause
 - brownfield work where repo understanding is incomplete
 - product work where the user's preference is the real acceptance oracle
+
+Should align honestly to the current CLI:
+
+- `tasks.md` may be authored for graph visibility, but task-file validation must run through `superplan parse`
+- ready-frontier checks should name `superplan task show`, `superplan task list`, or `superplan task next`
+- shaping should not invent current commands for change or task creation
 
 Should prefer checkpointed autopilot:
 

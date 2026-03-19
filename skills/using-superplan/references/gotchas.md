@@ -5,7 +5,10 @@ Record workflow traps specific to entry and readiness.
 ## Add A Gotcha When
 
 - the host looks Superplan-ready but is missing a critical prerequisite
+- setup and init are repeatedly confused in this host or repo
 - the repo repeatedly gets over-routed into structure for trivial requests
+- already-shaped work keeps getting bounced back to `route-work`
+- bounded subagents keep rerunning top-level entry routing
 - missing brownfield context keeps causing bad downstream shaping
 
 ## A Surprise Becomes A Gotcha When
