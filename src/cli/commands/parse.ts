@@ -13,6 +13,7 @@ interface AcceptanceCriterion {
 interface ParseDiagnostic {
   code: string;
   message: string;
+  task_id?: string;
 }
 
 interface ParsedTask {
@@ -24,6 +25,8 @@ interface ParsedTask {
   completed_acceptance_criteria: number;
   progress_percent: number;
   effective_status: 'draft' | 'in_progress' | 'done';
+  is_valid: boolean;
+  issues: string[];
 }
 
 type ParseResult =
@@ -150,6 +153,7 @@ function computeEffectiveStatus(criteria: AcceptanceCriterion[]): 'draft' | 'in_
 function buildTaskDiagnostics(task: ParsedTask, filePath: string): ParseDiagnostic[] {
   const diagnostics: ParseDiagnostic[] = [];
   const fileLabel = path.relative(process.cwd(), filePath) || filePath;
+  const taskId = task.task_id || undefined;
 
   if (!task.task_id) {
     diagnostics.push({
@@ -158,17 +162,27 @@ function buildTaskDiagnostics(task: ParsedTask, filePath: string): ParseDiagnost
     });
   }
 
+  if (!['pending', 'in_progress', 'done'].includes(task.status)) {
+    diagnostics.push({
+      code: 'INVALID_STATUS_VALUE',
+      message: `Invalid status value in ${fileLabel}`,
+      task_id: taskId,
+    });
+  }
+
   if (!task.description.trim()) {
     diagnostics.push({
-      code: 'DESCRIPTION_EMPTY',
-      message: `Description is empty in ${fileLabel}`,
+      code: 'TASK_WITH_NO_DESCRIPTION',
+      message: `Task has no description in ${fileLabel}`,
+      task_id: taskId,
     });
   }
 
   if (task.acceptance_criteria.length === 0) {
     diagnostics.push({
-      code: 'ACCEPTANCE_CRITERIA_MISSING',
-      message: `Acceptance criteria missing in ${fileLabel}`,
+      code: 'EMPTY_ACCEPTANCE_CRITERIA',
+      message: `Task has empty acceptance criteria in ${fileLabel}`,
+      task_id: taskId,
     });
   }
 
@@ -195,11 +209,17 @@ function buildTask(lines: string[], filePath: string): { task: ParsedTask; diagn
     completed_acceptance_criteria: completedAcceptanceCriteria,
     progress_percent: progressPercent,
     effective_status: computeEffectiveStatus(acceptanceCriteria),
+    is_valid: true,
+    issues: [],
   };
+
+  const diagnostics = buildTaskDiagnostics(task, filePath);
+  task.issues = diagnostics.map(diagnostic => diagnostic.code);
+  task.is_valid = task.issues.length === 0;
 
   return {
     task,
-    diagnostics: buildTaskDiagnostics(task, filePath),
+    diagnostics,
   };
 }
 
@@ -294,6 +314,32 @@ export async function parse(args: string[], _options: ParseOptions): Promise<Par
           code: 'TASK_READ_FAILED',
           message: `Failed to read task file ${path.relative(process.cwd(), taskFile) || taskFile}`,
         });
+      }
+    }
+
+    const taskIdCounts = new Map<string, number>();
+    for (const task of tasks) {
+      if (!task.task_id) {
+        continue;
+      }
+
+      taskIdCounts.set(task.task_id, (taskIdCounts.get(task.task_id) ?? 0) + 1);
+    }
+
+    for (const task of tasks) {
+      if (!task.task_id || taskIdCounts.get(task.task_id) === 1) {
+        continue;
+      }
+
+      diagnostics.push({
+        code: 'DUPLICATE_TASK_ID',
+        message: `Duplicate task_id found: ${task.task_id}`,
+        task_id: task.task_id,
+      });
+
+      if (!task.issues.includes('DUPLICATE_TASK_ID')) {
+        task.issues.push('DUPLICATE_TASK_ID');
+        task.is_valid = false;
       }
     }
 
