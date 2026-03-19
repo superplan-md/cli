@@ -26,6 +26,7 @@ test('cli without a command shows the main Superplan command list', async () => 
   assert.match(result.stdout, /setup\s+Setup Superplan on this machine or in this repo/);
   assert.match(result.stdout, /doctor\s+Validate setup/);
   assert.match(result.stdout, /parse\s+Parse superplan artifacts/);
+  assert.match(result.stdout, /popup\s+Open the current task popup/);
   assert.match(result.stdout, /purge\s+Purge Superplan installation/);
   assert.match(result.stdout, /status\s+Show current task status summary/);
   assert.doesNotMatch(result.stdout, /server\s+Start a local task board server/);

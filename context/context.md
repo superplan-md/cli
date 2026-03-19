@@ -19,6 +19,7 @@ The current top-level command surface is:
 - `purge`
 - `doctor`
 - `parse`
+- `popup`
 - `run`
 - `status`
 - `task`
@@ -34,6 +35,7 @@ The `server` surface has been intentionally removed for now.
 - `src/cli/commands/remove.ts`: Removes or purges Superplan installation state. Local removal now treats `.superplan/changes/` as part of repo-local Superplan state.
 - `src/cli/commands/doctor.ts`: Validates setup state and, in deep mode, inspects parsed tasks plus runtime consistency.
 - `src/cli/commands/parse.ts`: Parses markdown task contracts, returns structured task data, and emits diagnostics.
+- `src/cli/commands/popup.ts`: Launches the macOS-only persistent task popup MVP and derives its display state from Superplan runtime truth.
 - `src/cli/commands/task.ts`: Implements task inspection, selection, readiness explanation, runtime transitions, and deterministic runtime repair.
 - `src/cli/commands/run.ts`: Starts or continues the next task through the task runtime loop.
 - `src/cli/commands/status.ts`: Returns active, ready, blocked, and feedback-needed task summaries.
@@ -87,6 +89,7 @@ Important runtime commands:
 
 - `superplan status --json`
 - `superplan run --json`
+- `superplan popup --json`
 - `superplan task show <task_id> --json`
 - `superplan task block <task_id> --reason "..."`
 - `superplan task request-feedback <task_id> --message "..."`
@@ -100,6 +103,7 @@ Task markdown should not be hand-edited to reflect runtime lifecycle changes.
 - `task --help` is intentionally narrower than the full internal task command surface. It emphasizes the common execution loop rather than every diagnostic subcommand.
 - `why` and `why-next` still exist as commands, but they are treated as diagnostic tools rather than default workflow steps.
 - The main CLI help should describe the full top-level Superplan command list.
+- `popup` is currently macOS-only and is implemented as a CLI-launched helper window rather than a full desktop app shell.
 
 ## Testing And Development
 

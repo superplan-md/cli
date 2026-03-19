@@ -37,6 +37,7 @@ Commands:
   purge       Purge Superplan installation
   doctor      Validate setup
   parse       Parse superplan artifacts
+  popup       Open the current task popup
   run         Run the task execution loop
   status      Show current task status summary
   task        Task operations

@@ -127,6 +127,7 @@ Current top-level commands:
 | `purge` | Remove Superplan state more aggressively |
 | `doctor` | Validate setup and installation health |
 | `parse` | Parse task contracts and return diagnostics |
+| `popup` | Open a persistent task popup on macOS |
 | `run` | Start or continue the next task |
 | `status` | Show active, ready, blocked, and feedback-needed tasks |
 | `task` | Inspect and transition task runtime state |
@@ -229,6 +230,7 @@ superplan parse --json
 
 - The main CLI help shows the top-level Superplan commands.
 - `superplan task --help` is intentionally narrower and emphasizes the core task loop.
+- `superplan popup` is currently a macOS-only MVP.
 - The current system is CLI-first and markdown-first; there is no active server surface right now.
 
 ## License

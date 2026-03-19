@@ -4,6 +4,7 @@ import { parse } from './commands/parse';
 import { init } from './commands/init';
 import { task } from './commands/task';
 import { purge, remove } from './commands/remove';
+import { popup } from './commands/popup';
 import { run } from './commands/run';
 import { status } from './commands/status';
 
@@ -52,6 +53,7 @@ export const router: Record<string, CommandHandler> = {
   purge: async (_args, options) => purge(options),
   doctor: async (args) => doctor(args),
   parse: async (args, options) => parse(args, options),
+  popup: async (args, options) => popup(args, options),
   run: async () => run(),
   status: async () => status(),
   task: async (args) => task(args),
