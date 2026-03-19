@@ -24,6 +24,19 @@ The current top-level command surface is:
 - `status`
 - `task`
 
+## Installation
+
+Supported install paths in the current repo are:
+
+- curl installer: `curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/dev/scripts/install.sh | sh`
+- curl installer with custom prefix: `curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/dev/scripts/install.sh | SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh`
+- npm from a local checkout after build: `npm install -g .`
+
+Important install note:
+
+- `scripts/install.sh` now defaults `SUPERPLAN_REF` to `dev`, which matches the current tracked branch for this repository.
+- The documented npm flow assumes a local checkout where dependencies are installed and `npm run build` has been run before `npm install -g .`.
+
 ## Project Structure
 
 - `src/cli/main.ts`: CLI entrypoint. Handles help, version flags, `--json`, `--quiet`, and dispatch into the router.

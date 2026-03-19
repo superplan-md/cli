@@ -28,7 +28,7 @@ That split makes it easier to reason about what work exists, what is happening n
 If you want a one-command installer, use:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/dev/scripts/install.sh | sh
 ```
 
 The installer:
@@ -47,10 +47,28 @@ Prerequisites:
 You can also install to a custom npm prefix:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/main/scripts/install.sh | SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh
+curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/dev/scripts/install.sh | SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh
 ```
 
-### Install from source
+### Install with npm from a local checkout
+
+If you prefer an npm-driven install from source, build the CLI and install it globally from the repo root:
+
+```bash
+git clone -b dev https://github.com/superplan-md/cli.git
+cd cli
+npm install
+npm run build
+npm install -g .
+```
+
+Then verify the CLI is available:
+
+```bash
+superplan --version
+```
+
+### Run from source without a global install
 
 #### 1. Install dependencies
 
