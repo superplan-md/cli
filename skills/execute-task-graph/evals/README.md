@@ -19,6 +19,7 @@
 - confirm strategic goal change routes up to `route-work`
 - confirm it uses current CLI commands for runtime inspection and transitions
 - confirm it does not pretend `review` is a persisted runtime state today
+- confirm graph-blocked and runtime-blocked are not collapsed into one vague state
 
 ## Handoff Check
 
@@ -26,10 +27,20 @@
 - structural drift hands off to `shape-work`
 - strategic drift hands off to `route-work`
 - blocked and feedback states route through current CLI transitions, not markdown edits
+- runtime corruption or conflicting active tasks route through `task fix` or explicit reset, not ad hoc mutation
 
 ## Pressure Scenario
 
 - two ready tasks, one verifier opportunity, one hidden dependency discovered mid-run
+
+## Scenario Files
+
+- `01-priority-next-selection.md`
+- `02-graph-vs-runtime-blocked.md`
+- `03-review-ready-without-review-state.md`
+- `04-structural-drift-reshape.md`
+- `05-strategic-drift-reroute.md`
+- `06-runtime-fix-conflict.md`
 
 ## Pass Condition
 

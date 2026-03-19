@@ -8,6 +8,10 @@ Record recurring execution traps here.
 - a repo workflow repeatedly invalidates parallel verification
 - runtime state keeps getting confused with graph readiness
 - the same blocker pattern wastes time across tasks
+- graph-blocked work keeps getting mislabeled as runtime-blocked
+- agents keep inventing a persisted `review` runtime state that does not exist yet
+- stale task contracts keep being used after structural drift
+- runtime conflicts keep being papered over instead of using `task fix` or explicit reset
 
 ## A Surprise Becomes A Gotcha When
 

@@ -28,8 +28,10 @@ Use when:
 
 - run the relevant checks before making success claims
 - prefer the repo's trusted scripts, custom skills, browser flows, and QA routines
+- if no existing trusted path proves the AC directly, derive the smallest credible verification loop that does
 - map verification to the actual acceptance criteria
 - distinguish strong proof from weak supporting evidence
+- use static analysis only as a constrained fallback when stronger proof is unavailable or disproportionate
 - surface stale, missing, or partial evidence honestly
 - hand results cleanly to `review-task-against-ac` when tracked task completion is at stake
 
@@ -39,6 +41,7 @@ Use when:
 - running checks that do not actually prove the acceptance criteria
 - treating stale evidence as current proof
 - using a Superplan-specific path when the repo already has a better trusted one
+- treating static analysis as full proof for runtime or user-visible behavior when stronger proof is realistically available
 
 ## Handoff
 

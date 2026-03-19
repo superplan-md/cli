@@ -12,6 +12,14 @@ Move graph-ready work forward without drifting into broad replanning.
 This is the main execution control surface once work has been shaped.
 It should behave more like a scheduler and control plane than a single linear worker.
 
+Execution should be primarily subagent-driven:
+
+- select ready work
+- dispatch bounded worker tasks
+- dispatch verification in parallel where safe
+- collect evidence and runtime signals
+- decide continue, block, ask, review, or re-shape
+
 ## Trigger
 
 Use when:
@@ -46,8 +54,11 @@ Inputs:
 Assumptions:
 
 - execution should operate on ready work, not constantly redesign the project
-- multiple ready tasks may be safe to handle in parallel
+- not every execution issue is a reason to reshape the graph
+- multiple ready tasks may be best handled by subagents in parallel
+- implementation and verification can sometimes run in parallel, but only when their contracts and write surfaces make that safe
 - trajectory will change during execution; the key question is whether the change is local, structural, or strategic
+- execution should route into existing workspace workflows rather than trying to replace them
 
 ## Graph, Contract, And Runtime Rule
 
@@ -88,6 +99,7 @@ Current CLI truth:
 - readiness is computed from parsed task contracts plus runtime state
 - runtime states currently include `in_progress`, `done`, `blocked`, and `needs_feedback`
 - runtime events are append-only in `.superplan/runtime/events.ndjson`
+- `superplan status` is the current narrow runtime summary surface even though `.superplan/runtime/current.json` is still only a product target
 - review is still a workflow handoff, not a dedicated CLI lifecycle state
 
 Therefore:
@@ -96,6 +108,29 @@ Therefore:
 - use `task why` and `task why-next` when the frontier is unclear
 - use `task events` when runtime history matters
 - keep "ready for AC review" as a workflow output even though the current CLI does not store `review` as runtime state
+
+## Lifecycle Semantics And Recovery
+
+Use the CLI as the transition gate for runtime state.
+
+- graph-blocked means dependencies are not yet satisfied
+- runtime-blocked means real execution trouble encountered while already working
+- `needs_feedback` means the task cannot proceed without a human decision
+- `ready for AC review` means execution work is complete enough for acceptance review, even though that state is not yet persisted by the CLI
+
+Strictness rules:
+
+- impossible transitions should fail hard
+- invalid or stale task contracts should block safe forward motion
+- do not recover by hand-editing runtime files or markdown execution state
+
+Recovery rules:
+
+- safe idempotent reruns are acceptable where the CLI already supports them
+- use `superplan task fix` for deterministic runtime repair
+- use `superplan task reset <task_id>` only as an explicit recovery action, not as the normal path
+
+See `references/runtime-state.md` and `references/lifecycle-semantics.md`.
 
 ## Trajectory Change Model
 
@@ -116,11 +151,14 @@ See `references/trajectory-changes.md`.
 ## Allowed Actions
 
 - choose graph-ready work
-- choose whether work should run serially or in parallel
+- choose whether work should run:
+  - serially
+  - in parallel by branch
+  - in parallel by worker/verifier split
 - dispatch bounded subagents for ready work
 - assign clear ownership for each subagent's task or write surface
 - dispatch verification in parallel where safe and useful
-- route through existing repo scripts, custom skills, or harnesses when those are the trusted path
+- dispatch subagents through existing repo scripts, custom skills, or harnesses when those are the trusted path
 - begin task execution
 - inspect the frontier with `superplan task current`, `superplan task next`, `superplan task why-next`, and `superplan status`
 - inspect specific readiness or blockage with `superplan task why <task_id>`
@@ -131,6 +169,7 @@ See `references/trajectory-changes.md`.
 - route toward review when work appears ready
 - collect evidence from subagents and merge it into runtime understanding
 - re-evaluate the current frontier after major task events
+- classify trajectory changes as local, structural, or strategic
 - invoke support disciplines for debugging, tests, and verification
 - append meaningful execution decisions to durable decision memory
 - append newly discovered traps to gotcha memory when likely to matter again
@@ -154,9 +193,13 @@ See `references/subagent-dispatch.md`.
 - continuing blindly when blocked or feedback is clearly needed
 - spawning subagents without bounded ownership
 - parallelizing work that shares unstable assumptions or tight write conflicts
+- letting subagents silently redefine the task graph
+- treating major structural drift as a local execution detail
+- verifying against stale task contracts after the trajectory has materially changed
 - ignoring `task why`, `task why-next`, or `task fix` when runtime or readiness is unclear
 - treating every discovered issue as a reason to reshape
 - replacing a working user-owned harness with a Superplan-specific flow during execution
+- rewriting or bypassing existing custom skills or scripts unless explicitly asked
 
 ## Outputs
 
@@ -261,6 +304,7 @@ Should dispatch subagents in parallel:
 
 - when multiple ready tasks have disjoint write surfaces
 - when verification can run independently of implementation without invalidating the result
+- when one blocker can be investigated while other safe work continues
 
 Should use the CLI control plane explicitly:
 
@@ -274,6 +318,7 @@ Should use the CLI control plane explicitly:
 Should avoid parallelism:
 
 - when tasks depend on unstable shared assumptions
+- when integration cost is likely to erase the speed benefit
 - when verification depends on a moving implementation target
 - when write conflicts are likely
 
@@ -285,13 +330,35 @@ Should not overclaim current CLI support:
 Should classify trajectory change as local:
 
 - implementation approach changes but task contract still holds
+- verifier finds narrow fixable issues inside the same task
 
 Should classify trajectory change as structural:
 
 - a new dependency changes sequencing
 - a task needs to split
+- a task contract no longer describes the real work
 
 Should classify trajectory change as strategic:
 
 - the user's expectations changed
+- the top-level goal changed
 - the engagement or depth decision now looks materially wrong
+
+Should block cleanly:
+
+- when dependencies are unmet
+- when a user decision is required
+- when external information is missing
+
+Should escalate instead of silently working around:
+
+- broken graph structure
+- malformed task contracts
+- conflicting acceptance criteria
+- major structural drift
+- repeated execution churn that indicates shaping is no longer valid
+
+Should not reshape casually:
+
+- just because implementation is difficult
+- just because the agent wants a different plan
