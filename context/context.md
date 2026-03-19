@@ -35,9 +35,9 @@ The `server` surface has been intentionally removed for now.
 - `src/cli/commands/remove.ts`: Removes or purges Superplan installation state. Local removal now treats `.superplan/changes/` as part of repo-local Superplan state.
 - `src/cli/commands/doctor.ts`: Validates setup state and, in deep mode, inspects parsed tasks plus runtime consistency.
 - `src/cli/commands/parse.ts`: Parses markdown task contracts, returns structured task data, and emits diagnostics.
-- `src/cli/commands/popup.ts`: Launches the macOS-only persistent task popup MVP and derives its display state from Superplan runtime truth.
+- `src/cli/commands/popup.ts`: Launches the macOS-only persistent task popup MVP, keeps a single popup process alive, and derives its display state from Superplan runtime truth.
 - `src/cli/commands/task.ts`: Implements task inspection, selection, readiness explanation, runtime transitions, and deterministic runtime repair.
-- `src/cli/commands/run.ts`: Starts or continues the next task through the task runtime loop.
+- `src/cli/commands/run.ts`: Starts or continues the next task through the task runtime loop and relies on the task pickup hook for popup launch behavior.
 - `src/cli/commands/status.ts`: Returns active, ready, blocked, and feedback-needed task summaries.
 - `skills/`: Bundled workflow skills copied into `dist/skills` during build.
 - `test/`: Node built-in test suite for CLI, parser, lifecycle, task, and removal behavior.
@@ -104,6 +104,8 @@ Task markdown should not be hand-edited to reflect runtime lifecycle changes.
 - `why` and `why-next` still exist as commands, but they are treated as diagnostic tools rather than default workflow steps.
 - The main CLI help should describe the full top-level Superplan command list.
 - `popup` is currently macOS-only and is implemented as a CLI-launched helper window rather than a full desktop app shell.
+- Superplan now auto-opens the popup on macOS when a task is actually picked up through `run`, `task start`, or `task resume`.
+- The popup command deduplicates itself so repeated `run` calls reuse the existing popup window instead of stacking duplicates.
 
 ## Testing And Development
 

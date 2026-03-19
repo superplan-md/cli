@@ -1,3 +1,4 @@
+import * as fs from 'fs/promises';
 import { spawn } from 'child_process';
 import * as path from 'path';
 import { status } from './status';
@@ -14,6 +15,18 @@ interface PopupDeps {
   nodeExecPath: string;
   cliEntryPath: string;
   spawnFn: typeof spawn;
+  isProcessAlive: (pid: number) => boolean;
+  relaunchIfRunning: boolean;
+  terminateProcess: (pid: number) => void;
+}
+
+interface PopupRuntimePaths {
+  statePath: string;
+}
+
+interface PopupState {
+  pid: number;
+  launched_at: string;
 }
 
 type PopupSnapshotResult =
@@ -41,7 +54,8 @@ export type PopupResult =
   | {
       ok: true;
       data: {
-        launched: true;
+        launched: boolean;
+        already_running: boolean;
         platform: 'darwin';
         state: 'active' | 'next_ready' | 'idle';
         task_id: string | null;
@@ -54,6 +68,49 @@ export type PopupResult =
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+}
+
+function getPopupRuntimePaths(cwd: string): PopupRuntimePaths {
+  const runtimeDir = path.join(cwd, '.superplan', 'runtime');
+  return {
+    statePath: path.join(runtimeDir, 'popup.json'),
+  };
+}
+
+async function readPopupState(statePath: string): Promise<PopupState | null> {
+  try {
+    const content = await fs.readFile(statePath, 'utf-8');
+    const parsed = JSON.parse(content) as Partial<PopupState>;
+
+    if (typeof parsed.pid !== 'number') {
+      return null;
+    }
+
+    return {
+      pid: parsed.pid,
+      launched_at: typeof parsed.launched_at === 'string' ? parsed.launched_at : new Date(0).toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function writePopupState(statePath: string, popupState: PopupState): Promise<void> {
+  await fs.mkdir(path.dirname(statePath), { recursive: true });
+  await fs.writeFile(statePath, JSON.stringify(popupState, null, 2), 'utf-8');
+}
+
+async function clearPopupState(statePath: string): Promise<void> {
+  await fs.rm(statePath, { force: true });
+}
+
+function defaultIsProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function getPopupSnapshot(): Promise<PopupSnapshotResult> {
@@ -141,7 +198,7 @@ const app = Application.currentApplication();
 app.includeStandardAdditions = true;
 
 const nsApp = $.NSApplication.sharedApplication;
-nsApp.setActivationPolicy($.NSApplicationActivationPolicyAccessory);
+nsApp.setActivationPolicy($.NSApplicationActivationPolicyRegular);
 
 const INITIAL_SNAPSHOT = ${JSON.stringify(initialSnapshot.data)};
 const STATUS_COMMAND = ${JSON.stringify(statusCommand)};
@@ -298,24 +355,24 @@ const popupHeight = 190;
 const popupX = visibleFrame.origin.x + visibleFrame.size.width - popupWidth - 20;
 const popupY = visibleFrame.origin.y + visibleFrame.size.height - popupHeight - 20;
 
-const styleMask = $.NSWindowStyleMaskTitled | $.NSWindowStyleMaskClosable;
-const panel = $.NSPanel.alloc.initWithContentRectStyleMaskBackingDefer(
+const styleMask = $.NSWindowStyleMaskTitled | $.NSWindowStyleMaskClosable | $.NSWindowStyleMaskMiniaturizable;
+const window = $.NSWindow.alloc.initWithContentRectStyleMaskBackingDefer(
   $.NSMakeRect(popupX, popupY, popupWidth, popupHeight),
   styleMask,
   $.NSBackingStoreBuffered,
   false
 );
 
-panel.setTitle('Superplan');
-panel.setFloatingPanel(true);
-panel.setLevel($.NSFloatingWindowLevel);
-panel.setHidesOnDeactivate(false);
-panel.setCollectionBehavior($.NSWindowCollectionBehaviorCanJoinAllSpaces);
-panel.setReleasedWhenClosed(false);
-panel.standardWindowButton($.NSWindowMiniaturizeButton).setHidden(true);
-panel.standardWindowButton($.NSWindowZoomButton).setHidden(true);
+window.setTitle('Superplan');
+window.setLevel($.NSFloatingWindowLevel);
+window.setHidesOnDeactivate(false);
+window.setCollectionBehavior($.NSWindowCollectionBehaviorCanJoinAllSpaces);
+window.setReleasedWhenClosed(false);
+window.standardWindowButton($.NSWindowCloseButton).setHidden(false);
+window.standardWindowButton($.NSWindowMiniaturizeButton).setHidden(false);
+window.standardWindowButton($.NSWindowZoomButton).setHidden(true);
 
-const contentView = panel.contentView;
+const contentView = window.contentView;
 const backgroundView = $.NSView.alloc.initWithFrame($.NSMakeRect(0, 0, popupWidth, popupHeight));
 backgroundView.setWantsLayer(true);
 backgroundView.layer.setBackgroundColor($.NSColor.windowBackgroundColor.CGColor);
@@ -351,9 +408,10 @@ const timer = $.NSTimer.scheduledTimerWithTimeIntervalRepeatsBlock(
 );
 
 $.NSRunLoop.currentRunLoop.addTimerForMode(timer, $.NSRunLoopCommonModes);
-panel.makeKeyAndOrderFront(null);
+window.makeKeyAndOrderFront(null);
+nsApp.activateIgnoringOtherApps(true);
 
-while (panel.isVisible()) {
+while (window.isVisible) {
   $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(0.2));
 }
 
@@ -372,6 +430,11 @@ export async function popup(
     nodeExecPath: process.execPath,
     cliEntryPath: process.argv[1] ?? path.join(process.cwd(), 'dist', 'cli', 'main.js'),
     spawnFn: spawn,
+    isProcessAlive: defaultIsProcessAlive,
+    relaunchIfRunning: false,
+    terminateProcess: (pid: number) => {
+      process.kill(pid);
+    },
     ...deps,
   };
 
@@ -391,6 +454,36 @@ export async function popup(
     return popupSnapshot;
   }
 
+  const popupRuntimePaths = getPopupRuntimePaths(runtimeDeps.cwd);
+  const existingPopupState = await readPopupState(popupRuntimePaths.statePath);
+
+  if (existingPopupState && runtimeDeps.isProcessAlive(existingPopupState.pid)) {
+    if (runtimeDeps.relaunchIfRunning) {
+      try {
+        runtimeDeps.terminateProcess(existingPopupState.pid);
+      } catch {
+        // Best-effort: if the old helper resists termination, still try to open a fresh popup.
+      }
+
+      await clearPopupState(popupRuntimePaths.statePath);
+    } else {
+      return {
+        ok: true,
+        data: {
+          launched: false,
+          already_running: true,
+          platform: 'darwin',
+          state: popupSnapshot.data.state,
+          task_id: popupSnapshot.data.task_id,
+        },
+      };
+    }
+  }
+
+  if (existingPopupState && !runtimeDeps.isProcessAlive(existingPopupState.pid)) {
+    await clearPopupState(popupRuntimePaths.statePath);
+  }
+
   const popupScript = buildMacOsPopupScript({
     cwd: runtimeDeps.cwd,
     nodeExecPath: runtimeDeps.nodeExecPath,
@@ -403,12 +496,20 @@ export async function popup(
     stdio: 'ignore',
   });
 
+  if (typeof child.pid === 'number') {
+    await writePopupState(popupRuntimePaths.statePath, {
+      pid: child.pid,
+      launched_at: new Date().toISOString(),
+    });
+  }
+
   child.unref();
 
   return {
     ok: true,
     data: {
       launched: true,
+      already_running: false,
       platform: 'darwin',
       state: popupSnapshot.data.state,
       task_id: popupSnapshot.data.task_id,

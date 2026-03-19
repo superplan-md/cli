@@ -1,4 +1,9 @@
-import { task } from './task';
+import { task, TaskCommandDeps } from './task';
+
+interface RunDeps {
+  taskFn: typeof task;
+  taskCommandDeps: TaskCommandDeps;
+}
 
 export type RunResult =
   | {
@@ -10,8 +15,14 @@ export type RunResult =
     }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
 
-export async function run(): Promise<RunResult> {
-  const nextTaskResult = await task(['next']);
+export async function run(deps: Partial<RunDeps> = {}): Promise<RunResult> {
+  const runtimeDeps: RunDeps = {
+    taskFn: task,
+    taskCommandDeps: {},
+    ...deps,
+  };
+
+  const nextTaskResult = await runtimeDeps.taskFn(['next'], runtimeDeps.taskCommandDeps);
   if (!nextTaskResult.ok) {
     return nextTaskResult;
   }
@@ -48,7 +59,7 @@ export async function run(): Promise<RunResult> {
   }
 
   if (nextTaskResult.data.status === 'ready') {
-    const startTaskResult = await task(['start', nextTaskResult.data.task_id]);
+    const startTaskResult = await runtimeDeps.taskFn(['start', nextTaskResult.data.task_id], runtimeDeps.taskCommandDeps);
     if (!startTaskResult.ok) {
       return startTaskResult;
     }
