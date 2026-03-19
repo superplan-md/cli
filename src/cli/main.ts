@@ -37,7 +37,7 @@ Commands:
   purge       Purge Superplan installation
   doctor      Validate setup
   parse       Parse superplan artifacts
-  popup       Open or refocus the current task popup
+  server      Start the local dummy server
   run         Run the task execution loop
   status      Show current task status summary
   task        Task operations

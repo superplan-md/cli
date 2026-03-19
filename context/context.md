@@ -19,12 +19,10 @@ The current top-level command surface is:
 - `purge`
 - `doctor`
 - `parse`
-- `popup`
+- `server`
 - `run`
 - `status`
 - `task`
-
-The `server` surface has been intentionally removed for now.
 
 ## Project Structure
 
@@ -35,9 +33,9 @@ The `server` surface has been intentionally removed for now.
 - `src/cli/commands/remove.ts`: Removes or purges Superplan installation state. Local removal now treats `.superplan/changes/` as part of repo-local Superplan state.
 - `src/cli/commands/doctor.ts`: Validates setup state and, in deep mode, inspects parsed tasks plus runtime consistency.
 - `src/cli/commands/parse.ts`: Parses markdown task contracts, returns structured task data, and emits diagnostics.
-- `src/cli/commands/popup.ts`: Launches the macOS-only persistent task popup MVP, keeps a single popup process alive, and derives its display state from Superplan runtime truth.
+- `src/cli/commands/server.ts`: Starts a small dependency-free Node.js HTTP server with dummy routes and lightweight request logging.
 - `src/cli/commands/task.ts`: Implements task inspection, selection, readiness explanation, runtime transitions, and deterministic runtime repair.
-- `src/cli/commands/run.ts`: Starts or continues the next task through the task runtime loop and relies on the task pickup hook for popup launch behavior.
+- `src/cli/commands/run.ts`: Starts or continues the next task through the task runtime loop.
 - `src/cli/commands/status.ts`: Returns active, ready, blocked, and feedback-needed task summaries.
 - `skills/`: Bundled workflow skills copied into `dist/skills` during build.
 - `test/`: Node built-in test suite for CLI, parser, lifecycle, task, and removal behavior.
@@ -89,7 +87,6 @@ Important runtime commands:
 
 - `superplan status --json`
 - `superplan run --json`
-- `superplan popup --json`
 - `superplan task show <task_id> --json`
 - `superplan task block <task_id> --reason "..."`
 - `superplan task request-feedback <task_id> --message "..."`
@@ -103,9 +100,7 @@ Task markdown should not be hand-edited to reflect runtime lifecycle changes.
 - `task --help` is intentionally narrower than the full internal task command surface. It emphasizes the common execution loop rather than every diagnostic subcommand.
 - `why` and `why-next` still exist as commands, but they are treated as diagnostic tools rather than default workflow steps.
 - The main CLI help should describe the full top-level Superplan command list.
-- `popup` is currently macOS-only and is implemented as a CLI-launched helper window rather than a full desktop app shell.
-- Superplan now auto-opens the popup on macOS when a task is actually picked up through `run`, `task start`, or `task resume`.
-- The popup command deduplicates itself so repeated `run` calls reuse the existing popup window instead of stacking duplicates.
+- `server` is currently a small dummy HTTP server intended for demos and local integration experiments, not a production API surface.
 
 ## Testing And Development
 
@@ -117,6 +112,5 @@ Task markdown should not be hand-edited to reflect runtime lifecycle changes.
 
 - The runtime/task display path still has a mismatch where `superplan task complete <task_id> --json` can succeed while `superplan task show <task_id> --json` may still display `in_progress`.
 - The setup banner test in `test/lifecycle.test.cjs` has been a recurring unrelated failure point when running the full suite.
-- If server functionality is revisited later, it should be reintroduced intentionally through the router, help text, and dedicated tests.
 
-*Updated to reflect the current CLI surface, `.superplan/changes` storage, and the removal of the server command.*
+*Updated to reflect the current CLI surface and `.superplan/changes` storage.*

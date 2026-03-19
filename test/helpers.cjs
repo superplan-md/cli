@@ -59,7 +59,6 @@ async function runCli(args, options = {}) {
       cwd: options.cwd ?? REPO_ROOT,
       env: {
         ...process.env,
-        SUPERPLAN_DISABLE_AUTO_POPUP: '1',
         ...(options.env ?? {}),
       },
       stdio: ['ignore', 'pipe', 'pipe'],

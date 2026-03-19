@@ -4,8 +4,8 @@ import { parse } from './commands/parse';
 import { init } from './commands/init';
 import { task } from './commands/task';
 import { purge, remove } from './commands/remove';
-import { popup } from './commands/popup';
 import { run } from './commands/run';
+import { server } from './commands/server';
 import { status } from './commands/status';
 
 type CommandOptions = {
@@ -20,21 +20,6 @@ type CommandResult = {
 };
 
 type CommandHandler = (args: string[], options: CommandOptions) => Promise<CommandResult>;
-
-async function openTaskPopupOnPickup(_taskId: string): Promise<void> {
-  if (process.env.SUPERPLAN_DISABLE_AUTO_POPUP === '1') {
-    return;
-  }
-
-  try {
-    const popupResult = await popup([], { json: true, quiet: true }, { relaunchIfRunning: true });
-    if (!popupResult.ok && popupResult.error.code !== 'PLATFORM_UNSUPPORTED') {
-      return;
-    }
-  } catch {
-    // The command should still succeed even if the popup helper cannot be shown.
-  }
-}
 
 function hasError(result: CommandResult): result is CommandResult & {
   error: { code: string; message: string; retryable: boolean };
@@ -68,16 +53,10 @@ export const router: Record<string, CommandHandler> = {
   purge: async (_args, options) => purge(options),
   doctor: async (args) => doctor(args),
   parse: async (args, options) => parse(args, options),
-  popup: async (args, options) => popup(args, options),
-  run: async () => run({
-    taskCommandDeps: {
-      onTaskPicked: openTaskPopupOnPickup,
-    },
-  }),
+  run: async () => run(),
+  server: async (args, options) => server(args, options),
   status: async () => status(),
-  task: async (args) => task(args, {
-    onTaskPicked: openTaskPopupOnPickup,
-  }),
+  task: async (args) => task(args),
 };
 
 export async function routeCommand(args: string[]) {

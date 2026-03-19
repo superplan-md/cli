@@ -127,7 +127,7 @@ Current top-level commands:
 | `purge` | Remove Superplan state more aggressively |
 | `doctor` | Validate setup and installation health |
 | `parse` | Parse task contracts and return diagnostics |
-| `popup` | Open or refocus the persistent task popup on macOS |
+| `server` | Start a small local dummy HTTP server for demos and integration experiments |
 | `run` | Start or continue the next task |
 | `status` | Show active, ready, blocked, and feedback-needed tasks |
 | `task` | Inspect and transition task runtime state |
@@ -213,6 +213,23 @@ node --test test/task.test.cjs
 node --test test/parse.test.cjs
 ```
 
+## Dummy Server
+
+For quick local HTTP testing, Superplan now includes a tiny dummy server:
+
+```bash
+superplan server --port 3000
+```
+
+Available routes:
+
+- `GET /`
+- `GET /health`
+- `GET /api/tasks`
+- `GET /api/echo?message=hello`
+
+The server startup payload is returned through the normal CLI result shape, and request logs are written separately so the JSON startup response stays parseable for automation.
+
 ## JSON-First Automation
 
 Most commands support `--json`, which makes the CLI usable as a shared control plane for agents and scripts.
@@ -226,15 +243,11 @@ superplan task show T-001 --json
 superplan parse --json
 ```
 
-On macOS, Superplan now opens the persistent task popup when a task is actually picked up through `run`, `task start`, or `task resume`. `superplan popup` remains available as a manual fallback if you want to reopen it after closing the window.
-
 ## Notes
 
 - The main CLI help shows the top-level Superplan commands.
 - `superplan task --help` is intentionally narrower and emphasizes the core task loop.
-- The popup surface is currently a macOS-only MVP.
-- Superplan auto-opens the popup on macOS when a task is picked up, and `superplan popup` can reopen it manually.
-- The current system is CLI-first and markdown-first; there is no active server surface right now.
+- The current system is CLI-first and markdown-first.
 
 ## License
 

@@ -3,12 +3,10 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 
 const {
-  loadDistModule,
   makeSandbox,
   parseCliJson,
   readJson,
   runCli,
-  withSandboxEnv,
   writeFile,
   writeJson,
 } = require('./helpers.cjs');
@@ -192,52 +190,6 @@ Lifecycle task
     'task.feedback_requested',
     'task.reset',
   ]);
-});
-
-test('task start and resume notify the pickup hook only when the task is actually picked', async () => {
-  const sandbox = await makeSandbox('superplan-task-pickup-hook-');
-
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-210.md'), `---
-task_id: T-210
-status: pending
-priority: high
----
-
-## Description
-Notify the pickup hook
-
-## Acceptance Criteria
-- [ ] A
-`);
-
-  const pickedTaskIds = [];
-  const { task } = loadDistModule('cli/commands/task.js');
-
-  await withSandboxEnv(sandbox, async () => task(['start', 'T-210'], {
-    onTaskPicked: taskId => {
-      pickedTaskIds.push(taskId);
-    },
-  }));
-
-  await withSandboxEnv(sandbox, async () => task(['start', 'T-210'], {
-    onTaskPicked: taskId => {
-      pickedTaskIds.push(taskId);
-    },
-  }));
-
-  await withSandboxEnv(sandbox, async () => task(['block', 'T-210', '--reason', 'Waiting'], {
-    onTaskPicked: taskId => {
-      pickedTaskIds.push(taskId);
-    },
-  }));
-
-  await withSandboxEnv(sandbox, async () => task(['resume', 'T-210'], {
-    onTaskPicked: taskId => {
-      pickedTaskIds.push(taskId);
-    },
-  }));
-
-  assert.deepEqual(pickedTaskIds, ['T-210', 'T-210']);
 });
 
 test('task complete succeeds only for fully satisfied acceptance criteria', async () => {

@@ -48,10 +48,6 @@ interface RuntimePaths {
   eventsPath: string;
 }
 
-export interface TaskCommandDeps {
-  onTaskPicked?: (taskId: string) => Promise<void> | void;
-}
-
 interface TaskFixAction {
   task_id: string;
   action: 'reset' | 'block';
@@ -196,18 +192,6 @@ async function appendEvent(
     type,
     task_id: taskId,
   })}\n`, 'utf-8');
-}
-
-async function notifyTaskPicked(taskId: string, deps: TaskCommandDeps): Promise<void> {
-  if (!deps.onTaskPicked) {
-    return;
-  }
-
-  try {
-    await deps.onTaskPicked(taskId);
-  } catch {
-    // Popup visibility should not invalidate the task lifecycle transition.
-  }
 }
 
 function getTaskInvalidError(): TaskErrorResult {
@@ -737,7 +721,7 @@ async function whyTask(taskId: string): Promise<TaskCommandResult> {
   };
 }
 
-async function startTask(taskId: string, deps: TaskCommandDeps = {}): Promise<TaskCommandResult> {
+async function startTask(taskId: string): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
   const invariantError = getInvariantError(runtimeState);
@@ -820,7 +804,6 @@ async function startTask(taskId: string, deps: TaskCommandDeps = {}): Promise<Ta
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.started', taskId);
-  await notifyTaskPicked(taskId, deps);
 
   return {
     ok: true,
@@ -831,7 +814,7 @@ async function startTask(taskId: string, deps: TaskCommandDeps = {}): Promise<Ta
   };
 }
 
-async function resumeTask(taskId: string, deps: TaskCommandDeps = {}): Promise<TaskCommandResult> {
+async function resumeTask(taskId: string): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
   const invariantError = getInvariantError(runtimeState);
@@ -922,7 +905,6 @@ async function resumeTask(taskId: string, deps: TaskCommandDeps = {}): Promise<T
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.resumed', taskId);
-  await notifyTaskPicked(taskId, deps);
 
   return {
     ok: true,
@@ -1169,7 +1151,7 @@ function getPositionalArgs(args: string[]): string[] {
   return positionalArgs;
 }
 
-export async function task(args: string[], deps: TaskCommandDeps = {}): Promise<TaskCommandResult> {
+export async function task(args: string[]): Promise<TaskCommandResult> {
   const positionalArgs = getPositionalArgs(args);
   const subcommand = positionalArgs[0];
   const taskId = positionalArgs[1];
@@ -1220,11 +1202,11 @@ export async function task(args: string[], deps: TaskCommandDeps = {}): Promise<
   }
 
   if (subcommand === 'start') {
-    return startTask(taskId, deps);
+    return startTask(taskId);
   }
 
   if (subcommand === 'resume') {
-    return resumeTask(taskId, deps);
+    return resumeTask(taskId);
   }
 
   if (subcommand === 'reset') {
