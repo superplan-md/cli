@@ -39,6 +39,36 @@ async function directoryHasAtLeastOneFile(dirPath: string): Promise<boolean> {
   }
 }
 
+function getProjectAgents(baseDir: string): { name: string; path: string; skillsPath: string }[] {
+  return [
+    {
+      name: 'claude',
+      path: path.join(baseDir, '.claude'),
+      skillsPath: path.join(baseDir, '.claude', 'skills', 'superplan'),
+    },
+    {
+      name: 'gemini',
+      path: path.join(baseDir, '.gemini'),
+      skillsPath: path.join(baseDir, '.gemini', 'skills', 'superplan'),
+    },
+    {
+      name: 'cursor',
+      path: path.join(baseDir, '.cursor'),
+      skillsPath: path.join(baseDir, '.cursor', 'skills', 'superplan'),
+    },
+    {
+      name: 'codex',
+      path: path.join(baseDir, '.codex'),
+      skillsPath: path.join(baseDir, '.codex', 'skills', 'superplan'),
+    },
+    {
+      name: 'opencode',
+      path: path.join(baseDir, '.opencode'),
+      skillsPath: path.join(baseDir, '.opencode', 'skills', 'superplan'),
+    },
+  ];
+}
+
 export async function doctor() {
   const issues: DoctorIssue[] = [];
   const homeDir = os.homedir();
@@ -62,12 +92,9 @@ export async function doctor() {
     });
   }
 
-  const agents = ['claude', 'gemini', 'cursor', 'vscode', 'codex'];
+  const agents = getProjectAgents(process.cwd());
   for (const agent of agents) {
-    const agentPath = path.join(process.cwd(), `.${agent}`);
-    const agentSkillsPath = path.join(agentPath, 'skills', 'superplan');
-
-    if (await pathExists(agentPath) && !await pathExists(agentSkillsPath)) {
+    if (await pathExists(agent.path) && !await pathExists(agent.skillsPath)) {
       issues.push({
         code: 'AGENT_SKILLS_MISSING',
         message: 'Superplan skills not installed for agent',

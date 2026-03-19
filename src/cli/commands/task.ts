@@ -87,16 +87,47 @@ async function writeRuntimeState(runtimeFilePath: string, runtimeState: RuntimeS
   await fs.writeFile(runtimeFilePath, JSON.stringify(runtimeState, null, 2), 'utf-8');
 }
 
+function applyRuntimeState(task: ParsedTask, runtimeState?: RuntimeTaskState): ParsedTask {
+  if (!runtimeState) {
+    return task;
+  }
+
+  if (runtimeState.status === 'in_progress') {
+    return {
+      ...task,
+      status: 'in_progress',
+      effective_status: 'in_progress',
+    };
+  }
+
+  if (runtimeState.status === 'completed') {
+    return {
+      ...task,
+      status: 'completed',
+      effective_status: 'done',
+    };
+  }
+
+  return {
+    ...task,
+    status: runtimeState.status,
+  };
+}
+
 async function showTasks(): Promise<TaskCommandResult> {
   const parsedTasksResult = await getParsedTasks();
   if (parsedTasksResult.error) {
     return parsedTasksResult.error;
   }
 
+  const runtimeFilePath = path.join(process.cwd(), '.superplan', 'runtime', 'tasks.json');
+  const runtimeState = await readRuntimeState(runtimeFilePath);
+  const tasks = parsedTasksResult.tasks!.map(taskItem => applyRuntimeState(taskItem, runtimeState.tasks[taskItem.task_id]));
+
   return {
     ok: true,
     data: {
-      tasks: parsedTasksResult.tasks!,
+      tasks,
     },
   };
 }
@@ -111,10 +142,14 @@ async function showTask(taskId?: string): Promise<TaskCommandResult> {
     return parsedTask.error;
   }
 
+  const runtimeFilePath = path.join(process.cwd(), '.superplan', 'runtime', 'tasks.json');
+  const runtimeState = await readRuntimeState(runtimeFilePath);
+  const taskWithRuntimeState = applyRuntimeState(parsedTask.task!, runtimeState.tasks[parsedTask.task!.task_id]);
+
   return {
     ok: true,
     data: {
-      task: parsedTask.task!,
+      task: taskWithRuntimeState,
     },
   };
 }

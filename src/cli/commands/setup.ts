@@ -6,9 +6,11 @@ import { confirm, select } from '@inquirer/prompts';
 interface AgentEnvironment {
   name: string;
   path: string;
+  skills_path: string;
 }
 
 type InstallScope = 'global' | 'local' | 'both' | 'skip';
+type AgentScope = 'project' | 'global';
 
 export interface SetupOptions {
   json?: boolean;
@@ -54,17 +56,77 @@ async function installSkills(sourceDir: string, targetDir: string): Promise<void
   }
 }
 
-async function detectAgents(baseDir: string): Promise<AgentEnvironment[]> {
-  const supportedAgents = ['claude', 'gemini', 'cursor', 'vscode', 'codex'];
+function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironment[] {
+  if (scope === 'project') {
+    return [
+      {
+        name: 'claude',
+        path: path.join(baseDir, '.claude'),
+        skills_path: path.join(baseDir, '.claude', 'skills', 'superplan'),
+      },
+      {
+        name: 'gemini',
+        path: path.join(baseDir, '.gemini'),
+        skills_path: path.join(baseDir, '.gemini', 'skills', 'superplan'),
+      },
+      {
+        name: 'cursor',
+        path: path.join(baseDir, '.cursor'),
+        skills_path: path.join(baseDir, '.cursor', 'skills', 'superplan'),
+      },
+      {
+        name: 'codex',
+        path: path.join(baseDir, '.codex'),
+        skills_path: path.join(baseDir, '.codex', 'skills', 'superplan'),
+      },
+      {
+        name: 'opencode',
+        path: path.join(baseDir, '.opencode'),
+        skills_path: path.join(baseDir, '.opencode', 'skills', 'superplan'),
+      },
+    ];
+  }
+
+  return [
+    {
+      name: 'claude',
+      path: path.join(baseDir, '.claude'),
+      skills_path: path.join(baseDir, '.claude', 'skills', 'superplan'),
+    },
+    {
+      name: 'gemini',
+      path: path.join(baseDir, '.gemini'),
+      skills_path: path.join(baseDir, '.gemini', 'skills', 'superplan'),
+    },
+    {
+      name: 'cursor',
+      path: path.join(baseDir, '.cursor'),
+      skills_path: path.join(baseDir, '.cursor', 'skills', 'superplan'),
+    },
+    {
+      name: 'codex',
+      path: path.join(baseDir, '.codex'),
+      skills_path: path.join(baseDir, '.codex', 'skills', 'superplan'),
+    },
+    {
+      name: 'opencode',
+      path: path.join(baseDir, '.config', 'opencode'),
+      skills_path: path.join(baseDir, '.config', 'opencode', 'skills', 'superplan'),
+    },
+  ];
+}
+
+async function detectAgents(baseDir: string, scope: AgentScope): Promise<AgentEnvironment[]> {
   const detectedAgents: AgentEnvironment[] = [];
+  const supportedAgents = getAgentDefinitions(baseDir, scope);
 
   for (const agent of supportedAgents) {
-    const agentDir = path.join(baseDir, `.${agent}`);
+    const agentDir = agent.path;
 
     try {
       const stat = await fs.stat(agentDir);
       if (stat.isDirectory()) {
-        detectedAgents.push({ name: agent, path: agentDir });
+        detectedAgents.push(agent);
       }
     } catch {
       // Agent directory doesn't exist
@@ -76,10 +138,10 @@ async function detectAgents(baseDir: string): Promise<AgentEnvironment[]> {
 
 async function installAgentSkills(skillsDir: string, agents: AgentEnvironment[]): Promise<void> {
   for (const agent of agents) {
-    const targetDir = path.join(agent.path, 'skills', 'superplan');
+    const targetDir = agent.skills_path;
 
     await fs.rm(targetDir, { recursive: true, force: true });
-    await fs.mkdir(path.join(agent.path, 'skills'), { recursive: true });
+    await fs.mkdir(path.dirname(targetDir), { recursive: true });
 
     try {
       await fs.symlink(skillsDir, targetDir, 'dir');
@@ -255,10 +317,10 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
     }
 
     const repoAgents = scope === 'local' || scope === 'both'
-      ? await detectAgents(cwd)
+      ? await detectAgents(cwd, 'project')
       : [];
     const homeAgents = scope === 'global' || scope === 'both'
-      ? await detectAgents(homeDir)
+      ? await detectAgents(homeDir, 'global')
       : [];
 
     if (scope === 'global' || scope === 'both') {
