@@ -21,6 +21,7 @@ interface ParsedTask {
 interface RuntimeTaskState {
   status: string;
   started_at?: string;
+  completed_at?: string;
 }
 
 interface RuntimeState {
@@ -31,6 +32,7 @@ type TaskCommandResult =
   | { ok: true; data: { task: ParsedTask } }
   | { ok: true; data: { tasks: ParsedTask[] } }
   | { ok: true; data: { task_id: string; status: 'in_progress' } }
+  | { ok: true; data: { task_id: string; status: 'done' } }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
 
 function isTaskInvalid(task: ParsedTask): boolean {
@@ -100,10 +102,10 @@ function applyRuntimeState(task: ParsedTask, runtimeState?: RuntimeTaskState): P
     };
   }
 
-  if (runtimeState.status === 'completed') {
+  if (runtimeState.status === 'done') {
     return {
       ...task,
-      status: 'completed',
+      status: 'done',
       effective_status: 'done',
     };
   }
@@ -176,7 +178,7 @@ async function startTask(taskId: string): Promise<TaskCommandResult> {
   const runtimeState = await readRuntimeState(runtimeFilePath);
   const existingTaskState = runtimeState.tasks[taskId];
 
-  if (matchedTask.effective_status === 'done' || existingTaskState?.status === 'completed') {
+  if (matchedTask.effective_status === 'done' || existingTaskState?.status === 'done') {
     return {
       ok: false,
       error: {
@@ -203,16 +205,66 @@ async function startTask(taskId: string): Promise<TaskCommandResult> {
   };
 }
 
+async function completeTask(taskId: string): Promise<TaskCommandResult> {
+  const parsedTask = await getParsedTask(taskId);
+  if (parsedTask.error) {
+    return parsedTask.error;
+  }
+
+  const matchedTask = parsedTask.task!;
+  const runtimeFilePath = path.join(process.cwd(), '.superplan', 'runtime', 'tasks.json');
+  const runtimeState = await readRuntimeState(runtimeFilePath);
+  const existingTaskState = runtimeState.tasks[taskId];
+
+  if (existingTaskState?.status !== 'in_progress') {
+    return {
+      ok: false,
+      error: {
+        code: 'TASK_NOT_STARTED',
+        message: 'Task has not been started',
+        retryable: false,
+      },
+    };
+  }
+
+  if (matchedTask.completed_acceptance_criteria !== matchedTask.total_acceptance_criteria) {
+    return {
+      ok: false,
+      error: {
+        code: 'TASK_NOT_COMPLETE',
+        message: 'Task is not complete',
+        retryable: false,
+      },
+    };
+  }
+
+  runtimeState.tasks[taskId] = {
+    ...existingTaskState,
+    status: 'done',
+    completed_at: new Date().toISOString(),
+  };
+
+  await writeRuntimeState(runtimeFilePath, runtimeState);
+
+  return {
+    ok: true,
+    data: {
+      task_id: taskId,
+      status: 'done',
+    },
+  };
+}
+
 export async function task(args: string[]): Promise<TaskCommandResult> {
   const subcommand = args[0];
   const taskId = args[1];
 
-  if (subcommand !== 'show' && subcommand !== 'start') {
+  if (subcommand !== 'show' && subcommand !== 'start' && subcommand !== 'complete') {
     return {
       ok: false,
       error: {
         code: 'INVALID_TASK_COMMAND',
-        message: 'Usage: superplan task show [task_id] | superplan task start <task_id>',
+        message: 'Usage: superplan task show [task_id] | superplan task start <task_id> | superplan task complete <task_id>',
         retryable: false,
       },
     };
@@ -227,11 +279,15 @@ export async function task(args: string[]): Promise<TaskCommandResult> {
       ok: false,
       error: {
         code: 'INVALID_TASK_COMMAND',
-        message: 'Usage: superplan task show [task_id] | superplan task start <task_id>',
+        message: 'Usage: superplan task show [task_id] | superplan task start <task_id> | superplan task complete <task_id>',
         retryable: false,
       },
     };
   }
 
-  return startTask(taskId);
+  if (subcommand === 'start') {
+    return startTask(taskId);
+  }
+
+  return completeTask(taskId);
 }

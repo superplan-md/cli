@@ -6,7 +6,8 @@ import { confirm, select } from '@inquirer/prompts';
 interface AgentEnvironment {
   name: string;
   path: string;
-  skills_path: string;
+  install_path: string;
+  install_kind: 'markdown_command' | 'toml_command' | 'skills_directory';
 }
 
 type InstallScope = 'global' | 'local' | 'both' | 'skip';
@@ -56,33 +57,70 @@ async function installSkills(sourceDir: string, targetDir: string): Promise<void
   }
 }
 
+function getMarkdownCommandContent(): string {
+  return `---
+description: Use Superplan for task parsing and task execution workflows
+---
+
+Use the Superplan CLI in this repository to inspect and manage work.
+
+Common commands:
+- \`superplan parse\`
+- \`superplan task show\`
+- \`superplan task start <task_id>\`
+- \`superplan task complete <task_id>\`
+
+When working in this repo, prefer the Superplan CLI as the source of truth for task state.`;
+}
+
+function getGeminiCommandContent(): string {
+  return `description = "Use Superplan for task parsing and task execution workflows"
+
+prompt = """
+Use the Superplan CLI in this repository to inspect and manage work.
+
+Common commands:
+- \`superplan parse\`
+- \`superplan task show\`
+- \`superplan task start <task_id>\`
+- \`superplan task complete <task_id>\`
+
+When working in this repo, prefer the Superplan CLI as the source of truth for task state.
+"""`;
+}
+
 function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironment[] {
   if (scope === 'project') {
     return [
       {
         name: 'claude',
         path: path.join(baseDir, '.claude'),
-        skills_path: path.join(baseDir, '.claude', 'skills', 'superplan'),
+        install_path: path.join(baseDir, '.claude', 'commands', 'superplan.md'),
+        install_kind: 'markdown_command',
       },
       {
         name: 'gemini',
         path: path.join(baseDir, '.gemini'),
-        skills_path: path.join(baseDir, '.gemini', 'skills', 'superplan'),
+        install_path: path.join(baseDir, '.gemini', 'commands', 'superplan.toml'),
+        install_kind: 'toml_command',
       },
       {
         name: 'cursor',
         path: path.join(baseDir, '.cursor'),
-        skills_path: path.join(baseDir, '.cursor', 'skills', 'superplan'),
+        install_path: path.join(baseDir, '.cursor', 'commands', 'superplan.md'),
+        install_kind: 'markdown_command',
       },
       {
         name: 'codex',
         path: path.join(baseDir, '.codex'),
-        skills_path: path.join(baseDir, '.codex', 'skills', 'superplan'),
+        install_path: path.join(baseDir, '.codex', 'skills', 'superplan'),
+        install_kind: 'skills_directory',
       },
       {
         name: 'opencode',
         path: path.join(baseDir, '.opencode'),
-        skills_path: path.join(baseDir, '.opencode', 'skills', 'superplan'),
+        install_path: path.join(baseDir, '.opencode', 'commands', 'superplan.md'),
+        install_kind: 'markdown_command',
       },
     ];
   }
@@ -91,27 +129,32 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
     {
       name: 'claude',
       path: path.join(baseDir, '.claude'),
-      skills_path: path.join(baseDir, '.claude', 'skills', 'superplan'),
+      install_path: path.join(baseDir, '.claude', 'commands', 'superplan.md'),
+      install_kind: 'markdown_command',
     },
     {
       name: 'gemini',
       path: path.join(baseDir, '.gemini'),
-      skills_path: path.join(baseDir, '.gemini', 'skills', 'superplan'),
+      install_path: path.join(baseDir, '.gemini', 'commands', 'superplan.toml'),
+      install_kind: 'toml_command',
     },
     {
       name: 'cursor',
       path: path.join(baseDir, '.cursor'),
-      skills_path: path.join(baseDir, '.cursor', 'skills', 'superplan'),
+      install_path: path.join(baseDir, '.cursor', 'commands', 'superplan.md'),
+      install_kind: 'markdown_command',
     },
     {
       name: 'codex',
       path: path.join(baseDir, '.codex'),
-      skills_path: path.join(baseDir, '.codex', 'skills', 'superplan'),
+      install_path: path.join(baseDir, '.codex', 'skills', 'superplan'),
+      install_kind: 'skills_directory',
     },
     {
       name: 'opencode',
       path: path.join(baseDir, '.config', 'opencode'),
-      skills_path: path.join(baseDir, '.config', 'opencode', 'skills', 'superplan'),
+      install_path: path.join(baseDir, '.config', 'opencode', 'commands', 'superplan.md'),
+      install_kind: 'markdown_command',
     },
   ];
 }
@@ -138,17 +181,27 @@ async function detectAgents(baseDir: string, scope: AgentScope): Promise<AgentEn
 
 async function installAgentSkills(skillsDir: string, agents: AgentEnvironment[]): Promise<void> {
   for (const agent of agents) {
-    const targetDir = agent.skills_path;
+    if (agent.install_kind === 'skills_directory') {
+      const targetDir = agent.install_path;
 
-    await fs.rm(targetDir, { recursive: true, force: true });
-    await fs.mkdir(path.dirname(targetDir), { recursive: true });
+      await fs.rm(targetDir, { recursive: true, force: true });
+      await fs.mkdir(path.dirname(targetDir), { recursive: true });
 
-    try {
-      await fs.symlink(skillsDir, targetDir, 'dir');
-    } catch {
-      await fs.mkdir(targetDir, { recursive: true });
-      await fs.cp(skillsDir, targetDir, { recursive: true, force: true });
+      try {
+        await fs.symlink(skillsDir, targetDir, 'dir');
+      } catch {
+        await fs.mkdir(targetDir, { recursive: true });
+        await fs.cp(skillsDir, targetDir, { recursive: true, force: true });
+      }
+
+      continue;
     }
+
+    await fs.mkdir(path.dirname(agent.install_path), { recursive: true });
+    const content = agent.install_kind === 'toml_command'
+      ? getGeminiCommandContent()
+      : getMarkdownCommandContent();
+    await fs.writeFile(agent.install_path, content, 'utf-8');
   }
 }
 

@@ -44,17 +44,17 @@ function getProjectAgents(baseDir: string): { name: string; path: string; skills
     {
       name: 'claude',
       path: path.join(baseDir, '.claude'),
-      skillsPath: path.join(baseDir, '.claude', 'skills', 'superplan'),
+      skillsPath: path.join(baseDir, '.claude', 'commands', 'superplan.md'),
     },
     {
       name: 'gemini',
       path: path.join(baseDir, '.gemini'),
-      skillsPath: path.join(baseDir, '.gemini', 'skills', 'superplan'),
+      skillsPath: path.join(baseDir, '.gemini', 'commands', 'superplan.toml'),
     },
     {
       name: 'cursor',
       path: path.join(baseDir, '.cursor'),
-      skillsPath: path.join(baseDir, '.cursor', 'skills', 'superplan'),
+      skillsPath: path.join(baseDir, '.cursor', 'commands', 'superplan.md'),
     },
     {
       name: 'codex',
@@ -64,7 +64,7 @@ function getProjectAgents(baseDir: string): { name: string; path: string; skills
     {
       name: 'opencode',
       path: path.join(baseDir, '.opencode'),
-      skillsPath: path.join(baseDir, '.opencode', 'skills', 'superplan'),
+      skillsPath: path.join(baseDir, '.opencode', 'commands', 'superplan.md'),
     },
   ];
 }
