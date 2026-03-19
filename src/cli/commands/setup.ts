@@ -7,7 +7,7 @@ interface AgentEnvironment {
   name: string;
   path: string;
   install_path: string;
-  install_kind: 'markdown_command' | 'toml_command' | 'skills_directory' | 'skills_namespace';
+  install_kind: 'toml_command' | 'skills_namespace';
   cleanup_paths?: string[];
 }
 
@@ -37,6 +37,15 @@ interface VerificationIssue {
   code: string;
   message: string;
 }
+
+const SETUP_BANNER = `
+ ____  _   _ ____  _____ ____  ____  _        _    _   _
+/ ___|| | | |  _ \\| ____|  _ \\|  _ \\| |      / \\  | \\ | |
+\\___ \\| | | | |_) |  _| | |_) | |_) | |     / _ \\ |  \\| |
+ ___) | |_| |  __/| |___|  _ <|  __/| |___ / ___ \\| |\\  |
+|____/ \\___/|_|   |_____|_| \\_\\_|   |_____/_/   \\_\\_| \\_|
+
+`;
 
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
@@ -116,35 +125,27 @@ async function installSkillsNamespace(sourceDir: string, targetDir: string): Pro
   }
 }
 
-function getMarkdownCommandContent(): string {
-  return `---
-description: Use Superplan for task parsing and task execution workflows
----
-
-Use the Superplan CLI in this repository to inspect and manage work.
-
-Common commands:
-- \`superplan parse\`
-- \`superplan task show\`
-- \`superplan task start <task_id>\`
-- \`superplan task complete <task_id>\`
-
-When working in this repo, prefer the Superplan CLI as the source of truth for task state.`;
-}
-
 function getGeminiCommandContent(): string {
-  return `description = "Use Superplan for task parsing and task execution workflows"
+  return `description = "Use Superplan as the task execution control plane for this repository"
 
 prompt = """
-Use the Superplan CLI in this repository to inspect and manage work.
+Use the Superplan CLI in this repository as the source of truth for task state.
 
 Common commands:
-- \`superplan parse\`
-- \`superplan task show\`
-- \`superplan task start <task_id>\`
-- \`superplan task complete <task_id>\`
+- \`superplan status --json\`
+- \`superplan run --json\`
+- \`superplan task why-next --json\`
+- \`superplan task show <task_id> --json\`
+- \`superplan task block <task_id> --reason "<reason>" --json\`
+- \`superplan task request-feedback <task_id> --message "<message>" --json\`
+- \`superplan task complete <task_id> --json\`
+- \`superplan task fix --json\`
 
-When working in this repo, prefer the Superplan CLI as the source of truth for task state.
+Execution loop:
+1. Check \`superplan status --json\`
+2. Claim work with \`superplan run --json\`
+3. Inspect the selected task before editing code
+4. Update runtime state with block, feedback, complete, or fix commands instead of editing markdown state by hand
 """`;
 }
 
@@ -258,27 +259,8 @@ async function installAgentSkills(skillsDir: string, agents: AgentEnvironment[])
       continue;
     }
 
-    if (agent.install_kind === 'skills_directory') {
-      const targetDir = agent.install_path;
-
-      await fs.rm(targetDir, { recursive: true, force: true });
-      await fs.mkdir(path.dirname(targetDir), { recursive: true });
-
-      try {
-        await fs.symlink(skillsDir, targetDir, 'dir');
-      } catch {
-        await fs.mkdir(targetDir, { recursive: true });
-        await fs.cp(skillsDir, targetDir, { recursive: true, force: true });
-      }
-
-      continue;
-    }
-
     await fs.mkdir(path.dirname(agent.install_path), { recursive: true });
-    const content = agent.install_kind === 'toml_command'
-      ? getGeminiCommandContent()
-      : getMarkdownCommandContent();
-    await fs.writeFile(agent.install_path, content, 'utf-8');
+    await fs.writeFile(agent.install_path, getGeminiCommandContent(), 'utf-8');
   }
 }
 
@@ -450,6 +432,10 @@ function getNoAgentsMessage(scope: InstallScope, agentCount: number): string | u
   return 'No agent environments found in this repo or your home directory.';
 }
 
+function printSetupBanner(): void {
+  console.log(SETUP_BANNER);
+}
+
 export async function setup(options: SetupOptions): Promise<SetupResult> {
   try {
     if (options.json && !options.quiet) {
@@ -461,6 +447,10 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
           retryable: false,
         },
       };
+    }
+
+    if (!options.quiet) {
+      printSetupBanner();
     }
 
     const cwd = process.cwd();

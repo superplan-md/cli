@@ -31,7 +31,7 @@ Usage:
 
 Commands:
   init        Initialize Superplan in this repo
-  setup       Setup Superplan globally
+  setup       Setup Superplan on this machine or in this repo
   remove      Remove Superplan installation
   purge       Purge Superplan installation
   doctor      Validate setup

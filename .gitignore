@@ -5,4 +5,4 @@ dist/
 *.log
 npm-debug.log*
 .superplan
-.changes
+changes

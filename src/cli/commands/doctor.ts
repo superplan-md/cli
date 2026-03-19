@@ -101,6 +101,36 @@ function getProjectAgents(baseDir: string): { name: string; path: string; skills
   ];
 }
 
+function getGlobalAgents(baseDir: string): { name: string; path: string; skillsPath: string }[] {
+  return [
+    {
+      name: 'claude',
+      path: path.join(baseDir, '.claude'),
+      skillsPath: path.join(baseDir, '.claude', 'skills', 'using-superplan', 'SKILL.md'),
+    },
+    {
+      name: 'gemini',
+      path: path.join(baseDir, '.gemini'),
+      skillsPath: path.join(baseDir, '.gemini', 'commands', 'superplan.toml'),
+    },
+    {
+      name: 'cursor',
+      path: path.join(baseDir, '.cursor'),
+      skillsPath: path.join(baseDir, '.cursor', 'skills', 'using-superplan', 'SKILL.md'),
+    },
+    {
+      name: 'codex',
+      path: path.join(baseDir, '.codex'),
+      skillsPath: path.join(baseDir, '.codex', 'skills', 'using-superplan', 'SKILL.md'),
+    },
+    {
+      name: 'opencode',
+      path: path.join(baseDir, '.config', 'opencode'),
+      skillsPath: path.join(baseDir, '.config', 'opencode', 'skills', 'using-superplan', 'SKILL.md'),
+    },
+  ];
+}
+
 function applyRuntimeStatus(task: ParsedTask, runtimeTask?: RuntimeTaskState): ParsedTask {
   if (!runtimeTask) {
     return task;
@@ -253,12 +283,15 @@ export async function doctor(args: string[] = []) {
     });
   }
 
-  const agents = getProjectAgents(cwd);
+  const agents = [
+    ...getGlobalAgents(homeDir),
+    ...getProjectAgents(cwd),
+  ];
   for (const agent of agents) {
     if (await pathExists(agent.path) && !await pathExists(agent.skillsPath)) {
       issues.push({
         code: 'AGENT_SKILLS_MISSING',
-        message: 'Superplan skills not installed for agent',
+        message: `Superplan skills not installed for ${agent.name} agent`,
         fix: 'Run superplan setup in this repo',
       });
     }
