@@ -16,6 +16,7 @@ type AgentScope = 'project' | 'global';
 
 export interface SetupOptions {
   json?: boolean;
+  quiet?: boolean;
 }
 
 export type SetupResult =
@@ -451,7 +452,7 @@ function getNoAgentsMessage(scope: InstallScope, agentCount: number): string | u
 
 export async function setup(options: SetupOptions): Promise<SetupResult> {
   try {
-    if (options.json) {
+    if (options.json && !options.quiet) {
       return {
         ok: false,
         error: {
@@ -476,7 +477,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
     const localChangesDir = path.join(cwd, 'changes');
 
     const alreadySetup = await pathExists(globalConfigPath) || await pathExists(localSuperplanDir);
-    if (alreadySetup) {
+    if (alreadySetup && !options.quiet) {
       const reinstall = await confirm({ message: 'Superplan is already set up. Reinstall?' });
       if (!reinstall) {
         return {
@@ -490,15 +491,17 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
       }
     }
 
-    const scope = await select<InstallScope>({
-      message: 'Where do you want to install Superplan?',
-      choices: [
-        { name: 'Global (machine-level)', value: 'global' },
-        { name: 'Local (current repository)', value: 'local' },
-        { name: 'Both', value: 'both' },
-        { name: 'Skip', value: 'skip' },
-      ],
-    });
+    const scope = options.quiet
+      ? 'global'
+      : await select<InstallScope>({
+          message: 'Where do you want to install Superplan?',
+          choices: [
+            { name: 'Global (machine-level)', value: 'global' },
+            { name: 'Local (current repository)', value: 'local' },
+            { name: 'Both', value: 'both' },
+            { name: 'Skip', value: 'skip' },
+          ],
+        });
 
     if (scope === 'skip') {
       return {
@@ -511,7 +514,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
       };
     }
 
-    const proceed = await confirm({ message: 'Proceed with setup?' });
+    const proceed = options.quiet ? true : await confirm({ message: 'Proceed with setup?' });
     if (!proceed) {
       return {
         ok: false,
@@ -571,9 +574,10 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
 
     const installedAgents = [...homeAgents, ...repoAgents];
     const noAgentsMessage = getNoAgentsMessage(scope, installedAgents.length);
+    const quietMessage = options.quiet ? ' Quiet mode used default scope: global.' : '';
     const message = noAgentsMessage
-      ? `${noAgentsMessage} Setup verification passed.`
-      : 'Setup verification passed.';
+      ? `${noAgentsMessage} Setup verification passed.${quietMessage}`
+      : `Setup verification passed.${quietMessage}`;
 
     return {
       ok: true,

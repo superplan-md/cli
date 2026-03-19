@@ -349,7 +349,7 @@ async function resolveDefaultTaskFiles(changesDir: string): Promise<string[]> {
 }
 
 export async function parse(args: string[], _options: ParseOptions): Promise<ParseResult> {
-  const positionalArgs = args.filter(arg => arg !== '--json');
+  const positionalArgs = args.filter(arg => arg !== '--json' && arg !== '--quiet');
   const inputPath = positionalArgs[0] ?? 'changes';
   const resolvedInputPath = path.resolve(process.cwd(), inputPath);
 

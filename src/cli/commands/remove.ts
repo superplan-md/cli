@@ -15,6 +15,7 @@ type RemoveMode = 'remove' | 'purge';
 
 export interface RemoveOptions {
   json?: boolean;
+  quiet?: boolean;
 }
 
 export type RemoveResult =
@@ -128,7 +129,7 @@ async function removeAgentInstalls(agents: AgentEnvironment[], removedPaths: str
 
 async function removeCommand(mode: RemoveMode, options: RemoveOptions): Promise<RemoveResult> {
   try {
-    if (options.json) {
+    if (options.json || options.quiet) {
       return {
         ok: false,
         error: {

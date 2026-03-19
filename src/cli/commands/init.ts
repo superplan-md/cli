@@ -8,6 +8,10 @@ export type InitResult =
   | { ok: true; data: { root: string } }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
 
+export interface InitOptions {
+  quiet?: boolean;
+}
+
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
     await fs.access(targetPath);
@@ -17,7 +21,7 @@ async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
-export async function init(): Promise<InitResult> {
+export async function init(options: InitOptions = {}): Promise<InitResult> {
   const cwd = process.cwd();
   const superplanRoot = path.join(cwd, '.superplan');
   const configPath = path.join(superplanRoot, 'config.toml');
@@ -28,6 +32,17 @@ export async function init(): Promise<InitResult> {
 
   try {
     if (!await pathExists(globalConfigPath)) {
+      if (options.quiet) {
+        return {
+          ok: false,
+          error: {
+            code: 'SETUP_REQUIRED',
+            message: 'Global setup is required before init',
+            retryable: true,
+          },
+        };
+      }
+
       const runSetup = await confirm({
         message: 'Superplan is not set up on this machine.\nRun setup now?'
       });
@@ -43,7 +58,7 @@ export async function init(): Promise<InitResult> {
         };
       }
 
-      const setupResult: SetupResult = await setup({ json: false });
+      const setupResult: SetupResult = await setup({ json: false, quiet: false });
       if (!setupResult.ok) {
         return setupResult;
       }
@@ -61,6 +76,15 @@ export async function init(): Promise<InitResult> {
     }
 
     if (await pathExists(superplanRoot)) {
+      if (options.quiet) {
+        return {
+          ok: true,
+          data: {
+            root: '.superplan',
+          },
+        };
+      }
+
       const reinitialize = await confirm({ message: 'Superplan already initialized. Reinitialize?' });
       if (!reinitialize) {
         return {

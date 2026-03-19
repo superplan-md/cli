@@ -48,6 +48,12 @@ interface RuntimePaths {
   eventsPath: string;
 }
 
+interface TaskFixAction {
+  task_id: string;
+  action: 'reset' | 'block';
+  reason?: string;
+}
+
 type TaskCommandResult =
   | { ok: true; data: { task: ParsedTask | null } }
   | { ok: true; data: { tasks: ParsedTask[] } }
@@ -60,6 +66,7 @@ type TaskCommandResult =
   | { ok: true; data: { task_id: string | null; reason: string } }
   | { ok: true; data: { events: RuntimeEvent[] } }
   | { ok: true; data: { task_id: string; reset: true } }
+  | { ok: true; data: { fixed: boolean; actions: TaskFixAction[] } }
   | TaskErrorResult;
 
 type TaskErrorResult = { ok: false; error: { code: string; message: string; retryable: boolean } };
@@ -75,6 +82,7 @@ const TASK_SUBCOMMANDS = new Set([
   'start',
   'resume',
   'complete',
+  'fix',
   'reset',
   'block',
   'request-feedback',
@@ -224,6 +232,7 @@ function getTaskCommandHelpMessage(options: {
     '  start <task_id>              Start a task',
     '  resume <task_id>             Resume a blocked or feedback task',
     '  complete <task_id>           Complete an in-progress task',
+    '  fix                          Repair runtime conflicts deterministically',
     '  reset <task_id>              Clear runtime state for a task',
     '  block <task_id> --reason     Mark a task as blocked',
     '  request-feedback <task_id>   Mark a task as needing feedback',
@@ -311,6 +320,15 @@ function sortTasksByPriorityAndId(left: ParsedTask, right: ParsedTask): number {
   return left.task_id.localeCompare(right.task_id);
 }
 
+function getStartedAtTimestamp(taskState: RuntimeTaskState): number {
+  if (!taskState.started_at) {
+    return 0;
+  }
+
+  const parsedTimestamp = Date.parse(taskState.started_at);
+  return Number.isNaN(parsedTimestamp) ? 0 : parsedTimestamp;
+}
+
 function applyRuntimeState(task: ParsedTask, runtimeState?: RuntimeTaskState): ParsedTask {
   if (runtimeState?.status === 'in_progress') {
     return {
@@ -355,6 +373,11 @@ function applyRuntimeState(task: ParsedTask, runtimeState?: RuntimeTaskState): P
     ...task,
     status: task.effective_status,
   };
+}
+
+function mergeTasksWithRuntimeState(parsedTasks: ParsedTask[], runtimeState: RuntimeState): ParsedTask[] {
+  const tasksWithRuntimeState = parsedTasks.map(taskItem => applyRuntimeState(taskItem, runtimeState.tasks[taskItem.task_id]));
+  return computeMergedTaskReadiness(tasksWithRuntimeState);
 }
 
 function computeMergedTaskReadiness(tasks: ParsedTask[]): ParsedTask[] {
@@ -406,8 +429,7 @@ async function getMergedTasks(options?: { skipInvariant?: boolean }): Promise<{
     return { error: invariantError };
   }
 
-  const tasksWithRuntimeState = parsedTasksResult.tasks!.map(taskItem => applyRuntimeState(taskItem, runtimeState.tasks[taskItem.task_id]));
-  const tasks = computeMergedTaskReadiness(tasksWithRuntimeState);
+  const tasks = mergeTasksWithRuntimeState(parsedTasksResult.tasks!, runtimeState);
 
   return {
     tasks,
@@ -545,6 +567,94 @@ async function currentTask(): Promise<TaskCommandResult> {
     ok: true,
     data: {
       task: activeTaskResult.task ?? null,
+    },
+  };
+}
+
+async function fixTasks(): Promise<TaskCommandResult> {
+  const runtimePaths = getRuntimePaths();
+  const parsedTasksResult = await getParsedTasks();
+  if (parsedTasksResult.error) {
+    return parsedTasksResult.error;
+  }
+
+  const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
+  const actions: TaskFixAction[] = [];
+  const inProgressEntries = getInProgressTaskEntries(runtimeState);
+
+  if (inProgressEntries.length > 1) {
+    const sortedInProgressEntries = [...inProgressEntries].sort((left, right) => {
+      const timestampDifference = getStartedAtTimestamp(right[1]) - getStartedAtTimestamp(left[1]);
+      if (timestampDifference !== 0) {
+        return timestampDifference;
+      }
+
+      return left[0].localeCompare(right[0]);
+    });
+
+    const [keptTaskId] = sortedInProgressEntries[0];
+    for (const [taskId] of sortedInProgressEntries) {
+      if (taskId === keptTaskId) {
+        continue;
+      }
+
+      delete runtimeState.tasks[taskId];
+      actions.push({
+        task_id: taskId,
+        action: 'reset',
+      });
+      await appendEvent(runtimePaths.eventsPath, 'task.reset', taskId);
+    }
+  }
+
+  const mergedTasks = mergeTasksWithRuntimeState(parsedTasksResult.tasks!, runtimeState);
+  const activeTaskEntry = getInProgressTaskEntries(runtimeState)[0];
+
+  if (activeTaskEntry) {
+    const [taskId, taskState] = activeTaskEntry;
+    const matchedTask = mergedTasks.find(taskItem => taskItem.task_id === taskId);
+
+    if (!matchedTask || !matchedTask.is_valid) {
+      runtimeState.tasks[taskId] = {
+        ...taskState,
+        status: 'blocked',
+        reason: 'Task became invalid',
+        updated_at: new Date().toISOString(),
+      };
+      actions.push({
+        task_id: taskId,
+        action: 'block',
+        reason: 'Task became invalid',
+      });
+      await appendEvent(runtimePaths.eventsPath, 'task.blocked', taskId);
+    } else {
+      const { allDependenciesSatisfied, anyDependenciesSatisfied } = getDependencyState(mergedTasks, matchedTask);
+      if (!allDependenciesSatisfied || !anyDependenciesSatisfied) {
+        runtimeState.tasks[taskId] = {
+          ...taskState,
+          status: 'blocked',
+          reason: 'Dependency not satisfied',
+          updated_at: new Date().toISOString(),
+        };
+        actions.push({
+          task_id: taskId,
+          action: 'block',
+          reason: 'Dependency not satisfied',
+        });
+        await appendEvent(runtimePaths.eventsPath, 'task.blocked', taskId);
+      }
+    }
+  }
+
+  if (actions.length > 0) {
+    await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
+  }
+
+  return {
+    ok: true,
+    data: {
+      fixed: actions.length > 0,
+      actions,
     },
   };
 }
@@ -1024,7 +1134,7 @@ function getPositionalArgs(args: string[]): string[] {
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
 
-    if (arg === '--json') {
+    if (arg === '--json' || arg === '--quiet') {
       continue;
     }
 
@@ -1072,6 +1182,10 @@ export async function task(args: string[]): Promise<TaskCommandResult> {
 
   if (subcommand === 'events') {
     return eventsTask(taskId);
+  }
+
+  if (subcommand === 'fix') {
+    return fixTasks();
   }
 
   if (!taskId) {
