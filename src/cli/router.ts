@@ -1,6 +1,8 @@
 import { setup } from './commands/setup';
 import { doctor } from './commands/doctor';
 import { parse } from './commands/parse';
+import { init } from './commands/init';
+import { task } from './commands/task';
 
 type CommandOptions = {
   json: boolean;
@@ -11,9 +13,11 @@ type CommandHandler = (args: string[], options: CommandOptions) => Promise<{
 }>;
 
 export const router: Record<string, CommandHandler> = {
+  init: async () => init(),
   setup: async (_args, options) => setup(options),
   doctor: async () => doctor(),
   parse: async (args, options) => parse(args, options),
+  task: async (args) => task(args),
 };
 
 export async function routeCommand(args: string[]) {

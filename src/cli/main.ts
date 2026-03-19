@@ -8,6 +8,7 @@ Usage:
   superplan <command>
 
 Commands:
+  init        Initialize Superplan in this repo
   setup       Setup Superplan globally
   doctor      Validate setup
   parse       Parse superplan artifacts

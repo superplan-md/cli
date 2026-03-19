@@ -3,22 +3,46 @@ import * as path from 'path';
 import * as os from 'os';
 import { confirm, select } from '@inquirer/prompts';
 
+interface AgentEnvironment {
+  name: string;
+  path: string;
+}
+
+type InstallScope = 'global' | 'local' | 'both' | 'skip';
+
 export interface SetupOptions {
   json?: boolean;
 }
 
 export type SetupResult =
-  | { ok: true; data: { config_path: string; skills_path: string; agents: { name: string; path: string }[] } }
+  | {
+      ok: true;
+      data: {
+        config_path: string;
+        skills_path: string;
+        scope: InstallScope;
+        agents: AgentEnvironment[];
+        message?: string;
+      };
+    }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
 
-async function ensureConfig(configPath: string): Promise<void> {
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureGlobalConfig(configPath: string): Promise<void> {
   const initialConfig = `version = "0.1"\n\n[agents]\ninstalled = []\n`;
   await fs.writeFile(configPath, initialConfig, 'utf-8');
 }
 
-async function ensureDirectories(configDir: string, skillsDir: string): Promise<void> {
-  await fs.mkdir(configDir, { recursive: true });
-  await fs.mkdir(skillsDir, { recursive: true });
+async function ensureLocalConfig(configPath: string): Promise<void> {
+  await fs.writeFile(configPath, 'version = "0.1"\n', 'utf-8');
 }
 
 async function installSkills(sourceDir: string, targetDir: string): Promise<void> {
@@ -30,36 +54,125 @@ async function installSkills(sourceDir: string, targetDir: string): Promise<void
   }
 }
 
-async function installAgentSkills(globalSkillsDir: string): Promise<{ name: string; path: string }[]> {
+async function detectAgents(baseDir: string): Promise<AgentEnvironment[]> {
   const supportedAgents = ['claude', 'gemini', 'cursor', 'vscode', 'codex'];
-  const cwd = process.cwd();
-  const installed: { name: string; path: string }[] = [];
+  const detectedAgents: AgentEnvironment[] = [];
 
   for (const agent of supportedAgents) {
-    const agentDir = path.join(cwd, `.${agent}`);
+    const agentDir = path.join(baseDir, `.${agent}`);
+
     try {
       const stat = await fs.stat(agentDir);
       if (stat.isDirectory()) {
-        const targetDir = path.join(agentDir, 'skills', 'superplan');
-        
-        await fs.rm(targetDir, { recursive: true, force: true });
-        await fs.mkdir(path.join(agentDir, 'skills'), { recursive: true });
-
-        try {
-          await fs.symlink(globalSkillsDir, targetDir, 'dir');
-        } catch (symlinkErr) {
-          await fs.mkdir(targetDir, { recursive: true });
-          await fs.cp(globalSkillsDir, targetDir, { recursive: true, force: true });
-        }
-
-        installed.push({ name: agent, path: targetDir });
+        detectedAgents.push({ name: agent, path: agentDir });
       }
     } catch {
       // Agent directory doesn't exist
     }
   }
 
-  return installed;
+  return detectedAgents;
+}
+
+async function installAgentSkills(skillsDir: string, agents: AgentEnvironment[]): Promise<void> {
+  for (const agent of agents) {
+    const targetDir = path.join(agent.path, 'skills', 'superplan');
+
+    await fs.rm(targetDir, { recursive: true, force: true });
+    await fs.mkdir(path.join(agent.path, 'skills'), { recursive: true });
+
+    try {
+      await fs.symlink(skillsDir, targetDir, 'dir');
+    } catch {
+      await fs.mkdir(targetDir, { recursive: true });
+      await fs.cp(skillsDir, targetDir, { recursive: true, force: true });
+    }
+  }
+}
+
+async function ensureSkillsSource(sourceDir: string): Promise<SetupResult | null> {
+  try {
+    const stats = await fs.stat(sourceDir);
+    if (!stats.isDirectory()) {
+      return {
+        ok: false,
+        error: {
+          code: 'SKILLS_SOURCE_MISSING',
+          message: 'Local skills folder not found in project root',
+          retryable: false,
+        },
+      };
+    }
+  } catch {
+    return {
+      ok: false,
+      error: {
+        code: 'SKILLS_SOURCE_MISSING',
+        message: 'Local skills folder not found in project root',
+        retryable: false,
+      },
+    };
+  }
+
+  return null;
+}
+
+async function ensureGlobalSetup(configDir: string, configPath: string, skillsDir: string, sourceSkillsDir: string): Promise<void> {
+  await fs.mkdir(configDir, { recursive: true });
+
+  if (!await pathExists(configPath)) {
+    await ensureGlobalConfig(configPath);
+  }
+
+  await installSkills(sourceSkillsDir, skillsDir);
+}
+
+async function ensureLocalSetup(superplanDir: string, configPath: string, skillsDir: string, changesDir: string, sourceSkillsDir: string): Promise<void> {
+  await fs.mkdir(superplanDir, { recursive: true });
+  await fs.mkdir(changesDir, { recursive: true });
+
+  if (!await pathExists(configPath)) {
+    await ensureLocalConfig(configPath);
+  }
+
+  await installSkills(sourceSkillsDir, skillsDir);
+}
+
+function getScopePaths(scope: InstallScope, globalConfigPath: string, globalSkillsPath: string, localConfigPath: string, localSkillsPath: string) {
+  if (scope === 'local') {
+    return {
+      config_path: localConfigPath,
+      skills_path: localSkillsPath,
+    };
+  }
+
+  if (scope === 'skip') {
+    return {
+      config_path: '',
+      skills_path: '',
+    };
+  }
+
+  return {
+    config_path: globalConfigPath,
+    skills_path: globalSkillsPath,
+  };
+}
+
+function getNoAgentsMessage(scope: InstallScope, agentCount: number): string | undefined {
+  if (agentCount > 0 || scope === 'skip') {
+    return undefined;
+  }
+
+  if (scope === 'local') {
+    return 'No agent environments found in this repo.';
+  }
+
+  if (scope === 'global') {
+    return 'No agent environments found in your home directory.';
+  }
+
+  return 'No agent environments found in this repo or your home directory.';
 }
 
 export async function setup(options: SetupOptions): Promise<SetupResult> {
@@ -68,55 +181,59 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
       return {
         ok: false,
         error: {
-          code: "INTERACTIVE_REQUIRED",
-          message: "setup must be run interactively",
-          retryable: false
-        }
+          code: 'INTERACTIVE_REQUIRED',
+          message: 'setup must be run interactively',
+          retryable: false,
+        },
       };
     }
 
-    const configDir = path.join(os.homedir(), '.config', 'superplan');
-    const configPath = path.join(configDir, 'config.toml');
-    const skillsDir = path.join(configDir, 'skills');
+    const cwd = process.cwd();
+    const homeDir = os.homedir();
+    const sourceSkillsDir = path.join(cwd, 'skills');
 
-    let configExists = false;
-    try {
-      await fs.access(configPath);
-      configExists = true;
-    } catch {
-      configExists = false;
-    }
+    const globalConfigDir = path.join(homeDir, '.config', 'superplan');
+    const globalConfigPath = path.join(globalConfigDir, 'config.toml');
+    const globalSkillsDir = path.join(globalConfigDir, 'skills');
 
-    if (configExists) {
+    const localSuperplanDir = path.join(cwd, '.superplan');
+    const localConfigPath = path.join(localSuperplanDir, 'config.toml');
+    const localSkillsDir = path.join(localSuperplanDir, 'skills');
+    const localChangesDir = path.join(cwd, 'changes');
+
+    const alreadySetup = await pathExists(globalConfigPath) || await pathExists(localSuperplanDir);
+    if (alreadySetup) {
       const reinstall = await confirm({ message: 'Superplan is already set up. Reinstall?' });
       if (!reinstall) {
         return {
           ok: true,
           data: {
-            config_path: configPath,
-            skills_path: skillsDir,
-            agents: []
-          }
+            ...getScopePaths('skip', globalConfigPath, globalSkillsDir, localConfigPath, localSkillsDir),
+            scope: 'skip',
+            agents: [],
+          },
         };
       }
     }
 
-    const installLocation = await select({
+    const scope = await select<InstallScope>({
       message: 'Where do you want to install Superplan?',
       choices: [
-        { name: 'Global (recommended)', value: 'global' },
-        { name: 'Local', value: 'local' }
-      ]
+        { name: 'Global (machine-level)', value: 'global' },
+        { name: 'Local (current repository)', value: 'local' },
+        { name: 'Both', value: 'both' },
+        { name: 'Skip', value: 'skip' },
+      ],
     });
 
-    if (installLocation === 'local') {
+    if (scope === 'skip') {
       return {
-        ok: false,
-        error: {
-          code: "NOT_IMPLEMENTED",
-          message: "Local setup is not supported yet",
-          retryable: false
-        }
+        ok: true,
+        data: {
+          ...getScopePaths(scope, globalConfigPath, globalSkillsDir, localConfigPath, localSkillsDir),
+          scope,
+          agents: [],
+        },
       };
     }
 
@@ -125,63 +242,59 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
       return {
         ok: false,
         error: {
-          code: "USER_ABORTED",
-          message: "Setup aborted by user",
-          retryable: false
-        }
+          code: 'USER_ABORTED',
+          message: 'Setup aborted by user',
+          retryable: false,
+        },
       };
     }
 
-    const localSkillsDir = path.join(process.cwd(), 'skills');
-    try {
-      const stats = await fs.stat(localSkillsDir);
-      if (!stats.isDirectory()) {
-        return {
-          ok: false,
-          error: {
-            code: "SKILLS_SOURCE_MISSING",
-            message: "Local skills folder not found in project root",
-            retryable: false
-          }
-        };
+    const skillsSourceError = await ensureSkillsSource(sourceSkillsDir);
+    if (skillsSourceError) {
+      return skillsSourceError;
+    }
+
+    const repoAgents = scope === 'local' || scope === 'both'
+      ? await detectAgents(cwd)
+      : [];
+    const homeAgents = scope === 'global' || scope === 'both'
+      ? await detectAgents(homeDir)
+      : [];
+
+    if (scope === 'global' || scope === 'both') {
+      await ensureGlobalSetup(globalConfigDir, globalConfigPath, globalSkillsDir, sourceSkillsDir);
+      if (homeAgents.length > 0) {
+        await installAgentSkills(globalSkillsDir, homeAgents);
       }
-    } catch {
-      return {
-        ok: false,
-        error: {
-          code: "SKILLS_SOURCE_MISSING",
-          message: "Local skills folder not found in project root",
-          retryable: false
-        }
-      };
     }
 
-    await ensureDirectories(configDir, skillsDir);
-
-    if (!configExists) {
-      await ensureConfig(configPath);
+    if (scope === 'local' || scope === 'both') {
+      await ensureLocalSetup(localSuperplanDir, localConfigPath, localSkillsDir, localChangesDir, sourceSkillsDir);
+      if (repoAgents.length > 0) {
+        await installAgentSkills(localSkillsDir, repoAgents);
+      }
     }
 
-    await installSkills(localSkillsDir, skillsDir);
-
-    const installedAgents = await installAgentSkills(skillsDir);
+    const installedAgents = [...homeAgents, ...repoAgents];
+    const message = getNoAgentsMessage(scope, installedAgents.length);
 
     return {
       ok: true,
       data: {
-        config_path: configPath,
-        skills_path: skillsDir,
-        agents: installedAgents
-      }
+        ...getScopePaths(scope, globalConfigPath, globalSkillsDir, localConfigPath, localSkillsDir),
+        scope,
+        agents: installedAgents,
+        ...(message ? { message } : {}),
+      },
     };
   } catch (error: any) {
     return {
       ok: false,
       error: {
-        code: "SETUP_FAILED",
-        message: error.message || "An unknown error occurred",
-        retryable: false
-      }
+        code: 'SETUP_FAILED',
+        message: error.message || 'An unknown error occurred',
+        retryable: false,
+      },
     };
   }
 }

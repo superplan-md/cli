@@ -225,25 +225,62 @@ async function parseTaskFile(filePath: string): Promise<{ task: ParsedTask; diag
   return buildTask(lines, filePath);
 }
 
-export async function parse(args: string[], _options: ParseOptions): Promise<ParseResult> {
-  const positionalArgs = args.filter(arg => arg !== '--json');
-  const inputPath = positionalArgs[0];
+async function resolveDefaultTaskFiles(changesDir: string): Promise<string[]> {
+  const entries = await fs.readdir(changesDir, { withFileTypes: true });
+  const taskFiles: string[] = [];
 
-  if (!inputPath) {
-    return {
-      ok: false,
-      error: {
-        code: 'TASK_PATH_REQUIRED',
-        message: 'Task file path is required',
-        retryable: false,
-      },
-    };
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const changeDir = path.join(changesDir, entry.name);
+    const tasksDir = path.join(changeDir, 'tasks');
+
+    try {
+      const tasksDirStat = await fs.stat(tasksDir);
+      if (!tasksDirStat.isDirectory()) {
+        continue;
+      }
+    } catch {
+      continue;
+    }
+
+    const changeTaskFiles = await resolveTaskFiles(changeDir);
+    taskFiles.push(...changeTaskFiles);
   }
 
+  return taskFiles.sort((left, right) => left.localeCompare(right));
+}
+
+export async function parse(args: string[], _options: ParseOptions): Promise<ParseResult> {
+  const positionalArgs = args.filter(arg => arg !== '--json');
+  const inputPath = positionalArgs[0] ?? 'changes';
   const resolvedInputPath = path.resolve(process.cwd(), inputPath);
 
   try {
-    const taskFiles = await resolveTaskFiles(resolvedInputPath);
+    await fs.access(resolvedInputPath);
+  } catch {
+    if (positionalArgs.length === 0) {
+      return {
+        ok: true,
+        data: {
+          tasks: [],
+          diagnostics: [
+            {
+              code: 'CHANGES_DIR_MISSING',
+              message: 'No changes directory found. Run superplan init.',
+            },
+          ],
+        },
+      };
+    }
+  }
+
+  try {
+    const taskFiles = positionalArgs.length === 0
+      ? await resolveDefaultTaskFiles(resolvedInputPath)
+      : await resolveTaskFiles(resolvedInputPath);
     const tasks: ParsedTask[] = [];
     const diagnostics: ParseDiagnostic[] = [];
 
