@@ -78,6 +78,7 @@ Important install note:
 
 - Default parsing path is `.superplan/changes`, not repo-root `changes/`.
 - Task contracts live at `.superplan/changes/<slug>/tasks/T-xxx.md`.
+- Task IDs are allocated globally across `.superplan/changes/`, not restarted per change.
 - Parsed tasks currently rely on frontmatter such as:
   - `task_id`
   - `status`
@@ -161,6 +162,5 @@ Review handoff now works in two steps:
 ## Durable Repo Quirks
 
 - The frontmatter parser now supports inline and multi-line dependency lists, but it is still a deliberately small parser rather than a full YAML implementation.
-- The setup banner test in `test/lifecycle.test.cjs` has been a recurring unrelated failure point when running the full suite.
 
 *Updated to reflect the current CLI surface and `.superplan/changes` storage.*

@@ -237,6 +237,8 @@ superplan change new improve-task-authoring
 superplan task new improve-task-authoring --title "Add change scaffolding"
 ```
 
+Task IDs are allocated globally across `.superplan/changes/` so dependencies and runtime references stay unambiguous across changes.
+
 Each task contract is expected to include:
 
 - frontmatter with fields such as `task_id`, `status`, `priority`, `depends_on_all`, and `depends_on_any`

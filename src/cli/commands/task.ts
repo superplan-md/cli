@@ -1354,7 +1354,7 @@ async function createTask(changeSlug: string, title?: string, rawPriority?: stri
 
   await fs.mkdir(changePaths.tasksDir, { recursive: true });
 
-  const taskId = await getNextTaskId(changePaths.tasksDir);
+  const taskId = await getNextTaskId(changePaths.changesRoot);
   const taskPath = path.join(changePaths.tasksDir, `${taskId}.md`);
   const summary = title?.trim() || 'Describe the task.';
 

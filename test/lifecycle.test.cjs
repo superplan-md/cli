@@ -36,7 +36,7 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.match(installedUsingSuperplanSkill, /superplan task why-next --json/);
 });
 
-test('interactive setup prints a single ascii wordmark that includes .md', async () => {
+test('interactive setup prints the current ascii wordmark once', async () => {
   const sandbox = await makeSandbox('superplan-setup-banner-');
   const { setup } = loadDistModule('cli/commands/setup.js', {
     select: async () => 'skip',
@@ -57,8 +57,8 @@ test('interactive setup prints a single ascii wordmark that includes .md', async
   }
 
   const bannerOutput = output.join('\n');
-  assert.doesNotMatch(bannerOutput, /SUPERPLAN\.md\s*\n\s*\n/);
-  assert.match(bannerOutput, /\.___\s+__\.\s+_______/);
+  assert.match(bannerOutput, /____  _   _ ____  _____ ____  ____  _/);
+  assert.equal((bannerOutput.match(/____  _   _ ____/g) ?? []).length, 1);
 });
 
 test('doctor reports valid after quiet global setup in a clean repo', async () => {

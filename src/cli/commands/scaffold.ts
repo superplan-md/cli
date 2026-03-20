@@ -85,16 +85,35 @@ export function buildTaskContract(options: {
   ].join('\n');
 }
 
-export async function getNextTaskId(tasksDir: string): Promise<string> {
+export async function getNextTaskId(changesRoot: string): Promise<string> {
   try {
-    const taskEntries = await fs.readdir(tasksDir, { withFileTypes: true });
-    const maxTaskNumber = taskEntries
-      .filter(entry => entry.isFile())
-      .map(entry => /^T-(\d+)\.md$/.exec(entry.name))
-      .filter((match): match is RegExpExecArray => match !== null)
-      .map(match => Number.parseInt(match[1], 10))
-      .filter(taskNumber => Number.isInteger(taskNumber))
-      .reduce((currentMax, taskNumber) => Math.max(currentMax, taskNumber), 0);
+    const changeEntries = await fs.readdir(changesRoot, { withFileTypes: true });
+    let maxTaskNumber = 0;
+
+    for (const changeEntry of changeEntries) {
+      if (!changeEntry.isDirectory()) {
+        continue;
+      }
+
+      const tasksDir = path.join(changesRoot, changeEntry.name, 'tasks');
+      let taskEntries: Array<{ isFile(): boolean; name: string }> = [];
+
+      try {
+        taskEntries = await fs.readdir(tasksDir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+
+      const changeMaxTaskNumber = taskEntries
+        .filter(entry => entry.isFile())
+        .map(entry => /^T-(\d+)\.md$/.exec(entry.name))
+        .filter((match): match is RegExpExecArray => match !== null)
+        .map(match => Number.parseInt(match[1], 10))
+        .filter(taskNumber => Number.isInteger(taskNumber))
+        .reduce((currentMax, taskNumber) => Math.max(currentMax, taskNumber), 0);
+
+      maxTaskNumber = Math.max(maxTaskNumber, changeMaxTaskNumber);
+    }
 
     return `T-${String(maxTaskNumber + 1).padStart(3, '0')}`;
   } catch {

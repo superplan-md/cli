@@ -44,7 +44,7 @@ test('change new creates a canonical change skeleton', async () => {
   assert.match(tasksIndexContent, /## Tasks/);
 });
 
-test('task new creates the next task contract and updates tasks.md', async () => {
+test('task new creates globally unique task contracts and updates each change index', async () => {
   const sandbox = await makeSandbox('superplan-task-new-');
   await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
 
@@ -91,6 +91,33 @@ test('task new creates the next task contract and updates tasks.md', async () =>
 
   assert.equal(secondTaskPayload.data.task_id, 'T-002');
 
+  parseCliJson(await runCli(['change', 'new', 'release-polish', '--json'], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+
+  const thirdTaskPayload = parseCliJson(await runCli([
+    'task',
+    'new',
+    'release-polish',
+    '--title',
+    'Add release notes',
+    '--json',
+  ], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+
+  assert.deepEqual(thirdTaskPayload, {
+    ok: true,
+    data: {
+      task_id: 'T-003',
+      change_id: 'release-polish',
+      path: '.superplan/changes/release-polish/tasks/T-003.md',
+    },
+    error: null,
+  });
+
   const firstTaskPath = path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks', 'T-001.md');
   const firstTaskContent = await fs.readFile(firstTaskPath, 'utf-8');
   assert.match(firstTaskContent, /task_id: T-001/);
@@ -101,4 +128,11 @@ test('task new creates the next task contract and updates tasks.md', async () =>
   const tasksIndexContent = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks.md'), 'utf-8');
   assert.match(tasksIndexContent, /- `T-001` Add scaffolding command/);
   assert.match(tasksIndexContent, /- `T-002` Add help coverage/);
+
+  const secondChangeIndexContent = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'changes', 'release-polish', 'tasks.md'), 'utf-8');
+  assert.match(secondChangeIndexContent, /- `T-003` Add release notes/);
+
+  const parsePayload = parseCliJson(await runCli(['parse', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  const diagnosticCodes = new Set(parsePayload.data.diagnostics.map(diagnostic => diagnostic.code));
+  assert.equal(diagnosticCodes.has('DUPLICATE_TASK_ID'), false);
 });
