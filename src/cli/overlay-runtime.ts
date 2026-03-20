@@ -12,6 +12,7 @@ import {
   type OverlayTaskStatus,
   type OverlayTaskSummary,
 } from '../shared/overlay';
+import { resolveWorkspaceRoot } from './workspace-root';
 
 type TaskPriority = 'high' | 'medium' | 'low';
 
@@ -162,7 +163,7 @@ export async function refreshOverlaySnapshot(
   tasks: OverlayTaskSource[],
   options: RefreshOverlaySnapshotOptions = {},
 ): Promise<{ paths: OverlayRuntimePaths; snapshot: OverlaySnapshot }> {
-  const workspacePath = options.workspacePath ?? process.cwd();
+  const workspacePath = options.workspacePath ?? resolveWorkspaceRoot();
   const paths = getOverlayRuntimePaths(workspacePath);
   const timestamp = new Date().toISOString();
   const previousSnapshot = await readOverlaySnapshot(paths);
@@ -200,7 +201,7 @@ export async function setOverlayVisibilityRequest(
   requestedAction: OverlayRequestedAction,
   options: SetOverlayVisibilityOptions = {},
 ): Promise<{ paths: OverlayRuntimePaths; control: ReturnType<typeof createOverlayControlState> }> {
-  const workspacePath = options.workspacePath ?? process.cwd();
+  const workspacePath = options.workspacePath ?? resolveWorkspaceRoot();
   const paths = getOverlayRuntimePaths(workspacePath);
   const control = createOverlayControlState({
     workspace_path: workspacePath,

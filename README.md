@@ -133,6 +133,12 @@ Global setup:
 node dist/cli/main.js setup
 ```
 
+Interactive setup now scans for agent environments first, shows only the agents it actually found for that scope, includes a `Found:` hint plus a `Select all found AI agents` option when there are multiple detections, and runs immediately after those choices without an extra generic confirmation step.
+
+Successful human-mode `setup` now ends with a short `Superplan setup completed successfully.` message instead of dumping the full structured result payload.
+
+Local Superplan commands resolve to the nearest repo workspace root when run from subdirectories, so `setup`, `init`, and task/change commands reuse the repo-level `.superplan/` instead of creating nested ones under `apps/...`.
+
 Quiet machine-level setup for automation:
 
 ```bash
@@ -209,7 +215,7 @@ Current top-level commands:
 | --- | --- |
 | `change` | Create tracked work structure |
 | `init` | Initialize Superplan in the current repo |
-| `setup` | Install Superplan config and bundled skills |
+| `setup` | Install Superplan config, bundled skills, and the agent integrations you select |
 | `sync` | Re-parse tasks, repair safe runtime drift, and refresh repo state |
 | `update` | Update the installed Superplan CLI and refresh existing skills |
 | `remove` | Remove a Superplan installation, including machine-level CLI installs and the nearest local Superplan workspace it can infer safely |

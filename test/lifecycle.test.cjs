@@ -68,6 +68,159 @@ test('interactive setup prints the current ascii wordmark once', async () => {
   assert.equal((bannerOutput.match(/____  _   _ ____/g) ?? []).length, 1);
 });
 
+test('interactive setup installs only the selected agent integrations', async () => {
+  const sandbox = await makeSandbox('superplan-setup-selector-');
+  const confirmAnswers = [false, false];
+  const checkboxAnswers = [
+    ['claude'],
+    ['codex'],
+  ];
+  const seenCheckboxChoices = [];
+
+  await fs.mkdir(path.join(sandbox.home, '.claude'), { recursive: true });
+  await fs.mkdir(path.join(sandbox.cwd, '.codex'), { recursive: true });
+
+  const { setup } = loadDistModule('cli/commands/setup.js', {
+    select: async () => 'both',
+    confirm: async () => confirmAnswers.shift() ?? false,
+    checkbox: async options => {
+      seenCheckboxChoices.push(options.choices.map(choice => ({
+        name: choice.name,
+        value: choice.value,
+        checked: choice.checked,
+      })));
+      assert.equal(options.required, true);
+      assert.equal(options.instructions.includes('! Space = select, Enter = continue'), true);
+      assert.deepEqual(options.theme, {
+        icon: {
+          checked: '[x]',
+          unchecked: '[ ]',
+        },
+      });
+      assert.equal(options.validate([]), 'Select at least one agent integration to continue.');
+      return checkboxAnswers.shift() ?? [];
+    },
+  });
+
+  const result = await withSandboxEnv(sandbox, async () => setup({ json: false, quiet: false }));
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.scope, 'both');
+  assert.equal(confirmAnswers.length, 0);
+  assert.deepEqual(result.data.agents.map(agent => agent.name).sort(), ['claude', 'codex']);
+  assert.deepEqual(seenCheckboxChoices[0], [
+    { name: 'Claude Code', value: 'claude', checked: false },
+  ]);
+  assert.match(seenCheckboxChoices[0].map(choice => choice.name).join(', '), /Claude Code/);
+  assert.deepEqual(seenCheckboxChoices[1], [
+    { name: 'Codex', value: 'codex', checked: false },
+  ]);
+  assert.equal(seenCheckboxChoices.length, 2);
+  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'using-superplan', 'SKILL.md')));
+  assert.equal(await pathExists(path.join(sandbox.home, '.gemini', 'commands', 'superplan.toml')), false);
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.codex', 'skills', 'using-superplan', 'SKILL.md')));
+  assert.equal(await pathExists(path.join(sandbox.cwd, '.gemini', 'commands', 'superplan.toml')), false);
+});
+
+test('interactive local setup from a nested repo directory installs into the repo root workspace', async () => {
+  const sandbox = await makeSandbox('superplan-setup-nested-root-');
+  const nestedCwd = path.join(sandbox.cwd, 'apps', 'overlay-desktop');
+  const expectedWorkspaceRoot = await fs.realpath(sandbox.cwd);
+  const previousCwd = process.cwd();
+  const previousHome = process.env.HOME;
+  const confirmAnswers = [false];
+
+  await fs.mkdir(path.join(sandbox.cwd, '.git'), { recursive: true });
+  await fs.mkdir(path.join(sandbox.cwd, '.codex'), { recursive: true });
+  await fs.mkdir(nestedCwd, { recursive: true });
+
+  const { setup } = loadDistModule('cli/commands/setup.js', {
+    select: async () => 'local',
+    confirm: async () => confirmAnswers.shift() ?? false,
+    checkbox: async () => ['codex'],
+  });
+
+  process.chdir(nestedCwd);
+  process.env.HOME = sandbox.home;
+
+  try {
+    const result = await setup({ json: false, quiet: false });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.data.scope, 'local');
+    assert.equal(result.data.config_path, path.join(expectedWorkspaceRoot, '.superplan', 'config.toml'));
+    assert.deepEqual(result.data.agents.map(agent => agent.name), ['codex']);
+  } finally {
+    process.chdir(previousCwd);
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+  }
+
+  assert.equal(confirmAnswers.length, 0);
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'config.toml')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.codex', 'skills', 'using-superplan', 'SKILL.md')));
+  assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
+});
+
+test('interactive setup select-all option installs every supported machine-level agent integration', async () => {
+  const sandbox = await makeSandbox('superplan-setup-select-all-');
+  const confirmAnswers = [false];
+
+  await fs.mkdir(path.join(sandbox.home, '.claude'), { recursive: true });
+  await fs.mkdir(path.join(sandbox.home, '.gemini'), { recursive: true });
+  await fs.mkdir(path.join(sandbox.home, '.cursor'), { recursive: true });
+  await fs.mkdir(path.join(sandbox.home, '.codex'), { recursive: true });
+  await fs.mkdir(path.join(sandbox.home, '.config', 'opencode'), { recursive: true });
+
+  const { setup } = loadDistModule('cli/commands/setup.js', {
+    select: async () => 'global',
+    confirm: async () => confirmAnswers.shift() ?? false,
+    checkbox: async options => {
+      assert.equal(options.message, 'Select machine-level AI agents');
+      assert.equal(
+        options.instructions,
+        '\n! Found: Claude Code, Codex, Gemini, Cursor, OpenCode\n! Space = select, Enter = continue',
+      );
+      assert.deepEqual(options.theme, {
+        icon: {
+          checked: '[x]',
+          unchecked: '[ ]',
+        },
+      });
+      assert.deepEqual(options.choices.map(choice => choice.name), [
+        'Claude Code',
+        'Codex',
+        'Gemini',
+        'Cursor',
+        'OpenCode',
+        'Select all found AI agents',
+      ]);
+      return ['__all_agents__'];
+    },
+  });
+
+  const result = await withSandboxEnv(sandbox, async () => setup({ json: false, quiet: false }));
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.scope, 'global');
+  assert.equal(confirmAnswers.length, 0);
+  assert.deepEqual(result.data.agents.map(agent => agent.name).sort(), [
+    'claude',
+    'codex',
+    'cursor',
+    'gemini',
+    'opencode',
+  ]);
+  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'using-superplan', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.gemini', 'commands', 'superplan.toml')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.cursor', 'skills', 'using-superplan', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.codex', 'skills', 'using-superplan', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'opencode', 'skills', 'using-superplan', 'SKILL.md')));
+});
+
 test('doctor reports valid after quiet global setup in a clean repo', async () => {
   const sandbox = await makeSandbox('superplan-doctor-valid-');
   const fakeClaudeDir = path.join(sandbox.home, '.claude');
@@ -143,4 +296,28 @@ test('init quiet creates repository scaffolding after setup is complete', async 
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context')));
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'runtime')));
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes')));
+});
+
+test('init quiet from a nested repo directory creates scaffolding at the repo root', async () => {
+  const sandbox = await makeSandbox('superplan-init-nested-');
+  const nestedCwd = path.join(sandbox.cwd, 'apps', 'overlay-desktop');
+
+  await fs.mkdir(path.join(sandbox.cwd, '.git'), { recursive: true });
+  await fs.mkdir(nestedCwd, { recursive: true });
+
+  await runCli(['setup', '--quiet', '--json'], { cwd: nestedCwd, env: sandbox.env });
+  const initResult = await runCli(['init', '--quiet', '--json'], { cwd: nestedCwd, env: sandbox.env });
+  const payload = parseCliJson(initResult);
+  const relativeRoot = path.relative(nestedCwd, path.join(sandbox.cwd, '.superplan')) || '.superplan';
+
+  assert.equal(initResult.code, 0);
+  assert.deepEqual(payload, {
+    ok: true,
+    data: {
+      root: relativeRoot,
+    },
+    error: null,
+  });
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'config.toml')));
+  assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
 });

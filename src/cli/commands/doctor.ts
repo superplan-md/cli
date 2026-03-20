@@ -4,6 +4,7 @@ import * as path from 'path';
 import { parse } from './parse';
 import { inspectOverlayCompanionInstall } from '../overlay-companion';
 import { readOverlayPreferences } from '../overlay-preferences';
+import { resolveWorkspaceRoot } from '../workspace-root';
 
 interface DoctorIssue {
   code: string;
@@ -263,11 +264,12 @@ async function collectDeepIssues(cwd: string): Promise<DoctorIssue[]> {
 export async function doctor(args: string[] = []) {
   const issues: DoctorIssue[] = [];
   const cwd = process.cwd();
+  const workspaceRoot = resolveWorkspaceRoot(cwd);
   const homeDir = os.homedir();
   const configPath = path.join(homeDir, '.config', 'superplan', 'config.toml');
   const skillsPath = path.join(homeDir, '.config', 'superplan', 'skills');
   const deep = args.includes('--deep');
-  const overlayPreferences = await readOverlayPreferences(cwd);
+  const overlayPreferences = await readOverlayPreferences(workspaceRoot);
   const overlayCompanion = await inspectOverlayCompanionInstall();
 
   if (!await pathExists(configPath)) {
@@ -289,7 +291,7 @@ export async function doctor(args: string[] = []) {
 
   const agents = [
     ...getGlobalAgents(homeDir),
-    ...getProjectAgents(cwd),
+    ...getProjectAgents(workspaceRoot),
   ];
   for (const agent of agents) {
     if (await pathExists(agent.path) && !await pathExists(agent.skillsPath)) {
@@ -316,7 +318,7 @@ export async function doctor(args: string[] = []) {
   }
 
   if (deep) {
-    issues.push(...await collectDeepIssues(cwd));
+    issues.push(...await collectDeepIssues(workspaceRoot));
   }
 
   return {

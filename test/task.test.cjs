@@ -1,10 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const {
   makeSandbox,
   parseCliJson,
+  pathExists,
   readJson,
   runCli,
   writeFile,
@@ -122,6 +124,35 @@ Run me
     },
     error: null,
   });
+});
+
+test('task start from a nested repo directory writes runtime state at the repo root workspace', async () => {
+  const sandbox = await makeSandbox('superplan-task-nested-runtime-');
+  const nestedCwd = path.join(sandbox.cwd, 'apps', 'overlay-desktop');
+
+  await fs.mkdir(path.join(sandbox.cwd, '.git'), { recursive: true });
+  await fs.mkdir(nestedCwd, { recursive: true });
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-150.md'), `---
+task_id: T-150
+status: pending
+priority: high
+---
+
+## Description
+Start from nested cwd
+
+## Acceptance Criteria
+- [ ] Works
+`);
+
+  const startPayload = parseCliJson(await runCli(['task', 'start', 'T-150', '--json'], {
+    cwd: nestedCwd,
+    env: sandbox.env,
+  }));
+
+  assert.equal(startPayload.data.status, 'in_progress');
+  assert.equal((await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'))).tasks['T-150'].status, 'in_progress');
+  assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
 });
 
 test('task lifecycle supports block, resume, request-feedback, and reset with runtime events', async () => {

@@ -49,7 +49,7 @@ Important install note:
 - `src/cli/router.ts`: Maps top-level commands to command handlers and normalizes CLI responses.
 - `src/cli/commands/change.ts`: Creates new change scaffolding under `.superplan/changes/<slug>/`.
 - `src/cli/commands/init.ts`: Creates repo-local `.superplan/` scaffolding, including `.superplan/config.toml`, `.superplan/context/`, `.superplan/runtime/`, and `.superplan/changes/`.
-- `src/cli/commands/setup.ts`: Installs Superplan config and bundled skills for supported agent environments. Supports global, local, both, and skip flows.
+- `src/cli/commands/setup.ts`: Installs Superplan config and bundled skills for supported agent environments. Interactive setup now scans for agent environments first, presents a checklist of only the found agents for that scope, adds a `Found:` hint plus a bottom-positioned `Select all found AI agents` option when more than one agent is detected, skips the old generic proceed confirmation, and installs only the selected entries across global, local, both, and skip flows.
 - `src/cli/commands/update.ts`: Reruns the bundled installer for normal installed copies of the CLI using recorded install metadata, then refreshes existing skill installs.
 - `src/cli/commands/remove.ts`: Removes or purges Superplan installation state. Machine-level removal also uninstalls the managed CLI package/bin, symlinked dev installs that can be inferred from the invoked `superplan` bin path, and overlay artifacts when they are recorded or inferable, and local removal targets the nearest parent Superplan workspace rather than only the exact current directory.
 - `src/cli/commands/doctor.ts`: Validates setup state and, in deep mode, inspects parsed tasks plus runtime consistency.
@@ -73,6 +73,8 @@ Important install note:
 - Failures normalize to `{ ok: false, error: { code, message, retryable } }`.
 - `--quiet` is the agent-safe mode for commands that otherwise prompt or print human-oriented output.
 - `--json` is the primary automation mode.
+- Human-mode `setup` now prints a concise success message instead of the full structured payload.
+- Local-scope CLI commands now resolve the nearest repo workspace root, so running from `apps/...` reuses the repo-level `.superplan/` instead of creating nested local workspaces.
 
 ## Task Storage And Parsing
 

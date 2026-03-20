@@ -1,10 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const {
   makeSandbox,
   parseCliJson,
+  pathExists,
   runCli,
   writeFile,
 } = require('./helpers.cjs');
@@ -19,6 +21,35 @@ test('parse defaults to .superplan/changes and reports missing directory gracefu
   assert.deepEqual(payload.data.tasks, []);
   assert.equal(payload.data.diagnostics[0].code, 'CHANGES_DIR_MISSING');
   assert.equal(payload.error, null);
+});
+
+test('parse from a nested repo directory resolves the repo-root superplan workspace', async () => {
+  const sandbox = await makeSandbox('superplan-parse-nested-root-');
+  const nestedCwd = path.join(sandbox.cwd, 'apps', 'overlay-desktop');
+
+  await fs.mkdir(path.join(sandbox.cwd, '.git'), { recursive: true });
+  await fs.mkdir(nestedCwd, { recursive: true });
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'feature-a', 'tasks', 'T-001.md'), `---
+task_id: T-001
+status: pending
+priority: high
+---
+
+## Description
+Parse from nested cwd
+
+## Acceptance Criteria
+- [ ] Works
+`);
+
+  const result = await runCli(['parse', '--json'], { cwd: nestedCwd, env: sandbox.env });
+  const payload = parseCliJson(result);
+
+  assert.equal(result.code, 0);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.data.tasks.length, 1);
+  assert.equal(payload.data.tasks[0].task_id, 'T-001');
+  assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
 });
 
 test('parse extracts task fields, dependencies, priority, and acceptance criteria from a task file', async () => {

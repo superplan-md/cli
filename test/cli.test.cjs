@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parseCliJson, runCli } = require('./helpers.cjs');
+const { loadDistModule, makeSandbox, parseCliJson, runCli, withSandboxEnv } = require('./helpers.cjs');
 
 test('cli returns NO_COMMAND in json mode', async () => {
   const result = await runCli(['--json']);
@@ -119,4 +119,35 @@ test('diagnostic task commands still work even when hidden from help', async () 
   assert.equal(whyNextResult.code, 0);
   assert.equal(whyNextPayload.ok, true);
   assert.equal(typeof whyNextPayload.data.reason, 'string');
+});
+
+test('setup in human mode prints a concise success message instead of the full payload', async () => {
+  const sandbox = await makeSandbox('superplan-setup-human-output-');
+  const { routeCommand } = loadDistModule('cli/router.js', {
+    select: async () => 'global',
+    confirm: async () => false,
+  });
+
+  const originalConsoleLog = console.log;
+  const originalConsoleError = console.error;
+  const output = [];
+  const errors = [];
+  console.log = (...args) => {
+    output.push(args.join(' '));
+  };
+  console.error = (...args) => {
+    errors.push(args.join(' '));
+  };
+
+  try {
+    await withSandboxEnv(sandbox, async () => routeCommand(['setup']));
+  } finally {
+    console.log = originalConsoleLog;
+    console.error = originalConsoleError;
+  }
+
+  const combinedOutput = output.join('\n');
+  assert.match(combinedOutput, /Superplan setup completed successfully\./);
+  assert.doesNotMatch(combinedOutput, /"config_path"/);
+  assert.equal(errors.length, 0);
 });

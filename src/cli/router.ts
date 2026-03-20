@@ -27,6 +27,15 @@ type CommandHandler = (
   options: CommandOptions,
 ) => Promise<CommandResult>;
 
+function printHumanSuccess(command: string, result: CommandResult): boolean {
+  if (command === "setup") {
+    console.log("Superplan setup completed successfully.");
+    return true;
+  }
+
+  return false;
+}
+
 function hasError(result: CommandResult): result is CommandResult & {
   error: { code: string; message: string; retryable: boolean };
 } {
@@ -86,6 +95,13 @@ export async function routeCommand(args: string[]) {
       result.error.code === "INVALID_TASK_COMMAND"
     ) {
       console.error(result.error.message);
+    } else if (
+      result.ok &&
+      !options.json &&
+      !options.quiet &&
+      printHumanSuccess(command, result)
+    ) {
+      // Human-friendly success output handled above.
     } else {
       const normalizedResult = normalizeCliResult(result);
       const serializedResult = JSON.stringify(normalizedResult, null, 2);

@@ -4,6 +4,7 @@ import * as path from 'path';
 import { confirm } from '@inquirer/prompts';
 import { setup, type SetupResult } from './setup';
 import { writeOverlayPreference } from '../overlay-preferences';
+import { resolveWorkspaceRoot } from '../workspace-root';
 
 export type InitResult =
   | { ok: true; data: { root: string } }
@@ -24,7 +25,9 @@ async function pathExists(targetPath: string): Promise<boolean> {
 
 export async function init(options: InitOptions = {}): Promise<InitResult> {
   const cwd = process.cwd();
-  const superplanRoot = path.join(cwd, '.superplan');
+  const workspaceRoot = resolveWorkspaceRoot(cwd);
+  const superplanRoot = path.join(workspaceRoot, '.superplan');
+  const relativeSuperplanRoot = path.relative(cwd, superplanRoot) || '.superplan';
   const configPath = path.join(superplanRoot, 'config.toml');
   const contextDir = path.join(superplanRoot, 'context');
   const runtimeDir = path.join(superplanRoot, 'runtime');
@@ -81,7 +84,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
         return {
           ok: true,
           data: {
-            root: '.superplan',
+            root: relativeSuperplanRoot,
           },
         };
       }
@@ -91,7 +94,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
         return {
           ok: true,
           data: {
-            root: '.superplan',
+            root: relativeSuperplanRoot,
           },
         };
       }
@@ -105,13 +108,13 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
 
     if (!options.quiet) {
       const enableOverlay = await confirm({ message: 'Enable desktop overlay in this repository?' });
-      await writeOverlayPreference(enableOverlay, { scope: 'local', cwd });
+      await writeOverlayPreference(enableOverlay, { scope: 'local', cwd: workspaceRoot });
     }
 
     return {
       ok: true,
       data: {
-        root: '.superplan',
+        root: relativeSuperplanRoot,
       },
     };
   } catch (error: any) {
