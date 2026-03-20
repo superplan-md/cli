@@ -145,7 +145,6 @@ Current top-level commands:
 | `purge` | Remove Superplan state more aggressively |
 | `doctor` | Validate setup and installation health |
 | `parse` | Parse task contracts and return diagnostics |
-| `server` | Start a small local dummy HTTP server for demos and integration experiments |
 | `run` | Start or continue the next task |
 | `status` | Show active, ready, blocked, and feedback-needed tasks |
 | `task` | Inspect and transition task runtime state |
@@ -230,23 +229,6 @@ node --test test/cli.test.cjs
 node --test test/task.test.cjs
 node --test test/parse.test.cjs
 ```
-
-## Dummy Server
-
-For quick local HTTP testing, Superplan now includes a tiny dummy server:
-
-```bash
-superplan server --port 3000
-```
-
-Available routes:
-
-- `GET /`
-- `GET /health`
-- `GET /api/tasks`
-- `GET /api/echo?message=hello`
-
-The server startup payload is returned through the normal CLI result shape, and request logs are written separately so the JSON startup response stays parseable for automation.
 
 ## JSON-First Automation
 

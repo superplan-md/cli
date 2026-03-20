@@ -11,7 +11,7 @@ The current product surface is CLI-first and markdown-first:
 - canonical task artifacts live under `.superplan/changes/`
 - durable repo context can live under `context/` and `.superplan/context/`
 
-The current top-level command surface is:
+The current documented top-level command surface is:
 
 - `init`
 - `setup`
@@ -19,7 +19,6 @@ The current top-level command surface is:
 - `purge`
 - `doctor`
 - `parse`
-- `server`
 - `run`
 - `status`
 - `task`
@@ -46,7 +45,7 @@ Important install note:
 - `src/cli/commands/remove.ts`: Removes or purges Superplan installation state. Local removal now treats `.superplan/changes/` as part of repo-local Superplan state.
 - `src/cli/commands/doctor.ts`: Validates setup state and, in deep mode, inspects parsed tasks plus runtime consistency.
 - `src/cli/commands/parse.ts`: Parses markdown task contracts, returns structured task data, and emits diagnostics.
-- `src/cli/commands/server.ts`: Starts a small dependency-free Node.js HTTP server with dummy routes and lightweight request logging.
+- `src/cli/commands/server.ts`: Internal or experimental dummy HTTP server code that still exists in the repo, but is not part of the current public documentation surface.
 - `src/cli/commands/task.ts`: Implements task inspection, selection, readiness explanation, runtime transitions, and deterministic runtime repair.
 - `src/cli/commands/run.ts`: Starts or continues the next task through the task runtime loop.
 - `src/cli/commands/status.ts`: Returns active, ready, blocked, and feedback-needed task summaries.
@@ -113,7 +112,7 @@ Task markdown should not be hand-edited to reflect runtime lifecycle changes.
 - `task --help` is intentionally narrower than the full internal task command surface. It emphasizes the common execution loop rather than every diagnostic subcommand.
 - `why` and `why-next` still exist as commands, but they are treated as diagnostic tools rather than default workflow steps.
 - The main CLI help should describe the full top-level Superplan command list.
-- `server` is currently a small dummy HTTP server intended for demos and local integration experiments, not a production API surface.
+- The public docs currently exclude `server` from the surfaced command list even though internal or experimental server code still exists in the repo.
 
 ## Testing And Development
 
