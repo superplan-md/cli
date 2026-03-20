@@ -1,8 +1,8 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { parse } from './parse';
-import { refreshOverlaySnapshot } from '../overlay-runtime';
-import type { OverlayEventKind } from '../../shared/overlay';
+import { refreshOverlaySnapshot, setOverlayVisibilityRequest } from '../overlay-runtime';
+import type { OverlayEventKind, OverlayRequestedAction } from '../../shared/overlay';
 import {
   appendTaskEntryToIndex,
   buildTaskContract,
@@ -229,15 +229,26 @@ function getOverlayAlertKinds(tasks: ParsedTask[], preferredAlerts?: OverlayEven
   return [...new Set(alerts)];
 }
 
-async function refreshOverlayFromMergedTasks(preferredAlerts?: OverlayEventKind[]): Promise<void> {
+async function refreshOverlayFromMergedTasks(options: {
+  preferredAlerts?: OverlayEventKind[];
+  requestedAction?: OverlayRequestedAction;
+} = {}): Promise<void> {
   const mergedTasksResult = await getMergedTasks({ skipInvariant: true });
   if (mergedTasksResult.error) {
     return;
   }
 
-  await refreshOverlaySnapshot(mergedTasksResult.tasks!, {
-    alertKinds: getOverlayAlertKinds(mergedTasksResult.tasks!, preferredAlerts),
-  });
+  const operations: Promise<unknown>[] = [
+    refreshOverlaySnapshot(mergedTasksResult.tasks!, {
+      alertKinds: getOverlayAlertKinds(mergedTasksResult.tasks!, options.preferredAlerts),
+    }),
+  ];
+
+  if (options.requestedAction) {
+    operations.push(setOverlayVisibilityRequest(options.requestedAction));
+  }
+
+  await Promise.all(operations);
 }
 
 function getTaskInvalidError(): TaskErrorResult {
@@ -900,7 +911,7 @@ async function startTask(taskId: string): Promise<TaskCommandResult> {
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.started', taskId);
-  await refreshOverlayFromMergedTasks();
+  await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
 
   return {
     ok: true,
@@ -1002,7 +1013,7 @@ async function resumeTask(taskId: string): Promise<TaskCommandResult> {
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.resumed', taskId);
-  await refreshOverlayFromMergedTasks();
+  await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
 
   return {
     ok: true,
@@ -1223,7 +1234,7 @@ async function requestFeedbackTask(taskId: string, message?: string): Promise<Ta
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.feedback_requested', taskId);
-  await refreshOverlayFromMergedTasks(['needs_feedback']);
+  await refreshOverlayFromMergedTasks({ preferredAlerts: ['needs_feedback'] });
 
   return {
     ok: true,
@@ -1299,7 +1310,7 @@ async function reopenTask(taskId: string, reason?: string): Promise<TaskCommandR
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.reopened', taskId);
-  await refreshOverlayFromMergedTasks();
+  await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
 
   return {
     ok: true,

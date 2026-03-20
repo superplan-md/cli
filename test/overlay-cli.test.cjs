@@ -71,6 +71,79 @@ Show the current task description in the overlay
   assert.equal(typeof control.updated_at, 'string');
 });
 
+test('run ensures overlay visibility when it starts and continues work', async () => {
+  const sandbox = await makeSandbox('superplan-overlay-run-');
+
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-150.md'), `---
+task_id: T-150
+status: pending
+priority: high
+---
+
+## Description
+Run overlay task
+
+## Acceptance Criteria
+- [ ] A
+`);
+
+  parseCliJson(await runCli(['run', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+
+  const startedSnapshot = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
+  const startedControl = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
+  assert.equal(startedSnapshot.active_task?.task_id, 'T-150');
+  assert.equal(startedSnapshot.active_task?.status, 'in_progress');
+  assert.equal(startedControl.requested_action, 'ensure');
+  assert.equal(startedControl.visible, true);
+
+  parseCliJson(await runCli(['overlay', 'hide', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  const hiddenControl = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
+  assert.equal(hiddenControl.requested_action, 'hide');
+  assert.equal(hiddenControl.visible, false);
+
+  parseCliJson(await runCli(['run', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+
+  const continuedControl = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
+  assert.equal(continuedControl.requested_action, 'ensure');
+  assert.equal(continuedControl.visible, true);
+});
+
+test('task start and resume ensure overlay visibility', async () => {
+  const sandbox = await makeSandbox('superplan-overlay-pickup-');
+
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-250.md'), `---
+task_id: T-250
+status: pending
+priority: high
+---
+
+## Description
+Pickup overlay task
+
+## Acceptance Criteria
+- [ ] A
+`);
+
+  parseCliJson(await runCli(['task', 'start', 'T-250', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+
+  const startedControl = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
+  const startedSnapshot = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
+  assert.equal(startedControl.requested_action, 'ensure');
+  assert.equal(startedControl.visible, true);
+  assert.equal(startedSnapshot.active_task?.task_id, 'T-250');
+
+  parseCliJson(await runCli(['overlay', 'hide', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  parseCliJson(await runCli(['task', 'block', 'T-250', '--reason', 'Need to pause', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  parseCliJson(await runCli(['task', 'resume', 'T-250', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+
+  const resumedControl = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
+  const resumedSnapshot = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
+  assert.equal(resumedControl.requested_action, 'ensure');
+  assert.equal(resumedControl.visible, true);
+  assert.equal(resumedSnapshot.active_task?.task_id, 'T-250');
+  assert.equal(resumedSnapshot.active_task?.status, 'in_progress');
+});
+
 test('task lifecycle updates overlay snapshot and emits high-signal alerts only', async () => {
   const feedbackSandbox = await makeSandbox('superplan-overlay-feedback-');
 
