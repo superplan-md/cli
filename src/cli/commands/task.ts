@@ -1,6 +1,8 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { parse } from './parse';
+import { refreshOverlaySnapshot } from '../overlay-runtime';
+import type { OverlayEventKind } from '../../shared/overlay';
 
 interface AcceptanceCriterion {
   text: string;
@@ -22,6 +24,11 @@ interface ParsedTask {
   is_valid: boolean;
   is_ready: boolean;
   issues: string[];
+  started_at?: string;
+  completed_at?: string;
+  updated_at?: string;
+  reason?: string;
+  message?: string;
 }
 
 interface RuntimeTaskState {
@@ -194,6 +201,27 @@ async function appendEvent(
   })}\n`, 'utf-8');
 }
 
+function getOverlayAlertKinds(tasks: ParsedTask[], preferredAlerts?: OverlayEventKind[]): OverlayEventKind[] {
+  const alerts = [...(preferredAlerts ?? [])];
+
+  if (tasks.length > 0 && tasks.every(task => task.status === 'done')) {
+    alerts.push('all_tasks_done');
+  }
+
+  return [...new Set(alerts)];
+}
+
+async function refreshOverlayFromMergedTasks(preferredAlerts?: OverlayEventKind[]): Promise<void> {
+  const mergedTasksResult = await getMergedTasks({ skipInvariant: true });
+  if (mergedTasksResult.error) {
+    return;
+  }
+
+  await refreshOverlaySnapshot(mergedTasksResult.tasks!, {
+    alertKinds: getOverlayAlertKinds(mergedTasksResult.tasks!, preferredAlerts),
+  });
+}
+
 function getTaskInvalidError(): TaskErrorResult {
   return {
     ok: false,
@@ -332,9 +360,20 @@ function getStartedAtTimestamp(taskState: RuntimeTaskState): number {
 }
 
 function applyRuntimeState(task: ParsedTask, runtimeState?: RuntimeTaskState): ParsedTask {
+  const runtimeMetadata = runtimeState
+    ? {
+        ...(runtimeState.started_at ? { started_at: runtimeState.started_at } : {}),
+        ...(runtimeState.completed_at ? { completed_at: runtimeState.completed_at } : {}),
+        ...(runtimeState.updated_at ? { updated_at: runtimeState.updated_at } : {}),
+        ...(runtimeState.reason ? { reason: runtimeState.reason } : {}),
+        ...(runtimeState.message ? { message: runtimeState.message } : {}),
+      }
+    : {};
+
   if (runtimeState?.status === 'in_progress') {
     return {
       ...task,
+      ...runtimeMetadata,
       status: 'in_progress',
       effective_status: 'in_progress',
     };
@@ -343,6 +382,7 @@ function applyRuntimeState(task: ParsedTask, runtimeState?: RuntimeTaskState): P
   if (runtimeState?.status === 'done') {
     return {
       ...task,
+      ...runtimeMetadata,
       status: 'done',
       effective_status: 'done',
     };
@@ -351,6 +391,7 @@ function applyRuntimeState(task: ParsedTask, runtimeState?: RuntimeTaskState): P
   if (runtimeState?.status === 'blocked') {
     return {
       ...task,
+      ...runtimeMetadata,
       status: 'blocked',
       effective_status: 'blocked',
     };
@@ -359,6 +400,7 @@ function applyRuntimeState(task: ParsedTask, runtimeState?: RuntimeTaskState): P
   if (runtimeState?.status === 'needs_feedback') {
     return {
       ...task,
+      ...runtimeMetadata,
       status: 'needs_feedback',
       effective_status: 'needs_feedback',
     };
@@ -367,6 +409,7 @@ function applyRuntimeState(task: ParsedTask, runtimeState?: RuntimeTaskState): P
   if (runtimeState) {
     return {
       ...task,
+      ...runtimeMetadata,
       status: runtimeState.status,
     };
   }
@@ -650,6 +693,7 @@ async function fixTasks(): Promise<TaskCommandResult> {
 
   if (actions.length > 0) {
     await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
+    await refreshOverlayFromMergedTasks();
   }
 
   return {
@@ -797,13 +841,16 @@ async function startTask(taskId: string): Promise<TaskCommandResult> {
     };
   }
 
+  const timestamp = new Date().toISOString();
   runtimeState.tasks[taskId] = {
     status: 'in_progress',
-    started_at: new Date().toISOString(),
+    started_at: timestamp,
+    updated_at: timestamp,
   };
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.started', taskId);
+  await refreshOverlayFromMergedTasks();
 
   return {
     ok: true,
@@ -905,6 +952,7 @@ async function resumeTask(taskId: string): Promise<TaskCommandResult> {
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.resumed', taskId);
+  await refreshOverlayFromMergedTasks();
 
   return {
     ok: true,
@@ -962,14 +1010,17 @@ async function completeTask(taskId: string): Promise<TaskCommandResult> {
     };
   }
 
+  const timestamp = new Date().toISOString();
   runtimeState.tasks[taskId] = {
     ...existingTaskState,
     status: 'done',
-    completed_at: new Date().toISOString(),
+    completed_at: timestamp,
+    updated_at: timestamp,
   };
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.completed', taskId);
+  await refreshOverlayFromMergedTasks();
 
   return {
     ok: true,
@@ -1013,6 +1064,7 @@ async function blockTask(taskId: string, reason?: string): Promise<TaskCommandRe
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.blocked', taskId);
+  await refreshOverlayFromMergedTasks();
 
   return {
     ok: true,
@@ -1056,6 +1108,7 @@ async function requestFeedbackTask(taskId: string, message?: string): Promise<Ta
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.feedback_requested', taskId);
+  await refreshOverlayFromMergedTasks(['needs_feedback']);
 
   return {
     ok: true,
@@ -1106,6 +1159,7 @@ async function resetTask(taskId: string): Promise<TaskCommandResult> {
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.reset', taskId);
+  await refreshOverlayFromMergedTasks();
 
   return {
     ok: true,

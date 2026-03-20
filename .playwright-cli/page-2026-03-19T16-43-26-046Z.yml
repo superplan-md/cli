@@ -1,0 +1,65 @@
+- generic [ref=e2]:
+  - banner [ref=e29]:
+    - generic [ref=e30]:
+      - paragraph [ref=e31]: Superplan overlay prototype
+      - heading "Expanded kanban attention panel" [level=1] [ref=e32]
+    - generic [ref=e33]:
+      - button "Refresh" [ref=e34] [cursor=pointer]
+      - button "Shrink" [ref=e35] [cursor=pointer]
+  - generic [ref=e36]:
+    - generic [ref=e37]: All tasks done
+    - generic [ref=e38]:
+      - generic [ref=e39]: cli
+      - generic [ref=e40]: Updated 3:40 AM
+  - generic [ref=e41]:
+    - paragraph [ref=e42]: done
+    - heading "Define overlay runtime contract" [level=2] [ref=e43]
+    - paragraph [ref=e44]: Task T-399
+  - generic [ref=e45]:
+    - generic [ref=e46]:
+      - strong [ref=e47]: "0"
+      - generic [ref=e48]: In progress
+    - generic [ref=e49]:
+      - strong [ref=e50]: "0"
+      - generic [ref=e51]: Backlog
+    - generic [ref=e52]:
+      - strong [ref=e53]: "3"
+      - generic [ref=e54]: Done
+    - generic [ref=e55]:
+      - strong [ref=e56]: "0"
+      - generic [ref=e57]: Needs feedback
+  - generic [ref=e58]:
+    - generic [ref=e59]:
+      - generic [ref=e60]:
+        - heading "In progress" [level=3] [ref=e61]
+        - generic [ref=e62]: "0"
+      - paragraph [ref=e64]: Empty
+    - generic [ref=e65]:
+      - generic [ref=e66]:
+        - heading "Backlog" [level=3] [ref=e67]
+        - generic [ref=e68]: "0"
+      - paragraph [ref=e70]: Empty
+    - generic [ref=e71]:
+      - generic [ref=e72]:
+        - heading "Needs feedback" [level=3] [ref=e73]
+        - generic [ref=e74]: "0"
+      - paragraph [ref=e76]: Empty
+    - generic [ref=e77]:
+      - generic [ref=e78]:
+        - heading "Done" [level=3] [ref=e79]
+        - generic [ref=e80]: "3"
+      - generic [ref=e81]:
+        - article [ref=e82]:
+          - strong [ref=e83]: Define overlay runtime contract
+          - generic [ref=e84]: T-399
+        - article [ref=e85]:
+          - strong [ref=e86]: Emit overlay snapshot from CLI
+          - generic [ref=e87]: T-400
+        - article [ref=e88]:
+          - strong [ref=e89]: Boot the desktop prototype shell
+          - generic [ref=e90]: T-401
+    - generic [ref=e91]:
+      - generic [ref=e92]:
+        - heading "Blocked" [level=3] [ref=e93]
+        - generic [ref=e94]: "0"
+      - paragraph [ref=e96]: Empty

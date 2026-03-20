@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { routeCommand, router } from './router';
 import { getTaskCommandHelpMessage } from './commands/task';
+import { getOverlayCommandHelpMessage } from './commands/overlay';
 
 const { version } = require('../../package.json') as { version: string };
 
@@ -40,6 +41,7 @@ Commands:
   run         Run the task execution loop
   status      Show current task status summary
   task        Task operations
+  overlay     Overlay companion operations
 
 Options:
   -v, --version  Show CLI version
@@ -72,6 +74,22 @@ async function main() {
 
   if (command === 'task' && (args.includes('--help') || args[1] === 'help')) {
     const helpText = getTaskCommandHelpMessage({});
+    if (json || quiet) {
+      printJsonResult({
+        ok: true,
+        data: {
+          help: helpText,
+        },
+        error: null,
+      });
+    } else {
+      console.log(helpText);
+    }
+    return;
+  }
+
+  if (command === 'overlay' && (args.includes('--help') || args[1] === 'help')) {
+    const helpText = getOverlayCommandHelpMessage({});
     if (json || quiet) {
       printJsonResult({
         ok: true,

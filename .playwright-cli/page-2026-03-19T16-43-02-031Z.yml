@@ -1,0 +1,26 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - paragraph [ref=e5]: Superplan overlay prototype
+      - heading "Floating task strip" [level=1] [ref=e6]
+    - generic [ref=e7]:
+      - button "Refresh" [ref=e8] [cursor=pointer]
+      - button "Open board" [ref=e9] [cursor=pointer]
+  - generic [ref=e11]: All tasks done
+  - generic [ref=e12]:
+    - paragraph [ref=e13]: done
+    - heading "Define overlay runtime contract" [level=2] [ref=e14]
+    - paragraph [ref=e15]: Task T-399
+  - generic [ref=e16]:
+    - generic [ref=e17]:
+      - strong [ref=e18]: "0"
+      - generic [ref=e19]: In progress
+    - generic [ref=e20]:
+      - strong [ref=e21]: "0"
+      - generic [ref=e22]: Backlog
+    - generic [ref=e23]:
+      - strong [ref=e24]: "3"
+      - generic [ref=e25]: Done
+    - generic [ref=e26]:
+      - strong [ref=e27]: "0"
+      - generic [ref=e28]: Needs feedback

@@ -1,6 +1,6 @@
 ---
 name: using-superplan
-description: Use when Superplan is active in the current host or repo and the system must decide whether the request should stay conversational or enter structured Superplan workflow.
+description: Default entry skill when Superplan is active in the current host or repo and the system must decide whether the request should stay conversational or enter structured Superplan workflow.
 ---
 
 # Using Superplan

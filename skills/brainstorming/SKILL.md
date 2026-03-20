@@ -1,6 +1,6 @@
 ---
 name: brainstorming
-description: Use when work is ambiguous enough that expectations, constraints, taste, or acceptance intent must be clarified before Superplan can safely shape the work.
+description: Support skill. Use only after Superplan entry routing has already established that design clarification is the next blocker because expectations, constraints, taste, or acceptance intent remain ambiguous.
 ---
 
 # Brainstorming
@@ -12,6 +12,8 @@ Turn real ambiguity into an approved design before planning or execution proceed
 This skill is for expectation discovery, not decomposition theater.
 
 In Superplan, `brainstorming` is a support discipline skill. It does not decide whether Superplan should engage, and it does not own the full shaping phase.
+
+If this skill appears to be the first lane for a repo-work request, stop and hand control back to `using-superplan` or the current owning workflow phase.
 
 ## Hard Gate
 
@@ -40,6 +42,7 @@ It does not get to skip design discipline.
 
 Use when:
 
+- a workflow skill has already established that design clarification is the next blocker
 - hidden expectations make direct shaping unsafe
 - the user wants something built, changed, or clarified but key constraints are still implicit
 - taste, product, or acceptance risk is high enough that the wrong early assumption would increase blast radius
@@ -51,6 +54,7 @@ Use when:
 Do not use when:
 
 - the request is a simple explanation or answer
+- this is first-contact repo work and no workflow skill has routed into design clarification yet
 - the work is already clear enough for proportional shaping
 - the ambiguity is casual ideation with no durable artifact, visibility, or reusable-context benefit
 - `using-superplan` or `route-work` still needs to decide whether Superplan should engage
@@ -59,22 +63,24 @@ Do not use when:
 
 ## Ordered Process
 
-1. Explore repo context first.
-2. Confirm the ambiguity is real and durable enough to justify brainstorming.
-3. If the request is overscoped, decompose it before deeper refinement.
-4. Ask one high-leverage question at a time.
-5. Propose `2-3` approaches with trade-offs and a recommendation.
-6. Present the design in sections scaled to complexity.
-7. Get explicit approval before planning or execution.
-8. Write the minimum durable design artifact.
-9. If a substantial spec artifact was written, ask the user to review that artifact before moving on.
-10. Hand off to `writing-plans`.
+1. Confirm that a workflow skill has already routed here and that design clarification is the current blocker.
+2. Explore repo context first.
+3. Confirm the ambiguity is real and durable enough to justify brainstorming.
+4. If the request is overscoped, decompose it before deeper refinement.
+5. Ask one high-leverage question at a time.
+6. Propose `2-3` approaches with trade-offs and a recommendation.
+7. Present the design in sections scaled to complexity.
+8. Get explicit approval before planning or execution.
+9. Write the minimum durable design artifact.
+10. If a substantial spec artifact was written, ask the user to review that artifact before moving on.
+11. Hand control back to the owning workflow phase, usually `shape-work`.
 
 Do not reorder this flow casually.
 
 ## Context-First Rules
 
 - inspect repo files, docs, nearby code, and existing Superplan artifacts before asking questions the workspace can already answer
+- if this is clearly first-contact repo work, return to `using-superplan` instead of continuing
 - treat the user's raw narrative as signal, not noise
 - prefer one high-leverage question at a time
 - ask only questions whose answer materially changes the path
@@ -140,6 +146,7 @@ Do not force a written-artifact review loop when no meaningful artifact was crea
 - interruption points
 - re-shape triggers
 - verification-path shaping
+- the decision to hand off to `writing-plans` or `execute-task-graph`
 
 `brainstorming` may recommend that a spec is needed.
 It must not silently absorb the full shaping phase.
@@ -147,6 +154,7 @@ It must not silently absorb the full shaping phase.
 ## Forbidden Behavior
 
 - jumping straight to tasks before the target is understood
+- acting as the first lane for repo work that should still go through `using-superplan` or `route-work`
 - asking low-value questions the workspace can answer
 - skipping the approval loop because the work seems obvious
 - treating "I can code this" as proof that the design is understood
@@ -174,11 +182,12 @@ Do not record transient conversation detail as durable memory.
 
 ## Handoff
 
-The normal next skill is `writing-plans`.
+The normal next step is to return control to the owning workflow phase, usually `shape-work`.
 
 If approval is still missing, stop and get it.
 If the real blocker turns out to be stale workspace context, route back toward `context-bootstrap-sync`.
 If the request collapses into already-clear tiny work, return control to the owning workflow phase rather than forcing more ceremony.
+If the owning workflow phase has already established that the next blocker is execution sequencing rather than artifact depth, that phase may invoke `writing-plans`.
 
 ## Validation Cases
 
@@ -192,12 +201,14 @@ Should trigger:
 Should stay out:
 
 - direct explanation-only requests
+- first-contact Superplan repo work where entry routing has not happened yet
 - casual ideation with no durable workflow value
 - tiny already-clear work where proportional shaping can proceed directly
 - cases where the real missing prerequisite is context bootstrap rather than design clarification
 
 Should fail if:
 
+- it becomes the first lane for repo work that should still route through `using-superplan`
 - it skips context inspection and asks avoidable questions
 - it asks multiple low-leverage questions in one burst
 - it presents only one path when real alternatives exist

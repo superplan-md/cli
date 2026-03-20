@@ -6,6 +6,7 @@ import { task } from './commands/task';
 import { purge, remove } from './commands/remove';
 import { run } from './commands/run';
 import { status } from './commands/status';
+import { overlay } from './commands/overlay';
 
 type CommandOptions = {
   json: boolean;
@@ -55,6 +56,7 @@ export const router: Record<string, CommandHandler> = {
   run: async () => run(),
   status: async () => status(),
   task: async (args) => task(args),
+  overlay: async (args) => overlay(args),
 };
 
 export async function routeCommand(args: string[]) {
