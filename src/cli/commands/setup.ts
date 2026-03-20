@@ -1,8 +1,9 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { confirm, select } from '@inquirer/prompts';
+import { checkbox, confirm, select } from '@inquirer/prompts';
 import { writeOverlayPreference } from '../overlay-preferences';
+import { resolveWorkspaceRoot } from '../workspace-root';
 
 interface AgentEnvironment {
   name: string;
@@ -14,6 +15,17 @@ interface AgentEnvironment {
 
 type InstallScope = 'global' | 'local' | 'both' | 'skip';
 type AgentScope = 'project' | 'global';
+
+const AGENT_DISPLAY_NAMES: Record<string, string> = {
+  claude: 'Claude Code',
+  codex: 'Codex',
+  cursor: 'Cursor',
+  gemini: 'Gemini',
+  opencode: 'OpenCode',
+};
+
+const AGENT_SELECTION_ORDER = ['claude', 'codex', 'gemini', 'cursor', 'opencode'];
+const SELECT_ALL_AGENTS_VALUE = '__all_agents__';
 
 export interface SetupOptions {
   json?: boolean;
@@ -63,13 +75,6 @@ const SETUP_BANNER = `
 \\___ \\| | | | |_) |  _| | |_) | |_) | |     / _ \\ |  \\| |
  ___) | |_| |  __/| |___|  _ <|  __/| |___ / ___ \\| |\\  |
 |____/ \\___/|_|   |_____|_| \\_\\_|   |_____/_/   \\_\\_| \\_|
-
- .___  __.  _______
- |   \\/   | |       \\
- |  \\  /  | |  .--.  |
- |  |\\/|  | |  |  |  |
- |  |  |  | |  '--'  |
- |__|  |__| |_______/
 
 `;
 
@@ -178,6 +183,30 @@ Execution loop:
 
 Never write \`.superplan/runtime/overlay.json\` by hand.
 """`;
+}
+
+function getAgentDisplayName(agent: AgentEnvironment): string {
+  return AGENT_DISPLAY_NAMES[agent.name] ?? agent.name;
+}
+
+function sortAgentsForSelection(agents: AgentEnvironment[]): AgentEnvironment[] {
+  return [...agents].sort((left, right) => {
+    const leftIndex = AGENT_SELECTION_ORDER.indexOf(left.name);
+    const rightIndex = AGENT_SELECTION_ORDER.indexOf(right.name);
+    const normalizedLeftIndex = leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex;
+    const normalizedRightIndex = rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex;
+
+    if (normalizedLeftIndex !== normalizedRightIndex) {
+      return normalizedLeftIndex - normalizedRightIndex;
+    }
+
+    return getAgentDisplayName(left).localeCompare(getAgentDisplayName(right));
+  });
+}
+
+function formatDetectedAgentInstructions(agents: AgentEnvironment[]): string {
+  const foundAgentNames = agents.map(getAgentDisplayName).join(', ');
+  return `\n! Found: ${foundAgentNames}\n! Space = select, Enter = continue`;
 }
 
 function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironment[] {
@@ -293,6 +322,49 @@ async function installAgentSkills(skillsDir: string, agents: AgentEnvironment[])
     await fs.mkdir(path.dirname(agent.install_path), { recursive: true });
     await fs.writeFile(agent.install_path, getGeminiCommandContent(), 'utf-8');
   }
+}
+
+async function promptForAgentSelection(
+  message: string,
+  detectedAgents: AgentEnvironment[],
+): Promise<AgentEnvironment[]> {
+  const orderedAgents = sortAgentsForSelection(detectedAgents);
+  if (orderedAgents.length === 0) {
+    return [];
+  }
+
+  const selectedAgentNames = new Set(await checkbox<string>({
+    message,
+    required: true,
+    instructions: formatDetectedAgentInstructions(orderedAgents),
+    theme: {
+      icon: {
+        checked: '[x]',
+        unchecked: '[ ]',
+      },
+    },
+    validate: choices => choices.length > 0 || 'Select at least one agent integration to continue.',
+    choices: [
+      ...orderedAgents.map(agent => ({
+        name: getAgentDisplayName(agent),
+        value: agent.name,
+        checked: false,
+      })),
+      ...(orderedAgents.length > 1
+        ? [{
+            name: 'Select all found AI agents',
+            value: SELECT_ALL_AGENTS_VALUE,
+            checked: false,
+          }]
+        : []),
+    ],
+  }));
+
+  if (selectedAgentNames.has(SELECT_ALL_AGENTS_VALUE)) {
+    return orderedAgents;
+  }
+
+  return orderedAgents.filter(agent => selectedAgentNames.has(agent.name));
 }
 
 async function ensureSkillsSource(
@@ -474,6 +546,7 @@ export async function refreshInstalledSkills(
 ): Promise<RefreshInstalledSkillsResult> {
   try {
     const cwd = options.cwd ?? process.cwd();
+    const workspaceRoot = resolveWorkspaceRoot(cwd);
     const homeDir = options.homeDir ?? os.homedir();
     const sourceSkillsDir = options.sourceSkillsDir ?? path.resolve(__dirname, '../../skills');
 
@@ -481,7 +554,7 @@ export async function refreshInstalledSkills(
     const globalConfigPath = path.join(globalConfigDir, 'config.toml');
     const globalSkillsDir = path.join(globalConfigDir, 'skills');
 
-    const localSuperplanDir = path.join(cwd, '.superplan');
+    const localSuperplanDir = path.join(workspaceRoot, '.superplan');
     const localConfigPath = path.join(localSuperplanDir, 'config.toml');
     const localSkillsDir = path.join(localSuperplanDir, 'skills');
     const localChangesDir = path.join(localSuperplanDir, 'changes');
@@ -518,7 +591,7 @@ export async function refreshInstalledSkills(
     }
 
     const repoAgents = scope === 'local' || scope === 'both'
-      ? await detectAgents(cwd, 'project')
+      ? await detectAgents(workspaceRoot, 'project')
       : [];
     const homeAgents = scope === 'global' || scope === 'both'
       ? await detectAgents(homeDir, 'global')
@@ -598,6 +671,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
     }
 
     const cwd = process.cwd();
+    const workspaceRoot = resolveWorkspaceRoot(cwd);
     const homeDir = os.homedir();
     const sourceSkillsDir = path.resolve(__dirname, '../../skills');
 
@@ -605,7 +679,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
     const globalConfigPath = path.join(globalConfigDir, 'config.toml');
     const globalSkillsDir = path.join(globalConfigDir, 'skills');
 
-    const localSuperplanDir = path.join(cwd, '.superplan');
+    const localSuperplanDir = path.join(workspaceRoot, '.superplan');
     const localConfigPath = path.join(localSuperplanDir, 'config.toml');
     const localSkillsDir = path.join(localSuperplanDir, 'skills');
     const localChangesDir = path.join(localSuperplanDir, 'changes');
@@ -648,18 +722,6 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
       };
     }
 
-    const proceed = options.quiet ? true : await confirm({ message: 'Proceed with setup?' });
-    if (!proceed) {
-      return {
-        ok: false,
-        error: {
-          code: 'USER_ABORTED',
-          message: 'Setup aborted by user',
-          retryable: false,
-        },
-      };
-    }
-
     const enableGlobalOverlay = options.quiet
       ? false
       : ((scope === 'global' || scope === 'both')
@@ -676,11 +738,29 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
       return skillsSourceError;
     }
 
-    const repoAgents = scope === 'local' || scope === 'both'
-      ? await detectAgents(cwd, 'project')
+    const detectedRepoAgents = scope === 'local' || scope === 'both'
+      ? await detectAgents(workspaceRoot, 'project')
+      : [];
+    const detectedHomeAgents = scope === 'global' || scope === 'both'
+      ? await detectAgents(homeDir, 'global')
       : [];
     const homeAgents = scope === 'global' || scope === 'both'
-      ? await detectAgents(homeDir, 'global')
+      ? (options.quiet
+        ? detectedHomeAgents
+        : await promptForAgentSelection(
+          'Select machine-level AI agents',
+          detectedHomeAgents,
+        ))
+      : [];
+    const repoAgents = scope === 'local' || scope === 'both'
+      ? (options.quiet
+        ? detectedRepoAgents
+        : await promptForAgentSelection(
+          scope === 'both'
+            ? 'Select repository AI agents'
+            : 'Select AI agents in this repository',
+          detectedRepoAgents,
+        ))
       : [];
 
     if (scope === 'global' || scope === 'both') {
@@ -693,7 +773,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
 
     if (scope === 'local' || scope === 'both') {
       await ensureLocalSetup(localSuperplanDir, localConfigPath, localSkillsDir, localChangesDir, sourceSkillsDir);
-      await writeOverlayPreference(enableLocalOverlay, { scope: 'local', cwd });
+      await writeOverlayPreference(enableLocalOverlay, { scope: 'local', cwd: workspaceRoot });
       if (repoAgents.length > 0) {
         await installAgentSkills(localSkillsDir, repoAgents);
       }
@@ -720,7 +800,9 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
     }
 
     const installedAgents = [...homeAgents, ...repoAgents];
-    const noAgentsMessage = getNoAgentsMessage(scope, installedAgents.length);
+    const noAgentsMessage = installedAgents.length === 0
+      ? (options.quiet ? getNoAgentsMessage(scope, installedAgents.length) : 'No agent integrations selected.')
+      : undefined;
     const quietMessage = options.quiet ? ' Quiet mode used default scope: global.' : '';
     const message = noAgentsMessage
       ? `${noAgentsMessage} Setup verification passed.${quietMessage}`

@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { resolveSuperplanRoot } from '../workspace-root';
 
 export type ScaffoldPriority = 'high' | 'medium' | 'low';
 
@@ -25,7 +26,7 @@ export function isValidChangeSlug(slug: string): boolean {
 }
 
 export function getChangePaths(changeSlug: string, cwd = process.cwd()): ChangePaths {
-  const superplanRoot = path.join(cwd, '.superplan');
+  const superplanRoot = resolveSuperplanRoot(cwd);
   const changesRoot = path.join(superplanRoot, 'changes');
   const changeRoot = path.join(changesRoot, changeSlug);
 

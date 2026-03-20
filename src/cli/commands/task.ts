@@ -3,6 +3,7 @@ import * as path from 'path';
 import { parse } from './parse';
 import { refreshOverlaySnapshot } from '../overlay-runtime';
 import { applyRequestedOverlayAction } from '../overlay-visibility';
+import { resolveSuperplanRoot } from '../workspace-root';
 import type { OverlayEventKind, OverlayRequestedAction } from '../../shared/overlay';
 import {
   appendTaskEntryToIndex,
@@ -112,7 +113,7 @@ const TASK_SUBCOMMANDS = new Set([
 ]);
 
 function getRuntimePaths(): RuntimePaths {
-  const runtimeDir = path.join(process.cwd(), '.superplan', 'runtime');
+  const runtimeDir = path.join(resolveSuperplanRoot(), 'runtime');
   return {
     tasksPath: path.join(runtimeDir, 'tasks.json'),
     eventsPath: path.join(runtimeDir, 'events.ndjson'),

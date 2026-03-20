@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { resolveWorkspaceRoot } from '../workspace-root';
 
 interface ParseOptions {
   json?: boolean;
@@ -386,8 +387,11 @@ async function resolveDefaultTaskFiles(changesDir: string): Promise<string[]> {
 
 export async function parse(args: string[], _options: ParseOptions): Promise<ParseResult> {
   const positionalArgs = args.filter(arg => arg !== '--json' && arg !== '--quiet');
-  const inputPath = positionalArgs[0] ?? path.join('.superplan', 'changes');
-  const resolvedInputPath = path.resolve(process.cwd(), inputPath);
+  const cwd = process.cwd();
+  const inputPath = positionalArgs[0];
+  const resolvedInputPath = inputPath
+    ? path.resolve(cwd, inputPath)
+    : path.join(resolveWorkspaceRoot(cwd), '.superplan', 'changes');
 
   try {
     await fs.access(resolvedInputPath);

@@ -2,7 +2,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { confirm, select } from '@inquirer/prompts';
-import { readInstallMetadata } from '../install-metadata';
+import { readInstallMetadata, type InstallMetadata } from '../install-metadata';
 
 interface AgentEnvironment {
   name: string;
@@ -19,6 +19,12 @@ type RemoveMode = 'remove' | 'purge';
 export interface RemoveOptions {
   json?: boolean;
   quiet?: boolean;
+}
+
+interface RemoveDeps {
+  readInstallMetadata?: () => Promise<InstallMetadata | null>;
+  currentPackageRoot?: string;
+  invokedEntryPath?: string;
 }
 
 export type RemoveResult =
@@ -158,6 +164,28 @@ async function detectAgents(baseDir: string, scope: AgentScope, managedSkillName
   return detectedAgents;
 }
 
+async function findNearestProjectRoot(startDir: string, managedSkillNames: string[]): Promise<string> {
+  let currentDir = path.resolve(startDir);
+
+  while (true) {
+    if (await pathExists(path.join(currentDir, '.superplan'))) {
+      return currentDir;
+    }
+
+    const detectedAgents = await detectAgents(currentDir, 'project', managedSkillNames);
+    if (detectedAgents.length > 0) {
+      return currentDir;
+    }
+
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) {
+      return path.resolve(startDir);
+    }
+
+    currentDir = parentDir;
+  }
+}
+
 async function removePath(targetPath: string, removedPaths: string[]): Promise<void> {
   if (!targetPath) {
     return;
@@ -183,7 +211,78 @@ async function removeAgentInstalls(
   }
 }
 
-async function removeCommand(mode: RemoveMode, options: RemoveOptions): Promise<RemoveResult> {
+function inferInstalledCliTargetsFromPackageRoot(packageRoot: string): string[] {
+  const normalizedRoot = path.normalize(packageRoot);
+  if (path.basename(normalizedRoot) !== 'superplan') {
+    return [];
+  }
+
+  const nodeModulesDir = path.dirname(normalizedRoot);
+  if (path.basename(nodeModulesDir) !== 'node_modules') {
+    return [];
+  }
+
+  const libDir = path.dirname(nodeModulesDir);
+  if (path.basename(libDir) !== 'lib') {
+    return [];
+  }
+
+  const installPrefix = path.dirname(libDir);
+  return [
+    normalizedRoot,
+    path.join(installPrefix, 'bin', 'superplan'),
+  ];
+}
+
+function inferInstalledCliTargetsFromInvokedEntryPath(invokedEntryPath: string): string[] {
+  const normalizedEntryPath = path.normalize(invokedEntryPath);
+  if (path.basename(normalizedEntryPath) !== 'superplan') {
+    return [];
+  }
+
+  const binDir = path.dirname(normalizedEntryPath);
+  if (path.basename(binDir) !== 'bin') {
+    return [];
+  }
+
+  const installPrefix = path.dirname(binDir);
+  return [
+    path.join(installPrefix, 'lib', 'node_modules', 'superplan'),
+    normalizedEntryPath,
+  ];
+}
+
+function resolveInstalledCliTargets(
+  installMetadata: InstallMetadata | null,
+  currentPackageRoot: string,
+  invokedEntryPath: string,
+): string[] {
+  const targets = new Set<string>();
+
+  if (installMetadata?.install_bin) {
+    targets.add(path.join(installMetadata.install_bin, 'superplan'));
+  }
+
+  if (installMetadata?.install_prefix) {
+    targets.add(path.join(installMetadata.install_prefix, 'lib', 'node_modules', 'superplan'));
+  }
+
+  for (const inferredTarget of inferInstalledCliTargetsFromPackageRoot(currentPackageRoot)) {
+    targets.add(inferredTarget);
+  }
+
+  for (const inferredTarget of inferInstalledCliTargetsFromInvokedEntryPath(invokedEntryPath)) {
+    targets.add(inferredTarget);
+  }
+
+  return Array.from(targets);
+}
+
+async function removeCommand(
+  mode: RemoveMode,
+  options: RemoveOptions,
+  deps: Partial<RemoveDeps> = {},
+): Promise<RemoveResult> {
   try {
     if (options.json || options.quiet) {
       return {
@@ -200,9 +299,10 @@ async function removeCommand(mode: RemoveMode, options: RemoveOptions): Promise<
     const homeDir = os.homedir();
     const sourceSkillsDir = path.resolve(__dirname, '../../skills');
     const managedSkillNames = await getManagedSkillNames(sourceSkillsDir);
+    const localRootDir = await findNearestProjectRoot(cwd, managedSkillNames);
 
     const globalSuperplanDir = path.join(homeDir, '.config', 'superplan');
-    const localSuperplanDir = path.join(cwd, '.superplan');
+    const localSuperplanDir = path.join(localRootDir, '.superplan');
     const localChangesDir = path.join(localSuperplanDir, 'changes');
 
     const scope = await select<RemoveScope>({
@@ -240,16 +340,25 @@ async function removeCommand(mode: RemoveMode, options: RemoveOptions): Promise<
     }
 
     const removedPaths: string[] = [];
-    const installMetadata = await readInstallMetadata();
+    const installMetadataReader = deps.readInstallMetadata ?? readInstallMetadata;
+    const installMetadata = await installMetadataReader();
+    const installedCliTargets = resolveInstalledCliTargets(
+      installMetadata,
+      deps.currentPackageRoot ?? path.resolve(__dirname, '../../..'),
+      deps.invokedEntryPath ?? process.argv[1] ?? '',
+    );
     const globalAgents = scope === 'global' || scope === 'both'
       ? await detectAgents(homeDir, 'global', managedSkillNames)
       : [];
     const localAgents = scope === 'local' || scope === 'both'
-      ? await detectAgents(cwd, 'project', managedSkillNames)
+      ? await detectAgents(localRootDir, 'project', managedSkillNames)
       : [];
 
     if (scope === 'global' || scope === 'both') {
       await removeAgentInstalls(globalAgents, managedSkillNames, removedPaths);
+      for (const installedCliTarget of installedCliTargets) {
+        await removePath(installedCliTarget, removedPaths);
+      }
       await removePath(installMetadata?.overlay?.install_path ?? '', removedPaths);
       await removePath(globalSuperplanDir, removedPaths);
     }
@@ -281,10 +390,10 @@ async function removeCommand(mode: RemoveMode, options: RemoveOptions): Promise<
   }
 }
 
-export async function remove(options: RemoveOptions): Promise<RemoveResult> {
-  return removeCommand('remove', options);
+export async function remove(options: RemoveOptions, deps: Partial<RemoveDeps> = {}): Promise<RemoveResult> {
+  return removeCommand('remove', options, deps);
 }
 
-export async function purge(options: RemoveOptions): Promise<RemoveResult> {
-  return removeCommand('purge', options);
+export async function purge(options: RemoveOptions, deps: Partial<RemoveDeps> = {}): Promise<RemoveResult> {
+  return removeCommand('purge', options, deps);
 }

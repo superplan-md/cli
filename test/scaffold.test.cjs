@@ -44,6 +44,38 @@ test('change new creates a canonical change skeleton', async () => {
   assert.match(tasksIndexContent, /## Tasks/);
 });
 
+test('change new from a nested repo directory uses the repo-root superplan workspace', async () => {
+  const sandbox = await makeSandbox('superplan-change-new-nested-');
+  const nestedCwd = path.join(sandbox.cwd, 'apps', 'overlay-desktop');
+  const changeRoot = path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning');
+
+  await fs.mkdir(path.join(sandbox.cwd, '.git'), { recursive: true });
+  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+  await fs.mkdir(nestedCwd, { recursive: true });
+
+  const result = await runCli(['change', 'new', 'improve-planning', '--json'], {
+    cwd: nestedCwd,
+    env: sandbox.env,
+  });
+  const payload = parseCliJson(result);
+
+  assert.equal(result.code, 0);
+  assert.deepEqual(payload, {
+    ok: true,
+    data: {
+      change_id: 'improve-planning',
+      root: path.relative(nestedCwd, changeRoot) || changeRoot,
+      files: [
+        path.relative(nestedCwd, path.join(changeRoot, 'tasks.md')) || path.join(changeRoot, 'tasks.md'),
+        path.relative(nestedCwd, path.join(changeRoot, 'tasks')) || path.join(changeRoot, 'tasks'),
+      ],
+    },
+    error: null,
+  });
+  assert.equal(await pathExists(path.join(changeRoot, 'tasks.md')), true);
+  assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
+});
+
 test('task new creates globally unique task contracts and updates each change index', async () => {
   const sandbox = await makeSandbox('superplan-task-new-');
   await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });

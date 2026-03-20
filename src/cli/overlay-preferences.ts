@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import { resolveWorkspaceRoot } from './workspace-root';
 
 export type OverlayPreferenceScope = 'global' | 'local';
 
@@ -28,7 +29,7 @@ async function pathExists(targetPath: string): Promise<boolean> {
 
 export function getOverlayPreferencePaths(cwd = process.cwd()): OverlayPreferencePaths {
   const globalConfigPath = path.join(os.homedir(), '.config', 'superplan', 'config.toml');
-  const localRootPath = path.join(cwd, '.superplan');
+  const localRootPath = path.join(resolveWorkspaceRoot(cwd), '.superplan');
   const localConfigPath = path.join(localRootPath, 'config.toml');
 
   return {
