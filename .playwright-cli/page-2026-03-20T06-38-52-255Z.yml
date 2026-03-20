@@ -1,8 +1,0 @@
-- generic [ref=e3]:
-  - generic [ref=e4]:
-    - generic [ref=e5]: All tasks done
-    - button "Open board" [ref=e7] [cursor=pointer]:
-      - generic [ref=e8]: ↗
-  - generic [ref=e9]:
-    - paragraph [ref=e10]: Define overlay runtime contract
-    - paragraph [ref=e11]: Session complete
