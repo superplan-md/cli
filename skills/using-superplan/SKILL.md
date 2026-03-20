@@ -110,7 +110,7 @@ Common commands:
 - `superplan task request-feedback <task_id> --message "<message>" --json` when the user must respond
 - `superplan task complete <task_id> --json` after the work and acceptance criteria are satisfied
 - `superplan task fix --json` when runtime state becomes inconsistent
-- `superplan overlay ensure --json` to request overlay visibility when overlay support is enabled and the workspace has meaningful runtime state
+- `superplan overlay ensure --json` to explicitly reveal or resync the overlay when overlay support is enabled
 - `superplan overlay hide --json` to close the overlay when the workspace is idle or empty
 
 Execution default:
@@ -120,7 +120,7 @@ Execution default:
 3. inspect the chosen task with `superplan task show <task_id> --json`
 4. execute through the workflow spine, especially `execute-task-graph`, instead of ad hoc task mutation
 5. block, request feedback, or complete through the runtime commands rather than editing markdown state by hand
-6. if overlay support is enabled for the workspace, use `superplan overlay ensure --json` when work becomes active or needs feedback, and `superplan overlay hide --json` when the workspace becomes idle again
+6. if overlay support is enabled for the workspace, expect task start/resume/run transitions to auto-reveal the overlay when work becomes active; use `superplan overlay ensure --json` only when an explicit reveal or resync is needed, and `superplan overlay hide --json` when the workspace becomes idle again
 
 ## Entry Decision Order
 

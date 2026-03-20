@@ -49,6 +49,7 @@ test('install script installs superplan from a local source snapshot into a cust
       HOME: sandbox.home,
       SUPERPLAN_SOURCE_DIR: REPO_ROOT,
       SUPERPLAN_INSTALL_PREFIX: prefixDir,
+      SUPERPLAN_ENABLE_OVERLAY: '0',
     },
   });
 
@@ -64,6 +65,8 @@ test('install script installs superplan from a local source snapshot into a cust
   assert.equal(installMetadata.install_bin, path.join(prefixDir, 'bin'));
   assert.equal(installMetadata.source_dir, REPO_ROOT);
   assert.equal(installMetadata.ref, 'dev');
+  assert.equal(await fs.stat(path.join(sandbox.home, '.config', 'superplan', 'config.toml')).then(() => true, () => false), true);
+  assert.equal(await fs.stat(path.join(sandbox.home, '.config', 'superplan', 'skills', 'using-superplan', 'SKILL.md')).then(() => true, () => false), true);
 
   const cliResult = await runCommand(path.join(prefixDir, 'bin', 'superplan'), ['--version', '--json'], {
     cwd: sandbox.cwd,
@@ -95,6 +98,7 @@ test('install script records and installs a bundled overlay companion when one i
       SUPERPLAN_SOURCE_DIR: REPO_ROOT,
       SUPERPLAN_INSTALL_PREFIX: prefixDir,
       SUPERPLAN_OVERLAY_SOURCE_PATH: overlaySourcePath,
+      SUPERPLAN_ENABLE_OVERLAY: '1',
     },
   });
 
@@ -112,4 +116,8 @@ test('install script records and installs a bundled overlay companion when one i
   assert.equal(installMetadata.overlay.install_dir, path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay'));
   assert.equal(installMetadata.overlay.install_path, expectedOverlayInstallPath);
   assert.equal(installMetadata.overlay.executable_path, expectedOverlayInstallPath);
+  assert.match(
+    await fs.readFile(path.join(sandbox.home, '.config', 'superplan', 'config.toml'), 'utf-8'),
+    /\[overlay\][\s\S]*enabled = true/,
+  );
 });

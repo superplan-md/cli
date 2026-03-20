@@ -13,6 +13,9 @@
   },
   "scripts": {
     "build": "tsc && node ./scripts/copy-skills.js",
+    "overlay:bundle": "npm --prefix apps/overlay-desktop run tauri build",
+    "overlay:package": "node ./scripts/overlay-release.js package",
+    "overlay:release": "npm --prefix apps/overlay-desktop run tauri build && node ./scripts/overlay-release.js package",
     "start": "node ./dist/cli/main.js",
     "test": "npm run build && node --test test/*.test.cjs"
   },

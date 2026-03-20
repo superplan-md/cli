@@ -174,7 +174,7 @@ Execution loop:
 2. Claim work with \`superplan run --json\`
 3. Inspect the selected task before editing code
 4. Update runtime state with block, feedback, complete, or fix commands instead of editing markdown state by hand
-5. If overlay support is enabled for this workspace, use \`superplan overlay ensure --json\` when the workspace has meaningful runtime state and \`superplan overlay hide --json\` when it becomes idle or empty
+5. If overlay support is enabled for this workspace, task start/resume/run transitions will auto-reveal the overlay when work becomes active; use \`superplan overlay ensure --json\` only when you need to resync or reveal it explicitly, and \`superplan overlay hide --json\` when it becomes idle or empty
 
 Never write \`.superplan/runtime/overlay.json\` by hand.
 """`;

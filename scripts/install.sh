@@ -15,20 +15,29 @@ set -eu
 # - SUPERPLAN_SOURCE_DIR: local source directory to copy instead of cloning
 # - SUPERPLAN_INSTALL_PREFIX: custom npm global prefix for the install
 # - SUPERPLAN_OVERLAY_SOURCE_PATH: prebuilt overlay bundle or executable to install
+# - SUPERPLAN_OVERLAY_RELEASE_BASE_URL: base URL that hosts packaged overlay artifacts
 # - SUPERPLAN_OVERLAY_INSTALL_DIR: install directory for the overlay bundle or executable
-# - SUPERPLAN_OVERLAY_EXECUTABLE_RELATIVE_PATH: relative executable path inside the installed overlay bundle
+# - SUPERPLAN_ENABLE_OVERLAY: yes/no override for the machine-default overlay prompt
+# - SUPERPLAN_RUN_SETUP_AFTER_INSTALL: 1 to run machine setup after install, 0 to skip it
 
 SUPERPLAN_REPO_URL="${SUPERPLAN_REPO_URL:-https://github.com/superplan-md/cli.git}"
 SUPERPLAN_REF="${SUPERPLAN_REF:-dev}"
 SUPERPLAN_SOURCE_DIR="${SUPERPLAN_SOURCE_DIR:-}"
 SUPERPLAN_INSTALL_PREFIX="${SUPERPLAN_INSTALL_PREFIX:-}"
 SUPERPLAN_OVERLAY_SOURCE_PATH="${SUPERPLAN_OVERLAY_SOURCE_PATH:-}"
+SUPERPLAN_OVERLAY_RELEASE_BASE_URL="${SUPERPLAN_OVERLAY_RELEASE_BASE_URL:-https://github.com/superplan-md/cli/releases/download/${SUPERPLAN_REF}}"
 SUPERPLAN_OVERLAY_INSTALL_DIR="${SUPERPLAN_OVERLAY_INSTALL_DIR:-${HOME}/.local/share/superplan/overlay}"
-SUPERPLAN_OVERLAY_EXECUTABLE_RELATIVE_PATH="${SUPERPLAN_OVERLAY_EXECUTABLE_RELATIVE_PATH:-}"
+SUPERPLAN_ENABLE_OVERLAY="${SUPERPLAN_ENABLE_OVERLAY:-}"
+SUPERPLAN_RUN_SETUP_AFTER_INSTALL="${SUPERPLAN_RUN_SETUP_AFTER_INSTALL:-1}"
 
 OVERLAY_INSTALL_METHOD=""
 OVERLAY_INSTALL_PATH=""
 OVERLAY_EXECUTABLE_PATH=""
+OVERLAY_DOWNLOAD_URL=""
+OVERLAY_ARTIFACT_NAME=""
+OVERLAY_ARTIFACT_KIND=""
+OVERLAY_PLATFORM=""
+OVERLAY_ARCH=""
 
 say() {
   printf '%s\n' "$*"
@@ -51,6 +60,7 @@ require_command mktemp
 
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/superplan-install-XXXXXX")"
 SOURCE_WORKTREE="$WORK_DIR/source"
+DOWNLOADED_OVERLAY_PATH=""
 
 cleanup() {
   rm -rf "$WORK_DIR"
@@ -58,13 +68,89 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-resolve_overlay_executable_path() {
-  install_path="$1"
+to_lower() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+}
 
-  if [ -n "$SUPERPLAN_OVERLAY_EXECUTABLE_RELATIVE_PATH" ] && [ -f "$install_path/$SUPERPLAN_OVERLAY_EXECUTABLE_RELATIVE_PATH" ]; then
-    printf '%s\n' "$install_path/$SUPERPLAN_OVERLAY_EXECUTABLE_RELATIVE_PATH"
+resolve_overlay_release_target() {
+  overlay_target="$(
+    node - "$SOURCE_WORKTREE/scripts/overlay-release.js" "$(uname -s)" "$(uname -m)" <<'EOF'
+const overlayRelease = require(process.argv[2]);
+
+function normalizeShellPlatform(rawPlatform) {
+  const value = String(rawPlatform).toLowerCase();
+  if (value === 'darwin' || value === 'macos') {
+    return 'darwin';
+  }
+
+  if (value === 'linux') {
+    return 'linux';
+  }
+
+  throw new Error(`unsupported overlay platform: ${rawPlatform}`);
+}
+
+function normalizeShellArch(rawArch) {
+  const value = String(rawArch).toLowerCase();
+  if (value === 'arm64' || value === 'aarch64') {
+    return 'arm64';
+  }
+
+  if (value === 'x64' || value === 'x86_64' || value === 'amd64') {
+    return 'x64';
+  }
+
+  throw new Error(`unsupported overlay arch: ${rawArch}`);
+}
+
+const target = overlayRelease.getOverlayReleaseTarget(
+  normalizeShellPlatform(process.argv[3]),
+  normalizeShellArch(process.argv[4]),
+);
+
+process.stdout.write(`${target.platform}\n${target.arch}\n${target.artifactName}\n${target.artifactKind}\n`);
+EOF
+  )" || fail "failed to resolve packaged overlay target for this platform"
+
+  OVERLAY_PLATFORM="$(printf '%s\n' "$overlay_target" | sed -n '1p')"
+  OVERLAY_ARCH="$(printf '%s\n' "$overlay_target" | sed -n '2p')"
+  OVERLAY_ARTIFACT_NAME="$(printf '%s\n' "$overlay_target" | sed -n '3p')"
+  OVERLAY_ARTIFACT_KIND="$(printf '%s\n' "$overlay_target" | sed -n '4p')"
+}
+
+resolve_packaged_overlay_source() {
+  if [ -n "$SUPERPLAN_OVERLAY_SOURCE_PATH" ]; then
+    OVERLAY_INSTALL_METHOD="copied_prebuilt"
     return 0
   fi
+
+  local_artifact_path="$SOURCE_WORKTREE/dist/release/overlay/$OVERLAY_ARTIFACT_NAME"
+  if [ -f "$local_artifact_path" ]; then
+    SUPERPLAN_OVERLAY_SOURCE_PATH="$local_artifact_path"
+    OVERLAY_INSTALL_METHOD="copied_prebuilt"
+    return 0
+  fi
+
+  if [ -n "$SUPERPLAN_SOURCE_DIR" ]; then
+    say "No packaged overlay artifact found in local source snapshot; continuing without the desktop companion"
+    return 1
+  fi
+
+  require_command curl
+  OVERLAY_DOWNLOAD_URL="${SUPERPLAN_OVERLAY_RELEASE_BASE_URL%/}/$OVERLAY_ARTIFACT_NAME"
+  DOWNLOADED_OVERLAY_PATH="$WORK_DIR/$OVERLAY_ARTIFACT_NAME"
+  say "Downloading Superplan overlay from $OVERLAY_DOWNLOAD_URL"
+  if ! curl -fsSL "$OVERLAY_DOWNLOAD_URL" -o "$DOWNLOADED_OVERLAY_PATH"; then
+    fail "failed to download overlay companion for ${OVERLAY_PLATFORM}/${OVERLAY_ARCH} from $OVERLAY_DOWNLOAD_URL"
+  fi
+
+  SUPERPLAN_OVERLAY_SOURCE_PATH="$DOWNLOADED_OVERLAY_PATH"
+  OVERLAY_INSTALL_METHOD="downloaded_prebuilt"
+  return 0
+}
+
+resolve_overlay_executable_path() {
+  install_path="$1"
 
   if [ -d "$install_path/Contents/MacOS" ]; then
     find "$install_path/Contents/MacOS" -type f | sort | head -n 1
@@ -88,16 +174,80 @@ install_overlay_companion() {
 
   mkdir -p "$SUPERPLAN_OVERLAY_INSTALL_DIR"
 
-  overlay_name="$(basename "$SUPERPLAN_OVERLAY_SOURCE_PATH")"
-  OVERLAY_INSTALL_PATH="$SUPERPLAN_OVERLAY_INSTALL_DIR/$overlay_name"
-
-  rm -rf "$OVERLAY_INSTALL_PATH"
-  cp -R "$SUPERPLAN_OVERLAY_SOURCE_PATH" "$OVERLAY_INSTALL_PATH"
+  if printf '%s' "$SUPERPLAN_OVERLAY_SOURCE_PATH" | grep -Eq '\.tar\.gz$'; then
+    require_command tar
+    archive_root="$(
+      tar -tzf "$SUPERPLAN_OVERLAY_SOURCE_PATH" \
+        | sed -e 's#^\./##' -e '/^$/d' \
+        | head -n 1 \
+        | cut -d/ -f1
+    )"
+    [ -n "$archive_root" ] || fail "failed to determine overlay archive root from $SUPERPLAN_OVERLAY_SOURCE_PATH"
+    OVERLAY_INSTALL_PATH="$SUPERPLAN_OVERLAY_INSTALL_DIR/$archive_root"
+    rm -rf "$OVERLAY_INSTALL_PATH"
+    tar -xzf "$SUPERPLAN_OVERLAY_SOURCE_PATH" -C "$SUPERPLAN_OVERLAY_INSTALL_DIR"
+  else
+    overlay_name="$(basename "$SUPERPLAN_OVERLAY_SOURCE_PATH")"
+    OVERLAY_INSTALL_PATH="$SUPERPLAN_OVERLAY_INSTALL_DIR/$overlay_name"
+    rm -rf "$OVERLAY_INSTALL_PATH"
+    cp -R "$SUPERPLAN_OVERLAY_SOURCE_PATH" "$OVERLAY_INSTALL_PATH"
+  fi
 
   OVERLAY_EXECUTABLE_PATH="$(resolve_overlay_executable_path "$OVERLAY_INSTALL_PATH")"
   [ -n "$OVERLAY_EXECUTABLE_PATH" ] || fail "failed to resolve overlay executable inside $OVERLAY_INSTALL_PATH"
+  chmod +x "$OVERLAY_EXECUTABLE_PATH" 2>/dev/null || true
+}
 
-  OVERLAY_INSTALL_METHOD="copied_prebuilt"
+prompt_overlay_enabled_by_default() {
+  override="$(to_lower "$SUPERPLAN_ENABLE_OVERLAY")"
+
+  case "$override" in
+    1|y|yes|true|on)
+      return 0
+      ;;
+    0|n|no|false|off)
+      return 1
+      ;;
+  esac
+
+  if [ -r /dev/tty ]; then
+    printf 'Enable desktop overlay by default on this machine? [Y/n] ' > /dev/tty
+    IFS= read -r answer < /dev/tty || answer=""
+  else
+    answer=""
+  fi
+
+  answer="$(to_lower "$answer")"
+  case "$answer" in
+    ""|y|yes)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+run_machine_setup() {
+  if [ "$SUPERPLAN_RUN_SETUP_AFTER_INSTALL" != "1" ]; then
+    return 0
+  fi
+
+  say "Configuring Superplan on this machine"
+  "$INSTALL_BIN_DIR/superplan" setup --quiet --json >/dev/null \
+    || fail "machine setup failed after install"
+
+  if [ -n "$OVERLAY_INSTALL_PATH" ]; then
+    if prompt_overlay_enabled_by_default; then
+      say "Enabling desktop overlay by default"
+      "$INSTALL_BIN_DIR/superplan" overlay enable --global --json >/dev/null \
+        || fail "failed to enable overlay by default"
+    else
+      say "Leaving desktop overlay disabled by default"
+      "$INSTALL_BIN_DIR/superplan" overlay disable --global --json >/dev/null \
+        || fail "failed to persist overlay preference"
+    fi
+  fi
 }
 
 if [ -n "$SUPERPLAN_INSTALL_PREFIX" ]; then
@@ -120,6 +270,8 @@ else
 fi
 
 [ -f "$SOURCE_WORKTREE/package.json" ] || fail "package.json not found in installer worktree"
+resolve_overlay_release_target
+resolve_packaged_overlay_source || true
 
 cd "$SOURCE_WORKTREE"
 
@@ -159,6 +311,8 @@ if [ ! -x "$INSTALL_BIN_DIR/superplan" ]; then
   fail "superplan binary was not installed to $INSTALL_BIN_DIR"
 fi
 
+run_machine_setup
+
 INSTALL_STATE_DIR="${HOME}/.config/superplan"
 INSTALL_STATE_PATH="$INSTALL_STATE_DIR/install.json"
 INSTALL_METHOD="remote_repo"
@@ -168,7 +322,7 @@ if [ -n "$SUPERPLAN_SOURCE_DIR" ]; then
 fi
 
 mkdir -p "$INSTALL_STATE_DIR"
-node - "$INSTALL_STATE_PATH" "$INSTALL_METHOD" "$SUPERPLAN_REPO_URL" "$SUPERPLAN_REF" "$SUPERPLAN_INSTALL_PREFIX" "$INSTALL_PREFIX" "$INSTALL_BIN_DIR" "$SUPERPLAN_SOURCE_DIR" "$SUPERPLAN_OVERLAY_SOURCE_PATH" "$SUPERPLAN_OVERLAY_INSTALL_DIR" "$OVERLAY_INSTALL_METHOD" "$OVERLAY_INSTALL_PATH" "$OVERLAY_EXECUTABLE_PATH" "$SUPERPLAN_OVERLAY_EXECUTABLE_RELATIVE_PATH" <<'EOF'
+node - "$INSTALL_STATE_PATH" "$INSTALL_METHOD" "$SUPERPLAN_REPO_URL" "$SUPERPLAN_REF" "$SUPERPLAN_INSTALL_PREFIX" "$INSTALL_PREFIX" "$INSTALL_BIN_DIR" "$SUPERPLAN_SOURCE_DIR" "$SUPERPLAN_OVERLAY_SOURCE_PATH" "$SUPERPLAN_OVERLAY_RELEASE_BASE_URL" "$SUPERPLAN_OVERLAY_INSTALL_DIR" "$OVERLAY_INSTALL_METHOD" "$OVERLAY_INSTALL_PATH" "$OVERLAY_EXECUTABLE_PATH" "$OVERLAY_ARTIFACT_NAME" "$OVERLAY_PLATFORM" "$OVERLAY_ARCH" "$SUPERPLAN_RUN_SETUP_AFTER_INSTALL" <<'EOF'
 const fs = require('node:fs');
 
 const [
@@ -181,11 +335,15 @@ const [
   installBinDir,
   sourceDir,
   overlaySourcePath,
+  overlayReleaseBaseUrl,
   overlayInstallDir,
   overlayInstallMethod,
   overlayInstallPath,
   overlayExecutablePath,
-  overlayExecutableRelativePath,
+  overlayAssetName,
+  overlayPlatform,
+  overlayArch,
+  runSetupAfterInstall,
 ] = process.argv.slice(2);
 
 const metadata = {
@@ -209,12 +367,19 @@ if (overlayInstallMethod && overlayInstallPath) {
   metadata.overlay = {
     install_method: overlayInstallMethod,
     source_path: overlaySourcePath || undefined,
+    asset_name: overlayAssetName || undefined,
+    release_base_url: overlayReleaseBaseUrl || undefined,
     install_dir: overlayInstallDir || undefined,
     install_path: overlayInstallPath,
     executable_path: overlayExecutablePath || undefined,
-    executable_relative_path: overlayExecutableRelativePath || undefined,
+    platform: overlayPlatform || undefined,
+    arch: overlayArch || undefined,
     installed_at: new Date().toISOString(),
   };
+}
+
+if (runSetupAfterInstall) {
+  metadata.setup_completed = runSetupAfterInstall === '1';
 }
 
 fs.writeFileSync(installStatePath, JSON.stringify(metadata, null, 2));
@@ -225,3 +390,4 @@ if [ -n "$OVERLAY_INSTALL_PATH" ]; then
   say "Installed Superplan overlay to $OVERLAY_INSTALL_PATH"
 fi
 say "Run: superplan --version"
+say "Then run: superplan init --quiet --json inside a repository to start using Superplan"

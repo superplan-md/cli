@@ -73,6 +73,7 @@ test('update reruns the bundled installer with recorded install metadata', async
     assert.equal(calls[0].env.SUPERPLAN_INSTALL_PREFIX, path.join(sandbox.root, 'prefix'));
     assert.equal(calls[0].env.SUPERPLAN_OVERLAY_SOURCE_PATH, path.join(sandbox.root, 'overlay-bin'));
     assert.equal(calls[0].env.SUPERPLAN_OVERLAY_INSTALL_DIR, path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay'));
+    assert.equal(calls[0].env.SUPERPLAN_RUN_SETUP_AFTER_INSTALL, '0');
   });
 });
 

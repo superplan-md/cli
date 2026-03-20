@@ -5,10 +5,14 @@ import * as path from 'path';
 export interface OverlayInstallMetadata {
   install_method?: 'copied_prebuilt' | 'downloaded_prebuilt';
   source_path?: string;
+  asset_name?: string;
+  release_base_url?: string;
   install_dir?: string;
   install_path?: string;
   executable_path?: string;
   executable_relative_path?: string;
+  platform?: string;
+  arch?: string;
   installed_at?: string;
 }
 

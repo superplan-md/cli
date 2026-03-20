@@ -207,6 +207,50 @@ Launch overlay companion
   assert.match(launchOutput, new RegExp(`${realWorkspacePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
 });
 
+test('task start auto-launches the overlay companion when overlay is enabled', async () => {
+  const sandbox = await makeSandbox('superplan-overlay-task-start-');
+  const overlayOutputPath = path.join(sandbox.root, 'overlay-task-start.txt');
+  const fakeOverlayPath = path.join(sandbox.root, 'fake-overlay');
+
+  await writeFile(fakeOverlayPath, `#!/bin/sh
+printf '%s\n' "$*" > "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
+printf '%s\n' "$SUPERPLAN_OVERLAY_WORKSPACE" >> "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
+`);
+  await fs.chmod(fakeOverlayPath, 0o755);
+
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-012.md'), `---
+task_id: T-012
+status: pending
+priority: high
+depends_on_all: []
+depends_on_any: []
+---
+
+## Description
+Auto-launch overlay on execution
+
+## Acceptance Criteria
+- [ ] A
+`);
+
+  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+
+  const startPayload = parseCliJson(await runCli(['task', 'start', 'T-012', '--json'], {
+    cwd: sandbox.cwd,
+    env: {
+      ...sandbox.env,
+      SUPERPLAN_OVERLAY_BINARY_PATH: fakeOverlayPath,
+      SUPERPLAN_OVERLAY_TEST_OUTPUT: overlayOutputPath,
+    },
+  }));
+  const realWorkspacePath = await fs.realpath(sandbox.cwd);
+  const launchOutput = await waitForFile(overlayOutputPath);
+
+  assert.equal(startPayload.ok, true);
+  assert.equal(startPayload.data.status, 'in_progress');
+  assert.match(launchOutput, new RegExp(`--workspace ${realWorkspacePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+});
+
 test('task start and resume ensure overlay visibility', async () => {
   const sandbox = await makeSandbox('superplan-overlay-pickup-');
 
@@ -223,6 +267,7 @@ Pickup overlay task
 - [ ] A
 `);
 
+  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   parseCliJson(await runCli(['task', 'start', 'T-250', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
 
   const startedControl = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));

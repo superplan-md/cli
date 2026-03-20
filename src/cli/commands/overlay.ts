@@ -6,7 +6,11 @@ import {
   writeOverlayPreference,
   type OverlayPreferenceScope,
 } from '../overlay-preferences';
-import { launchInstalledOverlayCompanion, type OverlayCompanionLaunchResult } from '../overlay-companion';
+import {
+  applyRequestedOverlayAction,
+  createSkippedCompanionLaunchResult,
+} from '../overlay-visibility';
+import type { OverlayCompanionLaunchResult } from '../overlay-companion';
 
 type OverlayRequestedAction = 'ensure' | 'show' | 'hide';
 type OverlaySubcommand = OverlayRequestedAction | 'enable' | 'disable' | 'status';
@@ -80,33 +84,6 @@ function getPreferenceScope(args: string[]): OverlayPreferenceScope {
   return args.includes('--global') ? 'global' : 'local';
 }
 
-function hasRenderableSnapshotContent(snapshot: {
-  active_task: unknown;
-  attention_state: string;
-  board: {
-    in_progress: unknown[];
-    backlog: unknown[];
-    done: unknown[];
-    blocked: unknown[];
-    needs_feedback: unknown[];
-  };
-  events: unknown[];
-}): boolean {
-  if (snapshot.active_task) {
-    return true;
-  }
-
-  if (snapshot.attention_state !== 'normal') {
-    return true;
-  }
-
-  if (snapshot.events.length > 0) {
-    return true;
-  }
-
-  return Object.values(snapshot.board).some(column => column.length > 0);
-}
-
 async function loadTasksForSnapshot() {
   const showTasksResult = await task(['show']);
   if (!showTasksResult.ok) {
@@ -138,46 +115,26 @@ async function ensureOrShowOverlay(subcommand: 'ensure' | 'show'): Promise<Overl
     return tasksResult;
   }
 
-  const [{ paths, snapshot }, preferences] = await Promise.all([
-    refreshOverlaySnapshot(tasksResult.data.tasks),
-    readOverlayPreferences(),
-  ]);
-  const hasContent = hasRenderableSnapshotContent(snapshot);
-  const appliedAction: OverlayRequestedAction = preferences.effective_enabled && hasContent ? subcommand : 'hide';
-  const [{ control }, companion] = await Promise.all([
-    setOverlayVisibilityRequest(appliedAction),
-    appliedAction === 'hide'
-      ? Promise.resolve<OverlayCompanionLaunchResult>({
-          attempted: false,
-          launched: false,
-          configured: false,
-          launchable: false,
-          source: null,
-          install_path: null,
-          executable_path: null,
-          workspace_path: snapshot.workspace_path,
-          reason: 'not_requested',
-        })
-      : launchInstalledOverlayCompanion(snapshot.workspace_path),
-  ]);
+  const { paths, snapshot } = await refreshOverlaySnapshot(tasksResult.data.tasks);
+  const visibility = await applyRequestedOverlayAction(subcommand, snapshot);
 
   return {
     ok: true,
     data: {
       requested_action: subcommand,
-      applied_action: appliedAction,
-      visible: control.visible,
-      enabled: preferences.effective_enabled,
-      global_enabled: preferences.global_enabled,
-      local_enabled: preferences.local_enabled,
-      effective_scope: preferences.effective_scope,
+      applied_action: visibility.applied_action,
+      visible: visibility.visible,
+      enabled: visibility.enabled,
+      global_enabled: visibility.global_enabled,
+      local_enabled: visibility.local_enabled,
+      effective_scope: visibility.effective_scope,
       snapshot_path: paths.snapshot_path,
       control_path: paths.control_path,
       attention_state: snapshot.attention_state,
-      has_content: hasContent,
-      companion,
-      ...(preferences.effective_enabled ? {} : { reason: 'disabled' as const }),
-      ...(preferences.effective_enabled && !hasContent ? { reason: 'empty' as const } : {}),
+      has_content: visibility.has_content,
+      companion: visibility.companion,
+      ...(visibility.enabled ? {} : { reason: 'disabled' as const }),
+      ...(visibility.enabled && !visibility.has_content ? { reason: 'empty' as const } : {}),
     },
   };
 }
@@ -202,6 +159,7 @@ async function hideOverlay(): Promise<OverlayResult> {
       control_path: paths.control_path,
       attention_state: null,
       has_content: false,
+      companion: createSkippedCompanionLaunchResult(process.cwd()),
     },
   };
 }

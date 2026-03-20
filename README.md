@@ -52,6 +52,9 @@ The installer:
 - installs dependencies when needed
 - builds the CLI
 - installs `superplan` globally with npm
+- installs the packaged desktop overlay companion for the current macOS or Linux platform when a release artifact is available
+- runs machine-level `superplan setup` automatically so bundled skills are ready immediately
+- asks whether the desktop overlay should be enabled by default on this machine
 
 Prerequisites:
 
@@ -83,6 +86,8 @@ Then verify the CLI is available:
 superplan --version
 ```
 
+When the overlay companion is installed and enabled, the first real execution transition in a repo automatically reveals it. In practice, `superplan run`, `superplan task start`, `superplan task resume`, and `superplan task reopen` all surface the overlay when work becomes active. Explicit `superplan overlay ensure` / `hide` commands still exist for manual control and agent guidance.
+
 To update a normal installed copy later:
 
 ```bash
@@ -110,6 +115,27 @@ If the repo's task files or runtime state changed and you want Superplan to refr
 ```bash
 superplan sync --json
 ```
+
+### Overlay Release Packaging
+
+For release engineering, the packaged overlay artifacts consumed by the installer are produced with stable names:
+
+```bash
+npm run overlay:release
+```
+
+That command emits the current platform's installer-ready overlay artifact under:
+
+```text
+dist/release/overlay/
+```
+
+Current stable artifact names:
+
+- macOS: `superplan-overlay-darwin-arm64.tar.gz` or `superplan-overlay-darwin-x64.tar.gz`
+- Linux: `superplan-overlay-linux-x64.AppImage` or `superplan-overlay-linux-arm64.AppImage`
+
+`scripts/install.sh` looks for those local packaged artifacts first for source-based installs, and otherwise downloads the matching release asset for the current platform from the configured release base URL.
 
 ### Run from source without a global install
 

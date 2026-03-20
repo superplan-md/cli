@@ -120,12 +120,17 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
   const repoUrl = process.env.SUPERPLAN_REPO_URL || installMetadata?.repo_url || DEFAULT_REPO_URL;
   const ref = process.env.SUPERPLAN_REF || installMetadata?.ref || DEFAULT_REF;
   const installPrefix = process.env.SUPERPLAN_INSTALL_PREFIX || installMetadata?.install_prefix || '';
-  const overlaySourcePath = process.env.SUPERPLAN_OVERLAY_SOURCE_PATH || installMetadata?.overlay?.source_path || '';
-  const overlayInstallDir = process.env.SUPERPLAN_OVERLAY_INSTALL_DIR || installMetadata?.overlay?.install_dir || '';
-  const overlayExecutableRelativePath =
-    process.env.SUPERPLAN_OVERLAY_EXECUTABLE_RELATIVE_PATH
-    || installMetadata?.overlay?.executable_relative_path
+  const overlaySourcePath = process.env.SUPERPLAN_OVERLAY_SOURCE_PATH
+    || (
+      installMetadata?.overlay?.install_method === 'copied_prebuilt'
+        ? installMetadata?.overlay?.source_path
+        : ''
+    )
     || '';
+  const overlayReleaseBaseUrl = process.env.SUPERPLAN_OVERLAY_RELEASE_BASE_URL
+    || installMetadata?.overlay?.release_base_url
+    || '';
+  const overlayInstallDir = process.env.SUPERPLAN_OVERLAY_INSTALL_DIR || installMetadata?.overlay?.install_dir || '';
   const runner = deps.runInstaller ?? runCommand;
   const refreshSkills = deps.refreshSkills ?? refreshInstalledSkills;
 
@@ -137,10 +142,9 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
         SUPERPLAN_REF: ref,
         ...(installPrefix ? { SUPERPLAN_INSTALL_PREFIX: installPrefix } : {}),
         ...(overlaySourcePath ? { SUPERPLAN_OVERLAY_SOURCE_PATH: overlaySourcePath } : {}),
+        ...(overlayReleaseBaseUrl ? { SUPERPLAN_OVERLAY_RELEASE_BASE_URL: overlayReleaseBaseUrl } : {}),
         ...(overlayInstallDir ? { SUPERPLAN_OVERLAY_INSTALL_DIR: overlayInstallDir } : {}),
-        ...(overlayExecutableRelativePath
-          ? { SUPERPLAN_OVERLAY_EXECUTABLE_RELATIVE_PATH: overlayExecutableRelativePath }
-          : {}),
+        SUPERPLAN_RUN_SETUP_AFTER_INSTALL: '0',
       },
     });
 

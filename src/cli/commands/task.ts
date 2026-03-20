@@ -1,7 +1,8 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { parse } from './parse';
-import { refreshOverlaySnapshot, setOverlayVisibilityRequest } from '../overlay-runtime';
+import { refreshOverlaySnapshot } from '../overlay-runtime';
+import { applyRequestedOverlayAction } from '../overlay-visibility';
 import type { OverlayEventKind, OverlayRequestedAction } from '../../shared/overlay';
 import {
   appendTaskEntryToIndex,
@@ -238,17 +239,13 @@ async function refreshOverlayFromMergedTasks(options: {
     return;
   }
 
-  const operations: Promise<unknown>[] = [
-    refreshOverlaySnapshot(mergedTasksResult.tasks!, {
-      alertKinds: getOverlayAlertKinds(mergedTasksResult.tasks!, options.preferredAlerts),
-    }),
-  ];
+  const { snapshot } = await refreshOverlaySnapshot(mergedTasksResult.tasks!, {
+    alertKinds: getOverlayAlertKinds(mergedTasksResult.tasks!, options.preferredAlerts),
+  });
 
   if (options.requestedAction) {
-    operations.push(setOverlayVisibilityRequest(options.requestedAction));
+    await applyRequestedOverlayAction(options.requestedAction, snapshot);
   }
-
-  await Promise.all(operations);
 }
 
 function getTaskInvalidError(): TaskErrorResult {
