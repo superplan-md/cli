@@ -1,0 +1,37 @@
+{
+  "workspace_path": "/Users/puneetbhatt/cli",
+  "session_id": "workspace:/Users/puneetbhatt/cli",
+  "updated_at": "2026-03-19T22:10:00.000Z",
+  "active_task": null,
+  "board": {
+    "in_progress": [],
+    "backlog": [],
+    "done": [
+      {
+        "task_id": "T-399",
+        "title": "Define overlay runtime contract",
+        "status": "done"
+      },
+      {
+        "task_id": "T-400",
+        "title": "Emit overlay snapshot from CLI",
+        "status": "done"
+      },
+      {
+        "task_id": "T-401",
+        "title": "Boot the desktop prototype shell",
+        "status": "done"
+      }
+    ],
+    "blocked": [],
+    "needs_feedback": []
+  },
+  "attention_state": "all_tasks_done",
+  "events": [
+    {
+      "id": "evt-all-done-1",
+      "kind": "all_tasks_done",
+      "created_at": "2026-03-19T22:10:00.000Z"
+    }
+  ]
+}
