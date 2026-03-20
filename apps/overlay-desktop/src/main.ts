@@ -16,6 +16,7 @@ import {
 import {
   getBrowserFallbackSnapshot,
   getEmptyRuntimeSnapshot,
+  hasRenderableSnapshotContent,
   getSnapshotTaskProgress,
   isTauriWindowAvailable,
 } from './lib/runtime-helpers.js';
@@ -221,26 +222,6 @@ function getCompactStatusLabel(viewModel: PrototypeViewModel): string {
   }
 
   return `Working on ${viewModel.primaryTask.title}.`;
-}
-
-function hasRenderableSnapshotContent(snapshot: OverlaySnapshot | null): boolean {
-  if (!snapshot) {
-    return false;
-  }
-
-  if (snapshot.active_task) {
-    return true;
-  }
-
-  if (snapshot.attention_state !== 'normal') {
-    return true;
-  }
-
-  if (snapshot.events.length > 0) {
-    return true;
-  }
-
-  return Object.values(snapshot.board).some(column => column.length > 0);
 }
 
 function getCompactBoardLabel(viewModel: PrototypeViewModel): string {

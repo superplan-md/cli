@@ -90,6 +90,86 @@ test('snapshot task progress falls back to board completion counts when task che
   });
 });
 
+test('renderable snapshot helper hides stale all-tasks-done acknowledgement snapshots', async () => {
+  const { hasRenderableSnapshotContent } = await loadRuntimeHelpersModule();
+
+  const staleDoneSnapshot = {
+    workspace_path: '/tmp/workspace',
+    session_id: 'workspace:/tmp/workspace',
+    updated_at: '2026-03-20T00:00:00.000Z',
+    active_task: null,
+    board: {
+      in_progress: [],
+      backlog: [],
+      done: [{
+        task_id: 'T-999',
+        title: 'Finished task',
+        status: 'done',
+      }],
+      blocked: [],
+      needs_feedback: [],
+    },
+    attention_state: 'all_tasks_done',
+    events: [{
+      id: 'all_tasks_done:1',
+      kind: 'all_tasks_done',
+      created_at: '2026-03-20T00:00:00.000Z',
+    }],
+  };
+
+  assert.equal(
+    hasRenderableSnapshotContent(staleDoneSnapshot, Date.parse('2026-03-20T00:10:00.000Z')),
+    false,
+  );
+
+  assert.equal(
+    hasRenderableSnapshotContent(staleDoneSnapshot, Date.parse('2026-03-20T00:03:00.000Z')),
+    true,
+  );
+});
+
+test('renderable snapshot helper still shows actionable backlog and needs-feedback states', async () => {
+  const { hasRenderableSnapshotContent } = await loadRuntimeHelpersModule();
+
+  assert.equal(
+    hasRenderableSnapshotContent({
+      workspace_path: '/tmp/workspace',
+      session_id: 'workspace:/tmp/workspace',
+      updated_at: '2026-03-20T00:00:00.000Z',
+      active_task: null,
+      board: {
+        in_progress: [],
+        backlog: [{ task_id: 'T-100', title: 'Queued', status: 'backlog' }],
+        done: [],
+        blocked: [],
+        needs_feedback: [],
+      },
+      attention_state: 'normal',
+      events: [],
+    }),
+    true,
+  );
+
+  assert.equal(
+    hasRenderableSnapshotContent({
+      workspace_path: '/tmp/workspace',
+      session_id: 'workspace:/tmp/workspace',
+      updated_at: '2026-03-20T00:00:00.000Z',
+      active_task: null,
+      board: {
+        in_progress: [],
+        backlog: [],
+        done: [],
+        blocked: [],
+        needs_feedback: [{ task_id: 'T-101', title: 'Need input', status: 'needs_feedback' }],
+      },
+      attention_state: 'needs_feedback',
+      events: [],
+    }),
+    true,
+  );
+});
+
 test('tauri window availability guard returns false when the runtime getter throws', async () => {
   const { isTauriWindowAvailable } = await loadRuntimeHelpersModule();
 

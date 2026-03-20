@@ -1,3 +1,5 @@
+const DONE_ACK_WINDOW_MS = 5 * 60 * 1000;
+
 export function getEmptyRuntimeSnapshot(workspacePath = '') {
   return {
     workspace_path: workspacePath,
@@ -122,6 +124,69 @@ export function getSnapshotTaskProgress(snapshot) {
     total,
     ratio: total === 0 ? 0 : done / total,
   };
+}
+
+function parseTimestamp(value) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function getLatestDoneEventTimestamp(snapshot) {
+  const matchingEvents = (snapshot.events ?? [])
+    .filter(event => event.kind === 'all_tasks_done')
+    .map(event => parseTimestamp(event.created_at))
+    .filter(timestamp => timestamp !== null);
+
+  if (matchingEvents.length > 0) {
+    return Math.max(...matchingEvents);
+  }
+
+  return parseTimestamp(snapshot.updated_at);
+}
+
+export function hasRenderableSnapshotContent(snapshot, nowMs = Date.now()) {
+  if (!snapshot) {
+    return false;
+  }
+
+  if (snapshot.active_task) {
+    return true;
+  }
+
+  if ((snapshot.board?.in_progress?.length ?? 0) > 0) {
+    return true;
+  }
+
+  if ((snapshot.board?.backlog?.length ?? 0) > 0) {
+    return true;
+  }
+
+  if ((snapshot.board?.blocked?.length ?? 0) > 0) {
+    return true;
+  }
+
+  if ((snapshot.board?.needs_feedback?.length ?? 0) > 0) {
+    return true;
+  }
+
+  if (snapshot.attention_state === 'needs_feedback') {
+    return true;
+  }
+
+  if (snapshot.attention_state === 'all_tasks_done') {
+    const latestDoneTimestamp = getLatestDoneEventTimestamp(snapshot);
+    if (latestDoneTimestamp === null) {
+      return false;
+    }
+
+    return nowMs - latestDoneTimestamp <= DONE_ACK_WINDOW_MS;
+  }
+
+  return false;
 }
 
 export function isTauriWindowAvailable(getWindow) {
