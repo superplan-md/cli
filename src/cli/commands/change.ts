@@ -75,7 +75,7 @@ export function getChangeCommandHelpMessage(options: {
     intro,
     '',
     'Change commands:',
-    '  new <slug>                  Create a new change skeleton',
+    '  new <slug>                  Create a new tracked change',
     '',
     'Examples:',
     '  superplan change new improve-task-authoring',

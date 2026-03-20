@@ -27,7 +27,7 @@ interface ParsedTask {
   total_acceptance_criteria: number;
   completed_acceptance_criteria: number;
   progress_percent: number;
-  effective_status: 'draft' | 'in_progress' | 'done' | 'blocked' | 'needs_feedback';
+  effective_status: 'draft' | 'in_progress' | 'in_review' | 'done' | 'blocked' | 'needs_feedback';
   is_valid: boolean;
   is_ready: boolean;
   issues: string[];
@@ -67,6 +67,7 @@ type TaskCommandResult =
   | { ok: true; data: { task: ParsedTask | null } }
   | { ok: true; data: { tasks: ParsedTask[] } }
   | { ok: true; data: { task_id: string; status: 'in_progress' } }
+  | { ok: true; data: { task_id: string; status: 'in_review' } }
   | { ok: true; data: { task_id: string; status: 'done' } }
   | { ok: true; data: { task_id: string; status: 'blocked' } }
   | { ok: true; data: { task_id: string; status: 'needs_feedback' } }
@@ -93,6 +94,9 @@ const TASK_SUBCOMMANDS = new Set([
   'start',
   'resume',
   'complete',
+  'submit-review',
+  'approve',
+  'reopen',
   'fix',
   'reset',
   'block',
@@ -191,6 +195,9 @@ async function appendEvent(
     | 'task.started'
     | 'task.completed'
     | 'task.complete_failed'
+    | 'task.review_requested'
+    | 'task.approved'
+    | 'task.reopened'
     | 'task.blocked'
     | 'task.feedback_requested'
     | 'task.resumed'
@@ -240,7 +247,9 @@ export function getTaskCommandHelpMessage(options: {
     '  show [task_id]               Show one task or all tasks',
     '  new <change-slug>            Create a new task file in a change',
     '  start <task_id>              Start a specific ready task',
-    '  complete <task_id>           Finish an in-progress task after the criteria are done',
+    '  complete <task_id>           Finish implementation and send the task to review',
+    '  approve <task_id>            Approve an in-review task and mark it done',
+    '  reopen <task_id>             Move a review or done task back into implementation',
     '  block <task_id> --reason     Pause a task because something external is blocking it',
     '  request-feedback <task_id>   Pause a task because you need user input',
     '  resume <task_id>             Continue a blocked or feedback task',
@@ -257,6 +266,7 @@ export function getTaskCommandHelpMessage(options: {
     '  superplan task --help',
     '  superplan task new improve-task-authoring --title "Add task template"',
     '  superplan task start T-001',
+    '  superplan task approve T-001',
     '  superplan task block T-001 --reason "Waiting on review"',
   ].join('\n');
 }
@@ -375,6 +385,14 @@ function applyRuntimeState(task: ParsedTask, runtimeState?: RuntimeTaskState): P
     };
   }
 
+  if (runtimeState?.status === 'in_review') {
+    return {
+      ...task,
+      status: 'in_review',
+      effective_status: 'in_review',
+    };
+  }
+
   if (runtimeState?.status === 'blocked') {
     return {
       ...task,
@@ -419,6 +437,7 @@ function computeMergedTaskReadiness(tasks: ParsedTask[]): ParsedTask[] {
         task.is_valid &&
         task.status !== 'done' &&
         task.status !== 'in_progress' &&
+        task.status !== 'in_review' &&
         task.status !== 'blocked' &&
         task.status !== 'needs_feedback' &&
         allDependenciesSatisfied &&
@@ -497,6 +516,10 @@ function buildTaskReasons(task: ParsedTask, tasks: ParsedTask[], runtimeState: R
 
   if (task.status === 'blocked') {
     reasons.add('TASK_BLOCKED');
+  }
+
+  if (task.status === 'in_review') {
+    reasons.add('TASK_IN_REVIEW');
   }
 
   if (task.status === 'needs_feedback') {
@@ -965,6 +988,16 @@ async function completeTask(taskId: string): Promise<TaskCommandResult> {
 
   const existingTaskState = runtimeState.tasks[taskId];
 
+  if (existingTaskState?.status === 'in_review') {
+    return {
+      ok: true,
+      data: {
+        task_id: taskId,
+        status: 'in_review',
+      },
+    };
+  }
+
   if (existingTaskState?.status !== 'in_progress') {
     await appendEvent(runtimePaths.eventsPath, 'task.complete_failed', taskId);
     return {
@@ -991,12 +1024,66 @@ async function completeTask(taskId: string): Promise<TaskCommandResult> {
 
   runtimeState.tasks[taskId] = {
     ...existingTaskState,
-    status: 'done',
-    completed_at: new Date().toISOString(),
+    status: 'in_review',
+    updated_at: new Date().toISOString(),
   };
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
-  await appendEvent(runtimePaths.eventsPath, 'task.completed', taskId);
+  await appendEvent(runtimePaths.eventsPath, 'task.review_requested', taskId);
+
+  return {
+    ok: true,
+    data: {
+      task_id: taskId,
+      status: 'in_review',
+    },
+  };
+}
+
+async function approveTask(taskId: string): Promise<TaskCommandResult> {
+  const runtimePaths = getRuntimePaths();
+  const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
+  const parsedTask = await getParsedTask(taskId);
+  if (parsedTask.error) {
+    return parsedTask.error;
+  }
+
+  const matchedTask = parsedTask.task!;
+  if (!matchedTask.is_valid) {
+    return getTaskInvalidError();
+  }
+
+  if (runtimeState.tasks[taskId]?.status !== 'in_review') {
+    return {
+      ok: false,
+      error: {
+        code: 'TASK_NOT_IN_REVIEW',
+        message: 'Task is not in review',
+        retryable: false,
+      },
+    };
+  }
+
+  if (matchedTask.completed_acceptance_criteria !== matchedTask.total_acceptance_criteria) {
+    return {
+      ok: false,
+      error: {
+        code: 'TASK_NOT_COMPLETE',
+        message: 'Task is not complete',
+        retryable: false,
+      },
+    };
+  }
+
+  runtimeState.tasks[taskId] = {
+    ...runtimeState.tasks[taskId],
+    status: 'done',
+    completed_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
+  await appendEvent(runtimePaths.eventsPath, 'task.approved', taskId);
 
   return {
     ok: true,
@@ -1089,6 +1176,81 @@ async function requestFeedbackTask(taskId: string, message?: string): Promise<Ta
     data: {
       task_id: taskId,
       status: 'needs_feedback',
+    },
+  };
+}
+
+async function reopenTask(taskId: string, reason?: string): Promise<TaskCommandResult> {
+  const runtimePaths = getRuntimePaths();
+  const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
+  const parsedTask = await getParsedTask(taskId);
+  if (parsedTask.error) {
+    return parsedTask.error;
+  }
+
+  const existingTaskState = runtimeState.tasks[taskId];
+  if (existingTaskState?.status !== 'in_review' && existingTaskState?.status !== 'done') {
+    return {
+      ok: false,
+      error: {
+        code: 'TASK_NOT_REVIEWABLE',
+        message: 'Task is not in review or done',
+        retryable: false,
+      },
+    };
+  }
+
+  const matchedTask = parsedTask.task!;
+  if (!matchedTask.is_valid) {
+    return getTaskInvalidError();
+  }
+
+  const activeTaskEntry = getOtherActiveTaskEntry(runtimeState, taskId);
+  if (activeTaskEntry) {
+    return {
+      ok: false,
+      error: {
+        code: 'ANOTHER_TASK_IN_PROGRESS',
+        message: 'Another task is already in progress',
+        retryable: true,
+      },
+    };
+  }
+
+  const mergedTasksResult = await getMergedTasks({ skipInvariant: true });
+  if (mergedTasksResult.error) {
+    return mergedTasksResult.error;
+  }
+
+  const mergedTask = mergedTasksResult.tasks!.find(taskItem => taskItem.task_id === taskId) ?? matchedTask;
+  const { allDependenciesSatisfied, anyDependenciesSatisfied } = getDependencyState(mergedTasksResult.tasks!, mergedTask);
+  if (!allDependenciesSatisfied || !anyDependenciesSatisfied) {
+    return {
+      ok: false,
+      error: {
+        code: 'TASK_NOT_READY',
+        message: 'Task is not ready',
+        retryable: false,
+      },
+    };
+  }
+
+  const timestamp = new Date().toISOString();
+  runtimeState.tasks[taskId] = {
+    status: 'in_progress',
+    started_at: existingTaskState.started_at ?? timestamp,
+    updated_at: timestamp,
+    ...(reason ? { reason } : {}),
+  };
+
+  await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
+  await appendEvent(runtimePaths.eventsPath, 'task.reopened', taskId);
+
+  return {
+    ok: true,
+    data: {
+      task_id: taskId,
+      status: 'in_progress',
     },
   };
 }
@@ -1318,6 +1480,18 @@ export async function task(args: string[]): Promise<TaskCommandResult> {
 
   if (subcommand === 'resume') {
     return resumeTask(taskId);
+  }
+
+  if (subcommand === 'submit-review') {
+    return completeTask(taskId);
+  }
+
+  if (subcommand === 'approve') {
+    return approveTask(taskId);
+  }
+
+  if (subcommand === 'reopen') {
+    return reopenTask(taskId, reason);
   }
 
   if (subcommand === 'reset') {

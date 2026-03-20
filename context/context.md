@@ -40,6 +40,7 @@ Important install note:
 
 - `scripts/install.sh` now defaults `SUPERPLAN_REF` to `dev`, which matches the current tracked branch for this repository.
 - `scripts/install.sh` records install metadata under `~/.config/superplan/install.json` so `superplan update` can reuse the install source later.
+- Older installed binaries that predate the `update` command still need one manual rebuild/reinstall before `superplan update` becomes available.
 - The documented npm flow assumes a local checkout where dependencies are installed and `npm run build` has been run before `npm install -g .`.
 
 ## Project Structure
@@ -83,6 +84,7 @@ Important install note:
   - `priority`
   - `depends_on_all`
   - `depends_on_any`
+- Dependency arrays can be authored either inline like `depends_on_all: [T-001]` or as multi-line YAML-style lists.
 - Required markdown sections include:
   - `## Description`
   - `## Acceptance Criteria`
@@ -101,7 +103,7 @@ Current parse diagnostics include:
 
 Runtime truth is stored under `.superplan/runtime/`.
 
-- `tasks.json` stores merged execution state such as `in_progress`, `done`, `blocked`, and `needs_feedback`
+- `tasks.json` stores merged execution state such as `in_progress`, `in_review`, `done`, `blocked`, and `needs_feedback`
 - `events.ndjson` stores append-only lifecycle events
 
 The core execution loop is:
@@ -126,10 +128,18 @@ Important runtime commands:
 - `superplan task show <task_id> --json`
 - `superplan task block <task_id> --reason "..."`
 - `superplan task request-feedback <task_id> --message "..."`
+- `superplan task approve <task_id> --json`
+- `superplan task reopen <task_id> --reason "..."`
 - `superplan task fix --json`
 - `superplan task complete <task_id> --json`
 
 Task markdown should not be hand-edited to reflect runtime lifecycle changes.
+
+Review handoff now works in two steps:
+
+- `superplan task complete <task_id> --json` moves finished implementation into `in_review`
+- `superplan task approve <task_id> --json` marks an in-review task as `done`
+- `superplan task reopen <task_id> --reason "..."` moves an in-review or done task back to `in_progress`
 
 ## Behavioral Notes
 
@@ -150,7 +160,7 @@ Task markdown should not be hand-edited to reflect runtime lifecycle changes.
 
 ## Durable Repo Quirks
 
-- The parser currently expects single-line array frontmatter values such as `depends_on_all: [T-001]` instead of multi-line YAML list syntax.
+- The frontmatter parser now supports inline and multi-line dependency lists, but it is still a deliberately small parser rather than a full YAML implementation.
 - The setup banner test in `test/lifecycle.test.cjs` has been a recurring unrelated failure point when running the full suite.
 
 *Updated to reflect the current CLI surface and `.superplan/changes` storage.*

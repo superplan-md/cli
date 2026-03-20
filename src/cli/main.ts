@@ -32,7 +32,7 @@ Usage:
   superplan <command>
 
 Commands:
-  change      Change scaffolding operations
+  change      Create tracked work structure
   init        Initialize Superplan in this repo
   setup       Setup Superplan on this machine or in this repo
   sync        Refresh Superplan's view of this repo
@@ -43,7 +43,7 @@ Commands:
   parse       Parse superplan artifacts
   run         Run the task execution loop
   status      Show current task status summary
-  task        Task operations
+  task        Task runtime and review operations
 
 Options:
   -v, --version  Show CLI version

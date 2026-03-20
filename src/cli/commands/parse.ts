@@ -54,6 +54,30 @@ function parseStringArray(value: string): string[] {
     .filter(Boolean);
 }
 
+function parseIndentedStringList(lines: string[], startIndex: number): { values: string[]; nextIndex: number } {
+  const values: string[] = [];
+  let index = startIndex;
+
+  while (index < lines.length) {
+    const matchedLine = lines[index].match(/^\s*-\s+(.*)$/);
+    if (!matchedLine) {
+      break;
+    }
+
+    const value = matchedLine[1].trim().replace(/^['"]|['"]$/g, '');
+    if (value) {
+      values.push(value);
+    }
+
+    index += 1;
+  }
+
+  return {
+    values,
+    nextIndex: index,
+  };
+}
+
 function parseFrontmatter(lines: string[]): {
   task_id: string;
   status: string;
@@ -97,9 +121,21 @@ function parseFrontmatter(lines: string[]): {
           priority = value;
         }
       } else if (key === 'depends_on_all') {
-        dependsOnAll = parseStringArray(value);
+        if (value) {
+          dependsOnAll = parseStringArray(value);
+        } else {
+          const parsedList = parseIndentedStringList(lines, index + 1);
+          dependsOnAll = parsedList.values;
+          index = parsedList.nextIndex - 1;
+        }
       } else if (key === 'depends_on_any') {
-        dependsOnAny = parseStringArray(value);
+        if (value) {
+          dependsOnAny = parseStringArray(value);
+        } else {
+          const parsedList = parseIndentedStringList(lines, index + 1);
+          dependsOnAny = parsedList.values;
+          index = parsedList.nextIndex - 1;
+        }
       }
     }
 

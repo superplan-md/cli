@@ -21,6 +21,7 @@ Superplan keeps the same markdown-friendly workflow, but adds runtime truth:
 | --- | --- |
 | Notes and plans drift across chats and files | Task contracts live under `.superplan/changes/` |
 | The next step is often guessed manually | `superplan run --json` picks or continues the next task |
+| “Done” often means different things to different people | `complete`, `approve`, and `reopen` make review state explicit |
 | Blocked work is easy to lose track of | Runtime state records `blocked`, `needs_feedback`, and `done` |
 | Handoffs depend on chat context | JSON-first commands and durable context make work resumable |
 | Planning structure is often handwritten | `superplan change new` and `superplan task new` scaffold the common path |
@@ -87,6 +88,15 @@ To update a normal installed copy later:
 ```bash
 superplan update
 ```
+
+If `superplan update` returns `Unknown command: update`, the installed binary is older than the update feature. In that case, do a one-time manual refresh from a checkout:
+
+```bash
+npm run build
+npm install -g .
+```
+
+After that bootstrap update, future CLI refreshes can use `superplan update`.
 
 For local source installs, update from the checkout and reinstall explicitly.
 
@@ -172,6 +182,16 @@ superplan task block <task_id> --reason "..."
 superplan task request-feedback <task_id> --message "..."
 superplan task fix --json
 superplan task complete <task_id> --json
+superplan task approve <task_id> --json
+superplan task reopen <task_id> --reason "..."
+```
+
+Review handoff works like this:
+
+```bash
+superplan task complete <task_id> --json   # implementation done, send to review
+superplan task approve <task_id> --json    # final signoff, mark done
+superplan task reopen <task_id> --reason "Changes requested"
 ```
 
 > Do not hand-edit lifecycle state in markdown task files. Use runtime commands.
@@ -182,7 +202,7 @@ Current top-level commands:
 
 | Command | What it does |
 | --- | --- |
-| `change` | Create and inspect change-level scaffolding |
+| `change` | Create tracked work structure |
 | `init` | Initialize Superplan in the current repo |
 | `setup` | Install Superplan config and bundled skills |
 | `sync` | Re-parse tasks, repair safe runtime drift, and refresh repo state |
@@ -192,8 +212,8 @@ Current top-level commands:
 | `doctor` | Validate setup and installation health |
 | `parse` | Parse task contracts and return diagnostics |
 | `run` | Start or continue the next task |
-| `status` | Show active, ready, blocked, and feedback-needed tasks |
-| `task` | Inspect and transition task runtime state |
+| `status` | Show active, ready, in-review, blocked, and feedback-needed tasks |
+| `task` | Inspect and transition task runtime state, including review handoff |
 
 Task-specific help is available via:
 

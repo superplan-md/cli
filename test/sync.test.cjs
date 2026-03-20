@@ -76,6 +76,7 @@ Second task
       ],
       active: null,
       ready: ['T-001'],
+      in_review: [],
       blocked: ['T-002'],
       needs_feedback: [],
     },

@@ -12,6 +12,7 @@ export type StatusResult =
       data: {
         active: string | null;
         ready: string[];
+        in_review: string[];
         blocked: string[];
         needs_feedback: string[];
       };
@@ -42,6 +43,7 @@ export async function status(): Promise<StatusResult> {
   const tasks = showTasksResult.data.tasks as ParsedTask[];
   const activeTask = tasks.find(taskItem => taskItem.status === 'in_progress');
   const readyTasks = tasks.filter(taskItem => taskItem.is_ready).map(taskItem => taskItem.task_id);
+  const inReviewTasks = tasks.filter(taskItem => taskItem.status === 'in_review').map(taskItem => taskItem.task_id);
   const blockedTasks = tasks.filter(taskItem => taskItem.status === 'blocked').map(taskItem => taskItem.task_id);
   const needsFeedbackTasks = tasks.filter(taskItem => taskItem.status === 'needs_feedback').map(taskItem => taskItem.task_id);
 
@@ -50,6 +52,7 @@ export async function status(): Promise<StatusResult> {
     data: {
       active: activeTask?.task_id ?? null,
       ready: sortTaskIds(readyTasks),
+      in_review: sortTaskIds(inReviewTasks),
       blocked: sortTaskIds(blockedTasks),
       needs_feedback: sortTaskIds(needsFeedbackTasks),
     },

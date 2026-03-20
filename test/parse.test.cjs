@@ -64,6 +64,41 @@ Ship the parser
   assert.equal(payload.error, null);
 });
 
+test('parse accepts multi-line yaml-style dependency lists in frontmatter', async () => {
+  const sandbox = await makeSandbox('superplan-parse-multiline-');
+  const taskPath = path.join(sandbox.cwd, '.superplan', 'changes', 'feature-b', 'tasks', 'T-002.md');
+
+  await writeFile(taskPath, `---
+task_id: T-002
+status: pending
+depends_on_all:
+  - T-000
+  - T-001
+depends_on_any:
+  - T-010
+  - T-011
+---
+
+## Description
+Ship the parser with friendlier frontmatter
+
+## Acceptance Criteria
+- [ ] Parses multi-line dependencies
+`);
+
+  const result = await runCli(['parse', taskPath, '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+  const payload = parseCliJson(result);
+  const task = payload.data.tasks[0];
+
+  assert.equal(result.code, 0);
+  assert.equal(payload.ok, true);
+  assert.equal(task.task_id, 'T-002');
+  assert.deepEqual(task.depends_on_all, ['T-000', 'T-001']);
+  assert.deepEqual(task.depends_on_any, ['T-010', 'T-011']);
+  assert.deepEqual(payload.data.diagnostics, []);
+  assert.equal(payload.error, null);
+});
+
 test('parse reports duplicate ids and invalid task diagnostics across a change set', async () => {
   const sandbox = await makeSandbox('superplan-parse-diagnostics-');
 

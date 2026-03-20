@@ -74,6 +74,7 @@ Default priority task
   assert.deepEqual(statusPayload.data, {
     active: null,
     ready: ['T-001', 'T-002', 'T-003'],
+    in_review: [],
     blocked: [],
     needs_feedback: [],
   });
@@ -149,6 +150,7 @@ Lifecycle task
   assert.deepEqual(blockedStatusPayload.data, {
     active: null,
     ready: [],
+    in_review: [],
     blocked: ['T-200'],
     needs_feedback: [],
   });
@@ -163,6 +165,7 @@ Lifecycle task
   assert.deepEqual(feedbackStatusPayload.data, {
     active: null,
     ready: [],
+    in_review: [],
     blocked: [],
     needs_feedback: ['T-200'],
   });
@@ -192,7 +195,7 @@ Lifecycle task
   ]);
 });
 
-test('task complete keeps show and status aligned in the normal serialized flow', async () => {
+test('task complete hands work to review, approve finalizes it, and reopen returns it to implementation', async () => {
   const sandbox = await makeSandbox('superplan-task-complete-');
 
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-300.md'), `---
@@ -222,20 +225,100 @@ Complete me
     ok: true,
     data: {
       task_id: 'T-300',
-      status: 'done',
+      status: 'in_review',
     },
     error: null,
   });
 
   const showPayload = parseCliJson(await runCli(['task', 'show', 'T-300', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
-  assert.equal(showPayload.data.task.status, 'done');
+  assert.equal(showPayload.data.task.status, 'in_review');
 
   const statusPayload = parseCliJson(await runCli(['status', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   assert.deepEqual(statusPayload.data, {
     active: null,
     ready: [],
+    in_review: ['T-300'],
     blocked: [],
     needs_feedback: [],
+  });
+
+  const approvePayload = parseCliJson(await runCli(['task', 'approve', 'T-300', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  assert.deepEqual(approvePayload, {
+    ok: true,
+    data: {
+      task_id: 'T-300',
+      status: 'done',
+    },
+    error: null,
+  });
+
+  const approvedShowPayload = parseCliJson(await runCli(['task', 'show', 'T-300', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  assert.equal(approvedShowPayload.data.task.status, 'done');
+
+  const reopenPayload = parseCliJson(await runCli(['task', 'reopen', 'T-300', '--reason', 'Changes requested', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  assert.deepEqual(reopenPayload, {
+    ok: true,
+    data: {
+      task_id: 'T-300',
+      status: 'in_progress',
+    },
+    error: null,
+  });
+
+  const reopenedShowPayload = parseCliJson(await runCli(['task', 'show', 'T-300', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  assert.equal(reopenedShowPayload.data.task.status, 'in_progress');
+
+  const reopenedStatusPayload = parseCliJson(await runCli(['status', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  assert.deepEqual(reopenedStatusPayload.data, {
+    active: 'T-300',
+    ready: [],
+    in_review: [],
+    blocked: [],
+    needs_feedback: [],
+  });
+
+  const eventsPayload = parseCliJson(await runCli(['task', 'events', 'T-300', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  const eventTypes = eventsPayload.data.events.map(event => event.type);
+  assert.deepEqual(eventTypes, [
+    'task.review_requested',
+    'task.approved',
+    'task.reopened',
+  ]);
+});
+
+test('approve and reopen reject invalid review lifecycle transitions', async () => {
+  const sandbox = await makeSandbox('superplan-task-review-errors-');
+
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-301.md'), `---
+task_id: T-301
+status: pending
+---
+
+## Description
+Review me later
+
+## Acceptance Criteria
+- [x] A
+`);
+
+  const approvePayload = parseCliJson(await runCli(['task', 'approve', 'T-301', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  assert.deepEqual(approvePayload, {
+    ok: false,
+    error: {
+      code: 'TASK_NOT_IN_REVIEW',
+      message: 'Task is not in review',
+      retryable: false,
+    },
+  });
+
+  const reopenPayload = parseCliJson(await runCli(['task', 'reopen', 'T-301', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  assert.deepEqual(reopenPayload, {
+    ok: false,
+    error: {
+      code: 'TASK_NOT_REVIEWABLE',
+      message: 'Task is not in review or done',
+      retryable: false,
+    },
   });
 });
 

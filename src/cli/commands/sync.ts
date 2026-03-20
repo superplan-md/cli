@@ -30,6 +30,7 @@ export type SyncResult =
         actions: SyncFixAction[];
         active: string | null;
         ready: string[];
+        in_review: string[];
         blocked: string[];
         needs_feedback: string[];
       };
@@ -79,6 +80,7 @@ export async function sync(deps: Partial<SyncDeps> = {}): Promise<SyncResult> {
       actions: fixResult.data.actions,
       active: statusResult.data.active,
       ready: statusResult.data.ready,
+      in_review: statusResult.data.in_review,
       blocked: statusResult.data.blocked,
       needs_feedback: statusResult.data.needs_feedback,
     },
