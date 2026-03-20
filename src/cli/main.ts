@@ -36,7 +36,7 @@ Commands:
   init        Initialize Superplan in this repo
   setup       Setup Superplan on this machine or in this repo
   sync        Refresh Superplan's view of this repo
-  update      Update the installed Superplan CLI
+  update      Update the installed Superplan CLI and refresh skills
   remove      Remove Superplan installation
   purge       Purge Superplan installation
   doctor      Validate setup

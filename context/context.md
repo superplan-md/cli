@@ -39,7 +39,7 @@ Supported install paths in the current repo are:
 Important install note:
 
 - `scripts/install.sh` now defaults `SUPERPLAN_REF` to `dev`, which matches the current tracked branch for this repository.
-- `scripts/install.sh` records install metadata under `~/.config/superplan/install.json` so `superplan update` can reuse the install source later.
+- `scripts/install.sh` records install metadata under `~/.config/superplan/install.json` so `superplan update` can reuse the install source later and then refresh existing skill installs.
 - Older installed binaries that predate the `update` command still need one manual rebuild/reinstall before `superplan update` becomes available.
 - The documented npm flow assumes a local checkout where dependencies are installed and `npm run build` has been run before `npm install -g .`.
 
@@ -50,7 +50,7 @@ Important install note:
 - `src/cli/commands/change.ts`: Creates new change scaffolding under `.superplan/changes/<slug>/`.
 - `src/cli/commands/init.ts`: Creates repo-local `.superplan/` scaffolding, including `.superplan/config.toml`, `.superplan/context/`, `.superplan/runtime/`, and `.superplan/changes/`.
 - `src/cli/commands/setup.ts`: Installs Superplan config and bundled skills for supported agent environments. Supports global, local, both, and skip flows.
-- `src/cli/commands/update.ts`: Reruns the bundled installer for normal installed copies of the CLI using recorded install metadata.
+- `src/cli/commands/update.ts`: Reruns the bundled installer for normal installed copies of the CLI using recorded install metadata, then refreshes existing skill installs.
 - `src/cli/commands/remove.ts`: Removes or purges Superplan installation state. Local removal now treats `.superplan/changes/` as part of repo-local Superplan state.
 - `src/cli/commands/doctor.ts`: Validates setup state and, in deep mode, inspects parsed tasks plus runtime consistency.
 - `src/cli/commands/parse.ts`: Parses markdown task contracts, returns structured task data, and emits diagnostics.
@@ -146,8 +146,8 @@ Review handoff now works in two steps:
 
 - The public product story is centered on planning, task pickup, resumption, and handoff rather than side experiments.
 - `change` and `task new` are the primary authoring helpers for new tracked work.
-- `sync` refreshes Superplan's view of the current repo, while `update` refreshes the installed CLI itself.
-- `update` is intended for normal installed copies of the CLI; local source checkouts should still be updated from the checkout and reinstalled explicitly.
+- `sync` refreshes Superplan's view of the current repo and does not reinstall skills.
+- `update` refreshes the installed CLI plus any existing global or repo-local skill installs; local source checkouts should still be updated from the checkout and reinstalled explicitly.
 - `task --help` is intentionally narrower than the full internal task command surface. It emphasizes the common execution loop rather than every diagnostic subcommand.
 - `why` and `why-next` still exist as commands, but they are treated as diagnostic tools rather than default workflow steps.
 - The main CLI help should describe the full top-level Superplan command list.
