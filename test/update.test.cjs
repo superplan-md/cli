@@ -5,6 +5,7 @@ const path = require('node:path');
 const {
   loadDistModule,
   makeSandbox,
+  pathExists,
   withSandboxEnv,
   writeJson,
 } = require('./helpers.cjs');
@@ -40,6 +41,15 @@ test('update reruns the bundled installer with recorded install metadata', async
           stderr: '',
         };
       },
+      refreshSkills: async () => ({
+        ok: true,
+        data: {
+          scope: 'skip',
+          refreshed: false,
+          agents: [],
+          verified: true,
+        },
+      }),
     });
 
     assert.deepEqual(result, {
@@ -50,6 +60,8 @@ test('update reruns the bundled installer with recorded install metadata', async
         repo_url: 'https://github.com/example/custom-superplan.git',
         ref: 'release',
         install_prefix: path.join(sandbox.root, 'prefix'),
+        skills_refreshed: false,
+        skills_scope: 'skip',
       },
     });
 
@@ -61,6 +73,59 @@ test('update reruns the bundled installer with recorded install metadata', async
     assert.equal(calls[0].env.SUPERPLAN_INSTALL_PREFIX, path.join(sandbox.root, 'prefix'));
     assert.equal(calls[0].env.SUPERPLAN_OVERLAY_SOURCE_PATH, path.join(sandbox.root, 'overlay-bin'));
     assert.equal(calls[0].env.SUPERPLAN_OVERLAY_INSTALL_DIR, path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay'));
+  });
+});
+
+test('update refreshes installed skills for existing global and local setups', async () => {
+  const sandbox = await makeSandbox('superplan-update-refresh-skills-');
+  const metadataPath = path.join(sandbox.home, '.config', 'superplan', 'install.json');
+
+  await writeJson(metadataPath, {
+    install_method: 'remote_repo',
+    repo_url: 'https://github.com/example/custom-superplan.git',
+    ref: 'release',
+    install_prefix: path.join(sandbox.root, 'prefix'),
+  });
+
+  await writeJson(path.join(sandbox.home, '.config', 'superplan', 'config.toml'), {
+    version: '0.1',
+  });
+  await writeJson(path.join(sandbox.cwd, '.superplan', 'config.toml'), {
+    version: '0.1',
+  });
+
+  await withSandboxEnv(sandbox, async () => {
+    const fs = require('node:fs/promises');
+    await fs.mkdir(path.join(sandbox.home, '.claude'), { recursive: true });
+    await fs.mkdir(path.join(sandbox.cwd, '.codex'), { recursive: true });
+
+    const { update } = loadDistModule('cli/commands/update.js');
+
+    const result = await update({ json: true, quiet: true }, {
+      runInstaller: async () => ({
+        code: 0,
+        stdout: 'Installed Superplan',
+        stderr: '',
+      }),
+    });
+
+    assert.deepEqual(result, {
+      ok: true,
+      data: {
+        updated: true,
+        install_method: 'remote_repo',
+        repo_url: 'https://github.com/example/custom-superplan.git',
+        ref: 'release',
+        install_prefix: path.join(sandbox.root, 'prefix'),
+        skills_refreshed: true,
+        skills_scope: 'both',
+      },
+    });
+
+    assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'release-readiness', 'SKILL.md')), true);
+    assert.equal(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'release-readiness', 'SKILL.md')), true);
+    assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'skills', 'release-readiness', 'SKILL.md')), true);
+    assert.equal(await pathExists(path.join(sandbox.cwd, '.codex', 'skills', 'release-readiness', 'SKILL.md')), true);
   });
 });
 

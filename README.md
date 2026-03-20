@@ -89,6 +89,11 @@ To update a normal installed copy later:
 superplan update
 ```
 
+`superplan update` now does two things for normal installed copies:
+
+- updates the installed CLI
+- refreshes bundled Superplan skills for any existing global or repo-local setup it finds in the current environment
+
 If `superplan update` returns `Unknown command: update`, the installed binary is older than the update feature. In that case, do a one-time manual refresh from a checkout:
 
 ```bash
@@ -100,7 +105,7 @@ After that bootstrap update, future CLI refreshes can use `superplan update`.
 
 For local source installs, update from the checkout and reinstall explicitly.
 
-If the repo's task files or runtime state changed and you want Superplan to refresh its view of the project:
+If the repo's task files or runtime state changed and you want Superplan to refresh its view of the project without touching installed skills:
 
 ```bash
 superplan sync --json
@@ -206,7 +211,7 @@ Current top-level commands:
 | `init` | Initialize Superplan in the current repo |
 | `setup` | Install Superplan config and bundled skills |
 | `sync` | Re-parse tasks, repair safe runtime drift, and refresh repo state |
-| `update` | Update the installed Superplan CLI |
+| `update` | Update the installed Superplan CLI and refresh existing skills |
 | `remove` | Remove a Superplan installation |
 | `purge` | Remove Superplan state more aggressively |
 | `doctor` | Validate setup and installation health |
@@ -324,8 +329,8 @@ superplan parse --json
 - The main CLI help shows the top-level Superplan commands.
 - `superplan task --help` is intentionally narrower and emphasizes the core task loop.
 - `superplan change new` and `superplan task new` create the canonical authoring structure under `.superplan/changes/`.
-- `superplan sync` refreshes Superplan's view of the current repo.
-- `superplan update` is intended for normal installed copies of the CLI, not local source checkouts.
+- `superplan sync` refreshes Superplan's view of the current repo and does not reinstall skills.
+- `superplan update` is intended for normal installed copies of the CLI, not local source checkouts, and refreshes skills for existing setups after a successful update.
 - The current system is CLI-first and markdown-first.
 
 ## License

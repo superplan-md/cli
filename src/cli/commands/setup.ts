@@ -20,6 +20,12 @@ export interface SetupOptions {
   quiet?: boolean;
 }
 
+export interface RefreshInstalledSkillsOptions {
+  cwd?: string;
+  homeDir?: string;
+  sourceSkillsDir?: string;
+}
+
 export type SetupResult =
   | {
       ok: true;
@@ -30,6 +36,18 @@ export type SetupResult =
         agents: AgentEnvironment[];
         message?: string;
         verified?: boolean;
+      };
+    }
+  | { ok: false; error: { code: string; message: string; retryable: boolean } };
+
+export type RefreshInstalledSkillsResult =
+  | {
+      ok: true;
+      data: {
+        scope: InstallScope;
+        agents: AgentEnvironment[];
+        verified: true;
+        refreshed: boolean;
       };
     }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
@@ -277,7 +295,9 @@ async function installAgentSkills(skillsDir: string, agents: AgentEnvironment[])
   }
 }
 
-async function ensureSkillsSource(sourceDir: string): Promise<SetupResult | null> {
+async function ensureSkillsSource(
+  sourceDir: string,
+): Promise<{ ok: false; error: { code: string; message: string; retryable: boolean } } | null> {
   try {
     const stats = await fs.stat(sourceDir);
     if (!stats.isDirectory()) {
@@ -447,6 +467,117 @@ function getNoAgentsMessage(scope: InstallScope, agentCount: number): string | u
 
 function printSetupBanner(): void {
   console.log(SETUP_BANNER);
+}
+
+export async function refreshInstalledSkills(
+  options: RefreshInstalledSkillsOptions = {},
+): Promise<RefreshInstalledSkillsResult> {
+  try {
+    const cwd = options.cwd ?? process.cwd();
+    const homeDir = options.homeDir ?? os.homedir();
+    const sourceSkillsDir = options.sourceSkillsDir ?? path.resolve(__dirname, '../../skills');
+
+    const globalConfigDir = path.join(homeDir, '.config', 'superplan');
+    const globalConfigPath = path.join(globalConfigDir, 'config.toml');
+    const globalSkillsDir = path.join(globalConfigDir, 'skills');
+
+    const localSuperplanDir = path.join(cwd, '.superplan');
+    const localConfigPath = path.join(localSuperplanDir, 'config.toml');
+    const localSkillsDir = path.join(localSuperplanDir, 'skills');
+    const localChangesDir = path.join(localSuperplanDir, 'changes');
+
+    const hasGlobalSetup = await pathExists(globalConfigPath) || await pathExists(globalSkillsDir);
+    const hasLocalSetup = await pathExists(localConfigPath) || await pathExists(localSkillsDir);
+
+    const scope: InstallScope = hasGlobalSetup && hasLocalSetup
+      ? 'both'
+      : hasGlobalSetup
+        ? 'global'
+        : hasLocalSetup
+          ? 'local'
+          : 'skip';
+
+    if (scope === 'skip') {
+      return {
+        ok: true,
+        data: {
+          scope,
+          agents: [],
+          verified: true,
+          refreshed: false,
+        },
+      };
+    }
+
+    const skillsSourceError = await ensureSkillsSource(sourceSkillsDir);
+    if (skillsSourceError) {
+      return {
+        ok: false,
+        error: skillsSourceError.error,
+      };
+    }
+
+    const repoAgents = scope === 'local' || scope === 'both'
+      ? await detectAgents(cwd, 'project')
+      : [];
+    const homeAgents = scope === 'global' || scope === 'both'
+      ? await detectAgents(homeDir, 'global')
+      : [];
+
+    if (scope === 'global' || scope === 'both') {
+      await ensureGlobalSetup(globalConfigDir, globalConfigPath, globalSkillsDir, sourceSkillsDir);
+      if (homeAgents.length > 0) {
+        await installAgentSkills(globalSkillsDir, homeAgents);
+      }
+    }
+
+    if (scope === 'local' || scope === 'both') {
+      await ensureLocalSetup(localSuperplanDir, localConfigPath, localSkillsDir, localChangesDir, sourceSkillsDir);
+      if (repoAgents.length > 0) {
+        await installAgentSkills(localSkillsDir, repoAgents);
+      }
+    }
+
+    const verificationIssues = await verifySetup(scope, {
+      globalConfigPath,
+      globalSkillsDir,
+      localConfigPath,
+      localSkillsDir,
+      localChangesDir,
+      homeAgents,
+      repoAgents,
+    });
+
+    if (verificationIssues.length > 0) {
+      return {
+        ok: false,
+        error: {
+          code: 'SETUP_VERIFICATION_FAILED',
+          message: verificationIssues.map(issue => issue.message).join(' '),
+          retryable: false,
+        },
+      };
+    }
+
+    return {
+      ok: true,
+      data: {
+        scope,
+        agents: [...homeAgents, ...repoAgents],
+        verified: true,
+        refreshed: true,
+      },
+    };
+  } catch (error: any) {
+    return {
+      ok: false,
+      error: {
+        code: 'SETUP_FAILED',
+        message: error.message || 'An unknown error occurred',
+        retryable: false,
+      },
+    };
+  }
 }
 
 export async function setup(options: SetupOptions): Promise<SetupResult> {

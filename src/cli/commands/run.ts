@@ -1,7 +1,9 @@
 import { task } from './task';
+import { overlay } from './overlay';
 
 interface RunDeps {
   taskFn: typeof task;
+  overlayFn: typeof overlay;
 }
 
 export type RunResult =
@@ -17,6 +19,7 @@ export type RunResult =
 export async function run(deps: Partial<RunDeps> = {}): Promise<RunResult> {
   const runtimeDeps: RunDeps = {
     taskFn: task,
+    overlayFn: overlay,
     ...deps,
   };
 
@@ -47,6 +50,8 @@ export async function run(deps: Partial<RunDeps> = {}): Promise<RunResult> {
   }
 
   if (nextTaskResult.data.status === 'in_progress') {
+    await runtimeDeps.overlayFn(['ensure']);
+
     return {
       ok: true,
       data: {

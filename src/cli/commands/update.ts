@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { spawn } from 'node:child_process';
 import { readInstallMetadata, type InstallMetadata } from '../install-metadata';
+import { refreshInstalledSkills, type RefreshInstalledSkillsResult } from './setup';
 
 const DEFAULT_REPO_URL = 'https://github.com/superplan-md/cli.git';
 const DEFAULT_REF = 'dev';
@@ -21,6 +22,7 @@ interface UpdateDeps {
   installerPath?: string;
   readInstallMetadata?: () => Promise<InstallMetadata | null>;
   runInstaller?: (command: string, args: string[], options: { env: NodeJS.ProcessEnv }) => Promise<CommandResult>;
+  refreshSkills?: () => Promise<RefreshInstalledSkillsResult>;
 }
 
 export type UpdateResult =
@@ -32,6 +34,8 @@ export type UpdateResult =
         repo_url: string;
         ref: string;
         install_prefix: string | null;
+        skills_refreshed: boolean;
+        skills_scope: 'skip' | 'global' | 'local' | 'both';
       };
     }
   | {
@@ -123,6 +127,7 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
     || installMetadata?.overlay?.executable_relative_path
     || '';
   const runner = deps.runInstaller ?? runCommand;
+  const refreshSkills = deps.refreshSkills ?? refreshInstalledSkills;
 
   try {
     const installResult = await runner('sh', [installerPath], {
@@ -150,6 +155,18 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
       };
     }
 
+    const refreshResult = await refreshSkills();
+    if (!refreshResult.ok) {
+      return {
+        ok: false,
+        error: {
+          code: 'SKILLS_REFRESH_FAILED',
+          message: refreshResult.error.message,
+          retryable: refreshResult.error.retryable,
+        },
+      };
+    }
+
     return {
       ok: true,
       data: {
@@ -158,6 +175,8 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
         repo_url: repoUrl,
         ref,
         install_prefix: installPrefix || null,
+        skills_refreshed: refreshResult.data.refreshed,
+        skills_scope: refreshResult.data.scope,
       },
     };
   } catch (error: any) {

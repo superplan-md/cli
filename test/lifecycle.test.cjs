@@ -25,7 +25,14 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.equal(payload.error, null);
   assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'config.toml')));
   assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'using-superplan', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'release-readiness', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'regression-guarding', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'retrospective-postmortem', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'handoff-checkpointing', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'docs-sync', 'SKILL.md')));
   assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'using-superplan', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'release-readiness', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'docs-sync', 'SKILL.md')));
 
   const installedUsingSuperplanSkill = await fs.readFile(
     path.join(sandbox.home, '.claude', 'skills', 'using-superplan', 'SKILL.md'),
