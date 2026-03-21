@@ -1,10 +1,42 @@
 # Superplan CLI
 
-Turn normal planning into an executable local workflow.
+Superplan is a local, agent-first planning and execution CLI for repositories.
 
-Superplan is a lightweight planning and execution CLI for repositories that want durable task contracts, agent-friendly JSON output, and a simple runtime loop without a heavyweight project system.
+It turns rough planning into repo-native task contracts, explicit runtime state, and durable context under `.superplan/` so work stays structured, inspectable, and resumable.
 
-## Quick Start
+Use Superplan when you want:
+
+- a simple plug-and-play install for local agent workflows
+- a narrow JSON-first command loop instead of chat-memory task tracking
+- explicit task, review, and blocker state that another agent can resume later
+- local workflow structure without adopting a heavyweight project system
+
+## Why Use Superplan
+
+Normal planning in a repo usually means some mix of chat history, scratch notes, TODO comments, and memory. That works until work gets interrupted, handed off, or split across dependencies.
+
+Superplan keeps the same markdown-friendly workflow, but adds runtime truth:
+
+| Normal planning | Superplan planning |
+| --- | --- |
+| Notes and plans drift across chats and files | Task contracts live under `.superplan/changes/` |
+| The next step is often guessed manually | `superplan run --json` picks or continues the next task |
+| “Done” often means different things to different people | `complete`, `approve`, and `reopen` make review state explicit |
+| Blocked work is easy to lose track of | Runtime state records `blocked`, `needs_feedback`, and `done` |
+| Handoffs depend on chat context | JSON-first commands and durable context make work resumable |
+| Planning structure is often handwritten | `superplan change new`, `superplan task new`, and `superplan task batch` scaffold the common path |
+
+Superplan keeps three layers separate:
+
+- **Task contracts**: markdown files that describe scope, dependencies, and acceptance criteria
+- **Runtime state**: active, blocked, feedback-needed, and completed state under `.superplan/runtime`
+- **Durable context**: reusable repo truths under `.superplan/context`
+
+That split makes it easier to reason about what work exists, what is happening now, and what future agents should know.
+
+## Installation
+
+The fastest path is the one-command installer below. For most users, Superplan should feel plug-and-play: install it, let it set up the bundled skills, and start using it in a repo right away.
 
 ### Install with curl
 
@@ -55,6 +87,23 @@ Then verify the CLI is available:
 ```bash
 superplan --version
 ```
+
+### First commands after install
+
+Once `superplan` is available, go to the repo you want to use and run:
+
+```bash
+cd /path/to/your/repo
+superplan setup
+superplan init --json
+```
+
+That gives you the usual first-run path:
+
+- `superplan setup` installs or refreshes the machine and agent integrations
+- `superplan init --json` creates the repo-local `.superplan/` workspace
+
+If you used the one-command curl installer, machine-level `setup` is already run automatically, but this is still the right first-use sequence to remember and safe to rerun when needed.
 
 When the overlay companion is installed and enabled, the first real authoring or execution transition in a repo can reveal it. In practice, `superplan task new`, `superplan task batch`, `superplan run`, `superplan run <task_id>`, and `superplan task reopen` can surface the overlay. Explicit `superplan overlay ensure` / `hide` commands still exist for manual control and agent guidance.
 
@@ -170,39 +219,29 @@ If you already know several tasks for the same change, use one batch scaffold ca
 printf '%s' '[{"title":"Add authoring scaffold"},{"title":"Add help coverage"}]' | superplan task batch improve-task-authoring --stdin --json
 ```
 
-## Why Superplan
+## How It Works
 
-Superplan keeps three layers separate:
+Superplan starts from the moment an agent needs durable structure in a repo. Instead of relying on chat memory, scratch notes, or ad hoc TODOs, it gives the work a local home under `.superplan/`.
 
-- **Task contracts**: markdown files that describe scope, dependencies, and acceptance criteria
-- **Runtime state**: active, blocked, feedback-needed, and completed state under `.superplan/runtime`
-- **Durable context**: reusable repo truths under `.superplan/context`
+First, it shapes the work into tracked changes and task contracts. `superplan change new` creates the change root, `superplan task new` creates one task, and `superplan task batch` creates multiple tasks when the graph is already clear.
 
-That split makes it easier to reason about what work exists, what is happening now, and what future agents should know.
+Once the work is shaped, the execution loop stays narrow on purpose. `superplan status --json` shows the frontier, `superplan run --json` claims or continues work, and `superplan task show <task_id> --json` is there only when one task needs deeper inspection.
 
-It is built for teams and coding agents that want planning to stay:
+As work moves forward, runtime state stays explicit instead of being implied by chat. Tasks can be blocked, handed back for feedback, completed for review, approved, or reopened with dedicated commands.
 
-- local and inspectable
-- resumable after interruptions
-- shared between humans and agents
-- structured enough to pick the right next task without a separate web app
+Because task contracts, runtime state, and durable context all live locally in the repo, another agent can resume later without guessing what was intended or what happened last.
 
-## Normal Planning Vs Superplan
+## The Basic Workflow
 
-Normal planning in a repo usually means some mix of chat history, scratch notes, TODO comments, and memory. That works until work gets interrupted, handed off, or split across dependencies.
+1. Install Superplan and verify `superplan --version`.
+2. Initialize the repo with `superplan init --json`.
+3. Create a tracked change with `superplan change new <change-slug> --json`.
+4. Create one task with `superplan task new ... --json`, or multiple tasks with `superplan task batch --stdin --json`.
+5. Use `superplan status --json` and `superplan run --json` as the default execution loop.
+6. Move work through `block`, `request-feedback`, `complete`, `approve`, and `reopen` instead of editing lifecycle state by hand.
+7. Resume later from the same local task contracts, runtime state, and context instead of rebuilding state from chat history.
 
-Superplan keeps the same markdown-friendly workflow, but adds runtime truth:
-
-| Normal planning | Superplan planning |
-| --- | --- |
-| Notes and plans drift across chats and files | Task contracts live under `.superplan/changes/` |
-| The next step is often guessed manually | `superplan run --json` picks or continues the next task |
-| “Done” often means different things to different people | `complete`, `approve`, and `reopen` make review state explicit |
-| Blocked work is easy to lose track of | Runtime state records `blocked`, `needs_feedback`, and `done` |
-| Handoffs depend on chat context | JSON-first commands and durable context make work resumable |
-| Planning structure is often handwritten | `superplan change new`, `superplan task new`, and `superplan task batch` scaffold the common path |
-
-## Core Workflow
+## Canonical Runtime Loop
 
 The intended runtime loop is:
 
