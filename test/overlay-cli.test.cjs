@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const {
+  loadDistModule,
   parseCliJson,
   makeSandbox,
   readJson,
@@ -11,6 +12,63 @@ const {
   writeFile,
   writeJson,
 } = require('./helpers.cjs');
+
+test('macOS bundle launch plan reuses an already running matching workspace instance', () => {
+  const { getMacosOverlayBundleLaunchPlan } = loadDistModule('cli/overlay-companion.js');
+
+  const plan = getMacosOverlayBundleLaunchPlan({
+    appBundlePath: '/Applications/Superplan Overlay Desktop.app',
+    executablePath: '/Applications/Superplan Overlay Desktop.app/Contents/MacOS/superplan-overlay-desktop',
+    workspacePath: '/tmp/workspace',
+    runningCommandLines: [
+      '/Applications/Superplan Overlay Desktop.app/Contents/MacOS/superplan-overlay-desktop --workspace /tmp/workspace',
+    ],
+  });
+
+  assert.deepEqual(plan, {
+    mode: 'reuse_running',
+    command: null,
+    args: [],
+  });
+});
+
+test('macOS bundle launch plan hands off through the executable when another workspace instance is already running', () => {
+  const { getMacosOverlayBundleLaunchPlan } = loadDistModule('cli/overlay-companion.js');
+
+  const executablePath = '/Applications/Superplan Overlay Desktop.app/Contents/MacOS/superplan-overlay-desktop';
+  const plan = getMacosOverlayBundleLaunchPlan({
+    appBundlePath: '/Applications/Superplan Overlay Desktop.app',
+    executablePath,
+    workspacePath: '/tmp/next-workspace',
+    runningCommandLines: [
+      `${executablePath} --workspace /tmp/current-workspace`,
+    ],
+  });
+
+  assert.deepEqual(plan, {
+    mode: 'handoff_existing_instance',
+    command: executablePath,
+    args: ['--workspace', '/tmp/next-workspace'],
+  });
+});
+
+test('macOS bundle launch plan opens the app bundle without forcing a new instance on cold start', () => {
+  const { getMacosOverlayBundleLaunchPlan } = loadDistModule('cli/overlay-companion.js');
+
+  const plan = getMacosOverlayBundleLaunchPlan({
+    appBundlePath: '/Applications/Superplan Overlay Desktop.app',
+    executablePath: '/Applications/Superplan Overlay Desktop.app/Contents/MacOS/superplan-overlay-desktop',
+    workspacePath: '/tmp/workspace',
+    runningCommandLines: [],
+  });
+
+  assert.deepEqual(plan, {
+    mode: 'open_bundle',
+    command: '/usr/bin/open',
+    args: ['-a', '/Applications/Superplan Overlay Desktop.app', '--args', '--workspace', '/tmp/workspace'],
+  });
+  assert.equal(plan.args.includes('-n'), false);
+});
 
 async function waitForFile(targetPath, timeoutMs = 3000) {
   const startedAt = Date.now();

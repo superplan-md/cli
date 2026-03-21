@@ -28,6 +28,12 @@ export interface OverlayCompanionLaunchResult extends OverlayCompanionStatus {
   workspace_path: string;
 }
 
+export interface MacosOverlayBundleLaunchPlan {
+  mode: 'reuse_running' | 'handoff_existing_instance' | 'open_bundle';
+  command: string | null;
+  args: string[];
+}
+
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
     await fs.access(targetPath);
@@ -99,6 +105,82 @@ function resolveMacosAppBundlePath(
   }
 
   return null;
+}
+
+function commandMatchesExecutablePath(commandLine: string, executablePath: string): boolean {
+  return commandLine === executablePath || commandLine.startsWith(`${executablePath} `);
+}
+
+function commandMatchesWorkspacePath(commandLine: string, workspacePath: string): boolean {
+  return commandLine.includes(` --workspace ${workspacePath}`)
+    || commandLine.endsWith(`--workspace ${workspacePath}`)
+    || commandLine.includes(` --workspace=${workspacePath}`)
+    || commandLine.endsWith(`--workspace=${workspacePath}`);
+}
+
+async function readProcessCommandLines(): Promise<string[] | null> {
+  return await new Promise(resolve => {
+    const child = spawn('/bin/ps', ['-axo', 'command='], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+
+    let stdout = '';
+
+    child.stdout.on('data', chunk => {
+      stdout += String(chunk);
+    });
+
+    child.on('error', () => {
+      resolve(null);
+    });
+
+    child.on('close', code => {
+      if (code !== 0) {
+        resolve(null);
+        return;
+      }
+
+      resolve(
+        stdout
+          .split(/\r?\n/)
+          .map(line => line.trim())
+          .filter(Boolean),
+      );
+    });
+  });
+}
+
+export function getMacosOverlayBundleLaunchPlan(input: {
+  appBundlePath: string;
+  executablePath: string;
+  workspacePath: string;
+  runningCommandLines: string[];
+}): MacosOverlayBundleLaunchPlan {
+  const matchingCommands = input.runningCommandLines.filter(commandLine => (
+    commandMatchesExecutablePath(commandLine, input.executablePath)
+  ));
+
+  if (matchingCommands.some(commandLine => commandMatchesWorkspacePath(commandLine, input.workspacePath))) {
+    return {
+      mode: 'reuse_running',
+      command: null,
+      args: [],
+    };
+  }
+
+  if (matchingCommands.length > 0) {
+    return {
+      mode: 'handoff_existing_instance',
+      command: input.executablePath,
+      args: ['--workspace', input.workspacePath],
+    };
+  }
+
+  return {
+    mode: 'open_bundle',
+    command: '/usr/bin/open',
+    args: ['-a', input.appBundlePath, '--args', '--workspace', input.workspacePath],
+  };
 }
 
 async function resolveOverlayCompanionStatusFromPaths(input: {
@@ -221,10 +303,37 @@ export async function launchInstalledOverlayCompanion(
     const macosAppBundlePath = process.platform === 'darwin'
       ? resolveMacosAppBundlePath(companionStatus.install_path, companionStatus.executable_path)
       : null;
+    const runningCommandLines = process.platform === 'darwin'
+      ? await readProcessCommandLines()
+      : null;
+    const launchPlan = macosAppBundlePath
+      ? (runningCommandLines
+        ? getMacosOverlayBundleLaunchPlan({
+            appBundlePath: macosAppBundlePath,
+            executablePath: companionStatus.executable_path,
+            workspacePath: resolvedWorkspacePath,
+            runningCommandLines,
+          })
+        : {
+            mode: 'handoff_existing_instance' as const,
+            command: companionStatus.executable_path,
+            args: ['--workspace', resolvedWorkspacePath],
+          })
+      : {
+          command: companionStatus.executable_path,
+          args: ['--workspace', resolvedWorkspacePath],
+        };
 
-    const child = macosAppBundlePath
-      ? spawn('/usr/bin/open', ['-n', '-a', macosAppBundlePath, '--args', '--workspace', resolvedWorkspacePath], commonSpawnOptions)
-      : spawn(companionStatus.executable_path, ['--workspace', resolvedWorkspacePath], commonSpawnOptions);
+    if (!launchPlan.command) {
+      return {
+        ...companionStatus,
+        attempted: false,
+        launched: true,
+        workspace_path: resolvedWorkspacePath,
+      };
+    }
+
+    const child = spawn(launchPlan.command, launchPlan.args, commonSpawnOptions);
 
     child.unref();
 
