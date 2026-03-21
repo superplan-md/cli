@@ -34,6 +34,11 @@ export interface MacosOverlayBundleLaunchPlan {
   args: string[];
 }
 
+interface RunningProcessEntry {
+  pid: number;
+  command: string;
+}
+
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
     await fs.access(targetPath);
@@ -108,7 +113,10 @@ function resolveMacosAppBundlePath(
 }
 
 function commandMatchesExecutablePath(commandLine: string, executablePath: string): boolean {
-  return commandLine === executablePath || commandLine.startsWith(`${executablePath} `);
+  return commandLine === executablePath
+    || commandLine.startsWith(`${executablePath} `)
+    || commandLine.includes(` ${executablePath} `)
+    || commandLine.endsWith(` ${executablePath}`);
 }
 
 function commandMatchesWorkspacePath(commandLine: string, workspacePath: string): boolean {
@@ -148,6 +156,115 @@ async function readProcessCommandLines(): Promise<string[] | null> {
       );
     });
   });
+}
+
+function parseRunningProcessEntry(line: string): RunningProcessEntry | null {
+  const match = line.trim().match(/^(\d+)\s+(.*)$/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    pid: Number.parseInt(match[1], 10),
+    command: match[2].trim(),
+  };
+}
+
+async function readRunningProcessEntries(): Promise<RunningProcessEntry[] | null> {
+  return await new Promise(resolve => {
+    const child = spawn('/bin/ps', ['-axo', 'pid=,command='], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+
+    let stdout = '';
+
+    child.stdout.on('data', chunk => {
+      stdout += String(chunk);
+    });
+
+    child.on('error', () => {
+      resolve(null);
+    });
+
+    child.on('close', code => {
+      if (code !== 0) {
+        resolve(null);
+        return;
+      }
+
+      resolve(
+        stdout
+          .split(/\r?\n/)
+          .map(parseRunningProcessEntry)
+          .filter((entry): entry is RunningProcessEntry => entry !== null),
+      );
+    });
+  });
+}
+
+function getMatchingOverlayProcesses(
+  runningProcesses: RunningProcessEntry[],
+  executablePath: string,
+): RunningProcessEntry[] {
+  return runningProcesses.filter(entry => commandMatchesExecutablePath(entry.command, executablePath));
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error: any) {
+    if (error?.code === 'ESRCH') {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+async function waitForProcessExit(pid: number, timeoutMs: number): Promise<void> {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (!isProcessAlive(pid)) {
+      return;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+}
+
+async function terminateProcess(pid: number): Promise<void> {
+  if (!isProcessAlive(pid)) {
+    return;
+  }
+
+  try {
+    process.kill(pid, 'SIGTERM');
+  } catch (error: any) {
+    if (error?.code === 'ESRCH') {
+      return;
+    }
+
+    throw error;
+  }
+
+  try {
+    await waitForProcessExit(pid, 750);
+    return;
+  } catch {}
+
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch (error: any) {
+    if (error?.code === 'ESRCH') {
+      return;
+    }
+
+    throw error;
+  }
+
+  await waitForProcessExit(pid, 750).catch(() => {});
 }
 
 export function getMacosOverlayBundleLaunchPlan(input: {
@@ -291,6 +408,20 @@ export async function launchInstalledOverlayCompanion(
   }
 
   try {
+    const runningProcesses = await readRunningProcessEntries();
+    const matchingProcesses = runningProcesses && companionStatus.executable_path
+      ? getMatchingOverlayProcesses(runningProcesses, companionStatus.executable_path)
+      : [];
+
+    if (matchingProcesses.some(entry => commandMatchesWorkspacePath(entry.command, resolvedWorkspacePath))) {
+      return {
+        ...companionStatus,
+        attempted: false,
+        launched: true,
+        workspace_path: resolvedWorkspacePath,
+      };
+    }
+
     const commonSpawnOptions = {
       cwd: resolvedWorkspacePath,
       detached: true,
@@ -306,23 +437,29 @@ export async function launchInstalledOverlayCompanion(
     const runningCommandLines = process.platform === 'darwin'
       ? await readProcessCommandLines()
       : null;
-    const launchPlan = macosAppBundlePath
-      ? (runningCommandLines
-        ? getMacosOverlayBundleLaunchPlan({
-            appBundlePath: macosAppBundlePath,
-            executablePath: companionStatus.executable_path,
-            workspacePath: resolvedWorkspacePath,
-            runningCommandLines,
-          })
-        : {
-            mode: 'handoff_existing_instance' as const,
-            command: companionStatus.executable_path,
-            args: ['--workspace', resolvedWorkspacePath],
-          })
-      : {
+    const launchPlan = matchingProcesses.length > 0
+      ? {
+          mode: 'handoff_existing_instance' as const,
           command: companionStatus.executable_path,
           args: ['--workspace', resolvedWorkspacePath],
-        };
+        }
+      : macosAppBundlePath
+        ? (runningCommandLines
+          ? getMacosOverlayBundleLaunchPlan({
+              appBundlePath: macosAppBundlePath,
+              executablePath: companionStatus.executable_path,
+              workspacePath: resolvedWorkspacePath,
+              runningCommandLines,
+            })
+          : {
+              mode: 'handoff_existing_instance' as const,
+              command: companionStatus.executable_path,
+              args: ['--workspace', resolvedWorkspacePath],
+            })
+        : {
+            command: companionStatus.executable_path,
+            args: ['--workspace', resolvedWorkspacePath],
+          };
 
     if (!launchPlan.command) {
       return {
@@ -352,5 +489,23 @@ export async function launchInstalledOverlayCompanion(
       reason: 'launch_failed',
       message: error?.message || 'Failed to launch overlay companion.',
     };
+  }
+}
+
+export async function terminateInstalledOverlayCompanion(): Promise<void> {
+  const companionStatus = await inspectOverlayCompanionInstall();
+
+  if (!companionStatus.launchable || !companionStatus.executable_path) {
+    return;
+  }
+
+  const runningProcesses = await readRunningProcessEntries();
+  if (!runningProcesses) {
+    return;
+  }
+
+  const matchingProcesses = getMatchingOverlayProcesses(runningProcesses, companionStatus.executable_path);
+  for (const processEntry of matchingProcesses) {
+    await terminateProcess(processEntry.pid);
   }
 }

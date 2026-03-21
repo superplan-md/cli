@@ -1,6 +1,10 @@
 import { setOverlayVisibilityRequest } from './overlay-runtime';
 import { readOverlayPreferences, type OverlayPreferenceState } from './overlay-preferences';
-import { launchInstalledOverlayCompanion, type OverlayCompanionLaunchResult } from './overlay-companion';
+import {
+  launchInstalledOverlayCompanion,
+  terminateInstalledOverlayCompanion,
+  type OverlayCompanionLaunchResult,
+} from './overlay-companion';
 import type { OverlayRequestedAction, OverlaySnapshot } from '../shared/overlay';
 
 export interface OverlayVisibilityApplyResult {
@@ -67,7 +71,7 @@ export async function applyRequestedOverlayAction(
   const [{ control }, companion] = await Promise.all([
     setOverlayVisibilityRequest(appliedAction, { workspacePath: snapshot.workspace_path }),
     appliedAction === 'hide'
-      ? Promise.resolve(createSkippedCompanionLaunchResult(snapshot.workspace_path))
+      ? terminateInstalledOverlayCompanion().then(() => createSkippedCompanionLaunchResult(snapshot.workspace_path))
       : launchInstalledOverlayCompanion(snapshot.workspace_path),
   ]);
 

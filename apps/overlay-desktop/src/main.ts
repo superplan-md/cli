@@ -1056,7 +1056,7 @@ async function hideOverlayFromUi(): Promise<void> {
     visible: false,
   };
   lastAppliedVisibility = false;
-  await applyVisibility(false);
+  await terminateOverlayApplication();
 }
 
 async function enterExpandedWindowMode(): Promise<void> {
@@ -1522,7 +1522,33 @@ async function syncDerivedVisibility(): Promise<void> {
   }
 
   lastAppliedVisibility = visible;
-  await applyVisibility(visible);
+  if (!visible) {
+    await terminateOverlayApplication();
+    return;
+  }
+
+  await applyVisibility(true);
+}
+
+async function terminateOverlayApplication(): Promise<void> {
+  try {
+    await invoke('exit_overlay_application');
+    return;
+  } catch (error) {
+    console.error('exit_overlay_application failed', error);
+  }
+
+  const appWindow = getAppWindow();
+  if (appWindow) {
+    try {
+      await appWindow.close();
+      return;
+    } catch (error) {
+      console.error('window close fallback failed', error);
+    }
+  }
+
+  await applyVisibility(false);
 }
 
 async function syncOverlayRuntime(): Promise<void> {

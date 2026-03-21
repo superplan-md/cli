@@ -183,6 +183,73 @@ resolve_overlay_executable_path() {
   find "$install_path" -maxdepth 2 -type f -perm -u+x 2>/dev/null | sort | head -n 1
 }
 
+list_overlay_process_ids() {
+  target_executable_path="$1"
+  [ -n "$target_executable_path" ] || return 0
+
+  ps -axo pid=,command= 2>/dev/null | while IFS= read -r line; do
+    pid="$(printf '%s\n' "$line" | sed -n 's/^[[:space:]]*\([0-9][0-9]*\)[[:space:]].*$/\1/p')"
+    command_line="$(printf '%s\n' "$line" | sed -e 's/^[[:space:]]*[0-9][0-9]*[[:space:]]*//')"
+    [ -n "$pid" ] || continue
+
+    case "$command_line" in
+      "$target_executable_path"|"$target_executable_path "*)
+        printf '%s\n' "$pid"
+        ;;
+      "/bin/sh $target_executable_path"|"/bin/sh $target_executable_path "*)
+        printf '%s\n' "$pid"
+        ;;
+      "sh $target_executable_path"|"sh $target_executable_path "*)
+        printf '%s\n' "$pid"
+        ;;
+      "/bin/bash $target_executable_path"|"/bin/bash $target_executable_path "*)
+        printf '%s\n' "$pid"
+        ;;
+      "bash $target_executable_path"|"bash $target_executable_path "*)
+        printf '%s\n' "$pid"
+        ;;
+      "/bin/zsh $target_executable_path"|"/bin/zsh $target_executable_path "*)
+        printf '%s\n' "$pid"
+        ;;
+      "zsh $target_executable_path"|"zsh $target_executable_path "*)
+        printf '%s\n' "$pid"
+        ;;
+    esac
+  done
+}
+
+stop_running_overlay_companion() {
+  target_install_path="$1"
+  [ -n "$target_install_path" ] || return 0
+  [ -e "$target_install_path" ] || return 0
+
+  target_executable_path="$(resolve_overlay_executable_path "$target_install_path")"
+  [ -n "$target_executable_path" ] || return 0
+
+  process_ids="$(list_overlay_process_ids "$target_executable_path")"
+  [ -n "$process_ids" ] || return 0
+
+  say "Stopping running Superplan overlay companion"
+  for process_id in $process_ids; do
+    kill "$process_id" 2>/dev/null || true
+  done
+
+  attempt=0
+  while [ "$attempt" -lt 5 ]; do
+    remaining_ids="$(list_overlay_process_ids "$target_executable_path")"
+    [ -z "$remaining_ids" ] && return 0
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+
+  remaining_ids="$(list_overlay_process_ids "$target_executable_path")"
+  if [ -n "$remaining_ids" ]; then
+    for process_id in $remaining_ids; do
+      kill -9 "$process_id" 2>/dev/null || true
+    done
+  fi
+}
+
 install_overlay_companion() {
   if [ -z "$SUPERPLAN_OVERLAY_SOURCE_PATH" ]; then
     return 0
@@ -202,11 +269,13 @@ install_overlay_companion() {
     )"
     [ -n "$archive_root" ] || fail "failed to determine overlay archive root from $SUPERPLAN_OVERLAY_SOURCE_PATH"
     OVERLAY_INSTALL_PATH="$SUPERPLAN_OVERLAY_INSTALL_DIR/$archive_root"
+    stop_running_overlay_companion "$OVERLAY_INSTALL_PATH"
     rm -rf "$OVERLAY_INSTALL_PATH"
     tar -xzf "$SUPERPLAN_OVERLAY_SOURCE_PATH" -C "$SUPERPLAN_OVERLAY_INSTALL_DIR"
   else
     overlay_name="$(basename "$SUPERPLAN_OVERLAY_SOURCE_PATH")"
     OVERLAY_INSTALL_PATH="$SUPERPLAN_OVERLAY_INSTALL_DIR/$overlay_name"
+    stop_running_overlay_companion "$OVERLAY_INSTALL_PATH"
     rm -rf "$OVERLAY_INSTALL_PATH"
     cp -R "$SUPERPLAN_OVERLAY_SOURCE_PATH" "$OVERLAY_INSTALL_PATH"
   fi

@@ -370,6 +370,12 @@ fn set_overlay_visibility(app_handle: tauri::AppHandle, visible: bool) -> Result
 }
 
 #[tauri::command]
+fn exit_overlay_application(app_handle: tauri::AppHandle) -> Result<(), String> {
+    app_handle.exit(0);
+    Ok(())
+}
+
+#[tauri::command]
 fn persist_overlay_requested_action(
     app_handle: tauri::AppHandle,
     requested_action: String,
@@ -533,6 +539,7 @@ pub fn run() {
         load_overlay_control_state,
         persist_overlay_requested_action,
         set_overlay_visibility,
+        exit_overlay_application,
         set_overlay_size,
         play_overlay_alert_sound,
         start_overlay_drag

@@ -40,6 +40,24 @@ function runCommand(command, args, options = {}) {
   });
 }
 
+async function waitForPidExit(pid, timeoutMs = 10000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      process.kill(pid, 0);
+      await new Promise(resolve => setTimeout(resolve, 100));
+    } catch (error) {
+      if (error && error.code === 'ESRCH') {
+        return;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new Error(`Timed out waiting for process ${pid} to exit`);
+}
+
 test('install script installs superplan from a local source snapshot into a custom prefix', async () => {
   const sandbox = await makeSandbox('superplan-install-script-');
   const prefixDir = path.join(sandbox.root, 'prefix');
@@ -133,4 +151,56 @@ test('install script defaults bundled overlay installs to enabled', async () => 
     installerSource,
     /SUPERPLAN_ENABLE_OVERLAY="\$\{SUPERPLAN_ENABLE_OVERLAY:-1\}"/,
   );
+});
+
+test('install script stops a running installed overlay before replacing it', async () => {
+  const sandbox = await makeSandbox('superplan-install-overlay-replace-');
+  const prefixDir = path.join(sandbox.root, 'prefix');
+  const overlaySourcePath = path.join(sandbox.root, 'overlay-bin');
+
+  await fs.mkdir(prefixDir, { recursive: true });
+  await fs.writeFile(overlaySourcePath, '#!/bin/sh\nwhile :; do sleep 60; done\n', { mode: 0o755 });
+
+  const installEnv = {
+    ...process.env,
+    HOME: sandbox.home,
+    SUPERPLAN_SOURCE_DIR: REPO_ROOT,
+    SUPERPLAN_INSTALL_PREFIX: prefixDir,
+    SUPERPLAN_OVERLAY_SOURCE_PATH: overlaySourcePath,
+    SUPERPLAN_ENABLE_OVERLAY: '0',
+  };
+
+  const firstInstall = await runCommand('sh', [path.join(REPO_ROOT, 'scripts', 'install.sh')], {
+    cwd: sandbox.cwd,
+    env: installEnv,
+  });
+
+  assert.equal(firstInstall.code, 0, firstInstall.stderr || firstInstall.stdout);
+
+  const installedOverlayPath = path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay', 'overlay-bin');
+  const runningOverlay = spawn(installedOverlayPath, [], {
+    cwd: sandbox.cwd,
+    env: {
+      ...process.env,
+      HOME: sandbox.home,
+    },
+    detached: true,
+    stdio: 'ignore',
+  });
+  runningOverlay.unref();
+
+  assert.ok(runningOverlay.pid, 'expected spawned overlay pid');
+  await new Promise(resolve => setTimeout(resolve, 250));
+  process.kill(runningOverlay.pid, 0);
+
+  await fs.writeFile(overlaySourcePath, '#!/bin/sh\nprintf replaced\n', { mode: 0o755 });
+
+  const secondInstall = await runCommand('sh', [path.join(REPO_ROOT, 'scripts', 'install.sh')], {
+    cwd: sandbox.cwd,
+    env: installEnv,
+  });
+
+  assert.equal(secondInstall.code, 0, secondInstall.stderr || secondInstall.stdout);
+  await waitForPidExit(runningOverlay.pid);
+  assert.equal(await fs.readFile(installedOverlayPath, 'utf-8'), '#!/bin/sh\nprintf replaced\n');
 });

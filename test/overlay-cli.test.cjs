@@ -84,6 +84,57 @@ async function waitForFile(targetPath, timeoutMs = 3000) {
   throw new Error(`Timed out waiting for ${targetPath}`);
 }
 
+function processExists(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error && error.code === 'ESRCH') {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+async function waitForCondition(predicate, timeoutMs = 3000) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (await predicate()) {
+      return;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+
+  throw new Error('Timed out waiting for condition');
+}
+
+async function waitForPidCount(pidLogPath, expectedCount, timeoutMs = 3000) {
+  let lastPids = [];
+
+  await waitForCondition(async () => {
+    try {
+      const content = await fs.readFile(pidLogPath, 'utf-8');
+      lastPids = content
+        .split(/\r?\n/)
+        .map(line => Number.parseInt(line.trim(), 10))
+        .filter(Number.isInteger);
+    } catch {
+      lastPids = [];
+    }
+
+    return lastPids.length >= expectedCount;
+  }, timeoutMs);
+
+  return lastPids;
+}
+
+async function waitForProcessExit(pid, timeoutMs = 3000) {
+  await waitForCondition(async () => !processExists(pid), timeoutMs);
+}
+
 test('overlay --help explains overlay lifecycle subcommands', async () => {
   const result = await runCli(['overlay', '--help']);
 
@@ -417,6 +468,228 @@ Launch overlay companion
   assert.equal(ensurePayload.data.companion.executable_path, fakeOverlayPath);
   assert.match(launchOutput, new RegExp(`--workspace ${realWorkspacePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
   assert.match(launchOutput, new RegExp(`${realWorkspacePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
+});
+
+test('overlay ensure does not launch a second detached companion when one is already running', async (t) => {
+  const sandbox = await makeSandbox('superplan-overlay-single-instance-');
+  const fakeOverlayPath = path.join(sandbox.root, 'fake-overlay');
+  const pidLogPath = path.join(sandbox.root, 'overlay-pids.txt');
+
+  await writeFile(fakeOverlayPath, `#!/bin/sh
+trap 'kill 0 >/dev/null 2>&1; exit 0' TERM INT
+printf '%s\n' "$$" >> "$SUPERPLAN_OVERLAY_PID_LOG"
+while :
+do
+  sleep 1 &
+  wait $!
+done
+`);
+  await fs.chmod(fakeOverlayPath, 0o755);
+
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-011B.md'), `---
+task_id: T-011B
+status: pending
+priority: high
+---
+
+## Description
+Keep one overlay companion only
+
+## Acceptance Criteria
+- [ ] A
+`);
+
+  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+
+  const overlayEnv = {
+    ...sandbox.env,
+    SUPERPLAN_OVERLAY_BINARY_PATH: fakeOverlayPath,
+    SUPERPLAN_OVERLAY_PID_LOG: pidLogPath,
+  };
+
+  t.after(async () => {
+    try {
+      const content = await fs.readFile(pidLogPath, 'utf-8');
+      const pids = content
+        .split(/\r?\n/)
+        .map(line => Number.parseInt(line.trim(), 10))
+        .filter(Number.isInteger);
+
+      for (const pid of pids) {
+        if (processExists(pid)) {
+          process.kill(pid, 'SIGTERM');
+        }
+      }
+    } catch {}
+  });
+
+  parseCliJson(await runCli(['overlay', 'ensure', '--json'], {
+    cwd: sandbox.cwd,
+    env: overlayEnv,
+  }));
+
+  const [firstPid] = await waitForPidCount(pidLogPath, 1);
+  assert.equal(processExists(firstPid), true);
+
+  parseCliJson(await runCli(['overlay', 'ensure', '--json'], {
+    cwd: sandbox.cwd,
+    env: overlayEnv,
+  }));
+
+  await new Promise(resolve => setTimeout(resolve, 250));
+
+  const allPids = (await fs.readFile(pidLogPath, 'utf-8'))
+    .split(/\r?\n/)
+    .map(line => Number.parseInt(line.trim(), 10))
+    .filter(Number.isInteger);
+
+  assert.deepEqual(allPids, [firstPid]);
+});
+
+test('overlay hide terminates the detached companion process', async (t) => {
+  const sandbox = await makeSandbox('superplan-overlay-hide-terminates-');
+  const fakeOverlayPath = path.join(sandbox.root, 'fake-overlay');
+  const pidLogPath = path.join(sandbox.root, 'overlay-pids.txt');
+
+  await writeFile(fakeOverlayPath, `#!/bin/sh
+trap 'kill 0 >/dev/null 2>&1; exit 0' TERM INT
+printf '%s\n' "$$" >> "$SUPERPLAN_OVERLAY_PID_LOG"
+while :
+do
+  sleep 1 &
+  wait $!
+done
+`);
+  await fs.chmod(fakeOverlayPath, 0o755);
+
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-011C.md'), `---
+task_id: T-011C
+status: pending
+priority: high
+---
+
+## Description
+Terminate overlay companion on hide
+
+## Acceptance Criteria
+- [ ] A
+`);
+
+  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+
+  const overlayEnv = {
+    ...sandbox.env,
+    SUPERPLAN_OVERLAY_BINARY_PATH: fakeOverlayPath,
+    SUPERPLAN_OVERLAY_PID_LOG: pidLogPath,
+  };
+
+  t.after(async () => {
+    try {
+      const content = await fs.readFile(pidLogPath, 'utf-8');
+      const pids = content
+        .split(/\r?\n/)
+        .map(line => Number.parseInt(line.trim(), 10))
+        .filter(Number.isInteger);
+
+      for (const pid of pids) {
+        if (processExists(pid)) {
+          process.kill(pid, 'SIGTERM');
+        }
+      }
+    } catch {}
+  });
+
+  parseCliJson(await runCli(['overlay', 'ensure', '--json'], {
+    cwd: sandbox.cwd,
+    env: overlayEnv,
+  }));
+
+  const [pid] = await waitForPidCount(pidLogPath, 1);
+  assert.equal(processExists(pid), true);
+
+  parseCliJson(await runCli(['overlay', 'hide', '--json'], {
+    cwd: sandbox.cwd,
+    env: overlayEnv,
+  }));
+
+  await waitForProcessExit(pid);
+});
+
+test('overlay ensure terminates the companion when no renderable tasks remain', async (t) => {
+  const sandbox = await makeSandbox('superplan-overlay-empty-terminates-');
+  const fakeOverlayPath = path.join(sandbox.root, 'fake-overlay');
+  const pidLogPath = path.join(sandbox.root, 'overlay-pids.txt');
+  const taskPath = path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-011D.md');
+
+  await writeFile(fakeOverlayPath, `#!/bin/sh
+trap 'kill 0 >/dev/null 2>&1; exit 0' TERM INT
+printf '%s\n' "$$" >> "$SUPERPLAN_OVERLAY_PID_LOG"
+while :
+do
+  sleep 1 &
+  wait $!
+done
+`);
+  await fs.chmod(fakeOverlayPath, 0o755);
+
+  await writeFile(taskPath, `---
+task_id: T-011D
+status: pending
+priority: high
+---
+
+## Description
+Terminate overlay companion when there is nothing left to show
+
+## Acceptance Criteria
+- [ ] A
+`);
+
+  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+
+  const overlayEnv = {
+    ...sandbox.env,
+    SUPERPLAN_OVERLAY_BINARY_PATH: fakeOverlayPath,
+    SUPERPLAN_OVERLAY_PID_LOG: pidLogPath,
+  };
+
+  t.after(async () => {
+    try {
+      const content = await fs.readFile(pidLogPath, 'utf-8');
+      const pids = content
+        .split(/\r?\n/)
+        .map(line => Number.parseInt(line.trim(), 10))
+        .filter(Number.isInteger);
+
+      for (const pid of pids) {
+        if (processExists(pid)) {
+          process.kill(pid, 'SIGTERM');
+        }
+      }
+    } catch {}
+  });
+
+  parseCliJson(await runCli(['overlay', 'ensure', '--json'], {
+    cwd: sandbox.cwd,
+    env: overlayEnv,
+  }));
+
+  const [pid] = await waitForPidCount(pidLogPath, 1);
+  assert.equal(processExists(pid), true);
+
+  await fs.rm(taskPath);
+
+  const emptyEnsurePayload = parseCliJson(await runCli(['overlay', 'ensure', '--json'], {
+    cwd: sandbox.cwd,
+    env: overlayEnv,
+  }));
+
+  assert.equal(emptyEnsurePayload.ok, true);
+  assert.equal(emptyEnsurePayload.data.applied_action, 'hide');
+  assert.equal(emptyEnsurePayload.data.has_content, false);
+  assert.equal(emptyEnsurePayload.data.reason, 'empty');
+
+  await waitForProcessExit(pid);
 });
 
 test('overlay status reports the last requested runtime visibility instead of recomputing it from content', async () => {
