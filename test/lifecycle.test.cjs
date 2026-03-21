@@ -45,8 +45,12 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.match(installedUsingSuperplanSkill, /superplan task show <task_id> --json/);
   assert.match(installedUsingSuperplanSkill, /superplan task batch <change-slug> --stdin --json/);
   assert.match(installedUsingSuperplanSkill, /manual creation of individual `tasks\/T-xxx\.md` files is off limits/i);
+  assert.match(installedUsingSuperplanSkill, /do not use shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > \.\.\.`, `printf > \.\.\.`, or here-docs/i);
+  assert.match(installedUsingSuperplanSkill, /stdin transport into `superplan task batch --stdin --json`/i);
   assert.match(installedUsingSuperplanSkill, /Entry routing is not permission to explore the CLI surface\./);
   assert.match(installedUsingSuperplanSkill, /do not call `--help`, neighboring subcommands, or diagnostic commands/i);
+  assert.match(installedUsingSuperplanSkill, /launchable companion is installed/i);
+  assert.match(installedUsingSuperplanSkill, /surface `overlay\.companion\.reason` instead of assuming the overlay appeared/i);
   assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task next --json/);
   assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task why-next --json/);
   assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task start <task_id> --json/);
@@ -61,6 +65,8 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.match(installedShapeSkill, /superplan task batch <change-slug> --stdin --json/);
   assert.match(installedShapeSkill, /tasks\.md/);
   assert.match(installedShapeSkill, /Manual creation of individual `tasks\/T-xxx\.md` files is off limits\./);
+  assert.match(installedShapeSkill, /Do not use shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > \.\.\.`, `printf > \.\.\.`, or here-docs/i);
+  assert.match(installedShapeSkill, /stdin transport into `superplan task batch --stdin --json`/i);
   assert.match(installedShapeSkill, /use one `superplan task batch <change-slug> --stdin --json` call over repeated `superplan task new` calls\./);
   assert.match(installedShapeSkill, /Shaping is not permission to explore the CLI surface\./);
   assert.match(installedShapeSkill, /use the current CLI contract already listed in this skill instead of probing adjacent commands/i);
@@ -74,6 +80,8 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.match(installedExecuteTaskGraphSkill, /superplan run <task_id> --json/);
   assert.match(installedExecuteTaskGraphSkill, /superplan task show <task_id> --json/);
   assert.match(installedExecuteTaskGraphSkill, /Execution is not permission to wander across CLI commands\./);
+  assert.match(installedExecuteTaskGraphSkill, /launchable companion is installed/i);
+  assert.match(installedExecuteTaskGraphSkill, /surface `overlay\.companion\.reason` instead of assuming the overlay appeared/i);
   assert.match(installedExecuteTaskGraphSkill, /repeatedly polling `status` or `task show` without a concrete state, blocker, or handoff reason/i);
   assert.doesNotMatch(installedExecuteTaskGraphSkill, /superplan task why <task_id> --json/);
   assert.doesNotMatch(installedExecuteTaskGraphSkill, /superplan task start <task_id>/);
@@ -84,6 +92,7 @@ test('setup quiet installs bundled global assets into the configured home direct
     'utf-8',
   );
   assert.match(installedRouteSkill, /Routing is not permission to explore the CLI surface\./);
+  assert.match(installedRouteSkill, /CLI-minted `tasks\/T-\*\.md`/);
 });
 
 test('interactive setup prints the current ascii wordmark once', async () => {
@@ -262,6 +271,12 @@ test('interactive setup select-all option installs every supported machine-level
   assert.ok(await pathExists(path.join(sandbox.home, '.cursor', 'skills', 'superplan-entry', 'SKILL.md')));
   assert.ok(await pathExists(path.join(sandbox.home, '.codex', 'skills', 'superplan-entry', 'SKILL.md')));
   assert.ok(await pathExists(path.join(sandbox.home, '.config', 'opencode', 'skills', 'superplan-entry', 'SKILL.md')));
+
+  const geminiCommand = await fs.readFile(path.join(sandbox.home, '.gemini', 'commands', 'superplan.toml'), 'utf-8');
+  assert.match(geminiCommand, /Never create or edit `\.superplan\/changes\/<change-slug>\/tasks\/T-xxx\.md` task contracts with shell loops or direct file-edit rewrites/i);
+  assert.match(geminiCommand, /stdin transport into `superplan task batch --stdin --json`/i);
+  assert.match(geminiCommand, /launchable companion is installed/i);
+  assert.match(geminiCommand, /surface `overlay\.companion\.reason` instead of assuming the overlay appeared/i);
 });
 
 test('doctor reports valid after quiet global setup in a clean repo', async () => {

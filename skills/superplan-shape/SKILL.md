@@ -125,6 +125,8 @@ Manual creation of individual `tasks/T-xxx.md` files is off limits.
 
 Agents should spend their shaping effort on the graph and dependency structure in `tasks.md`, then mint canonical task contracts through the CLI.
 
+Do not use shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > ...`, `printf > ...`, or here-docs to write task contracts or task graph files directly. Shell is only acceptable here as stdin transport into `superplan task batch --stdin --json`.
+
 When shaping produces exactly one new task contract, `superplan task new <change-slug> --title "<title>" --json` is the default scaffold path.
 
 When shaping produces two or more new task contracts that are clear enough to author now, use one `superplan task batch <change-slug> --stdin --json` call over repeated `superplan task new` calls.
@@ -254,6 +256,7 @@ Treat the workspace's existing setup as the default operating surface.
 - creating tracked work without a root `changes/<slug>/tasks.md`
 - hand-creating new `tasks/T-xxx.md` task contracts when `superplan task new` can mint the canonical ID and scaffold
 - manually creating individual task files instead of using `superplan task batch --stdin --json` when multiple tasks are ready together
+- using shell loops or direct file-edit rewrites to create or mutate task contracts instead of the CLI authoring commands; piping JSON into `superplan task batch --stdin --json` is fine, writing the task files yourself is not
 - authoring root graphs or shard files without the hard-contract section shape
 - inventing unstable IDs or renumbering existing task IDs
 - putting canonical dependency or workstream ownership in task files once graph truth exists

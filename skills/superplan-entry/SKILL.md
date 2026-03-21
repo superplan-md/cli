@@ -136,17 +136,19 @@ Execution default:
 3. use the task returned by `superplan run --json`; use `superplan run <task_id> --json` when one specific task should become active; only call `superplan task show <task_id> --json` when you need one task's full details and readiness reasons
 4. execute through the workflow spine, especially `superplan-execute`, instead of ad hoc task mutation
 5. block, request feedback, or complete through the runtime commands rather than editing markdown state by hand
-6. if overlay support is enabled for the workspace, expect `superplan task new`, `superplan task batch`, `superplan run`, `superplan run <task_id>`, and `superplan task reopen` to auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle again
+6. if overlay support is enabled for the workspace and a launchable companion is installed, expect `superplan task new`, `superplan task batch`, `superplan run`, `superplan run <task_id>`, and `superplan task reopen` to auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle again
+7. after overlay-triggering commands, inspect the returned overlay payload; if `overlay.companion.launched` is false, surface `overlay.companion.reason` instead of assuming the overlay appeared
 
 Authoring default:
 
 1. create the tracked change once with `superplan change new <change-slug> --json`
 2. manual creation of individual `tasks/T-xxx.md` files is off limits; agents should shape the graph and dependencies first, then use the CLI to mint task contracts
-3. use `superplan task new <change-slug> --title "<title>" --json` only when exactly one task should be created now
-4. use `superplan task batch <change-slug> --stdin --json` when two or more tasks are clear enough to create in one pass
-5. when multiple tasks are ready together, prefer one batch call so the graph edges and batch-local dependencies are captured in one authoring step
-6. prefer stdin over temporary files for batch task authoring in agent flows
-7. use the returned task payloads directly after authoring instead of immediately calling `superplan task show`
+3. do not use shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > ...`, `printf > ...`, or here-docs to write task contracts or task graph files directly; shell is only acceptable as stdin transport into `superplan task batch --stdin --json`
+4. use `superplan task new <change-slug> --title "<title>" --json` only when exactly one task should be created now
+5. use `superplan task batch <change-slug> --stdin --json` when two or more tasks are clear enough to create in one pass
+6. when multiple tasks are ready together, prefer one batch call so the graph edges and batch-local dependencies are captured in one authoring step
+7. prefer stdin over temporary files for batch task authoring in agent flows
+8. use the returned task payloads directly after authoring instead of immediately calling `superplan task show`
 
 Canonical command rule:
 
@@ -154,6 +156,7 @@ Canonical command rule:
 - do not choose between multiple overlapping commands when one canonical path exists
 - do not explore neighboring CLI commands when one canonical path is already listed here
 - do not call `--help` or diagnostic commands just to confirm a command the skill already named
+- do not replace canonical task authoring with shell loops or direct file rewrites
 - prefer commands that already return the needed task payload instead of making extra follow-up calls
 
 ## Entry Decision Order

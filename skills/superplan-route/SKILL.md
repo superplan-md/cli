@@ -86,10 +86,10 @@ Routing is not permission to explore the CLI surface.
 
 Expected artifact pattern by depth:
 
-- `direct`: usually `tasks.md` plus one lightweight task contract
-- `task`: `tasks.md` plus one normal task contract
-- `slice`: usually `plan.md`, `tasks.md`, and `tasks/T-*.md`; add specs only when target misunderstanding is the bigger risk than sequencing
-- `program`: `plan.md`, `tasks.md`, `tasks/T-*.md`, and specs where multiple interfaces, expectations, or product truths need durable capture
+- `direct`: usually `tasks.md` plus one lightweight CLI-minted task contract
+- `task`: `tasks.md` plus one normal CLI-minted task contract
+- `slice`: usually `plan.md`, `tasks.md`, and CLI-minted `tasks/T-*.md`; add specs only when target misunderstanding is the bigger risk than sequencing
+- `program`: `plan.md`, `tasks.md`, CLI-minted `tasks/T-*.md`, and specs where multiple interfaces, expectations, or product truths need durable capture
 
 Graph rule:
 
