@@ -40,7 +40,9 @@ test('setup quiet installs bundled global assets into the configured home direct
   );
   assert.match(installedUsingSuperplanSkill, /superplan run --json/);
   assert.match(installedUsingSuperplanSkill, /superplan status --json/);
-  assert.match(installedUsingSuperplanSkill, /superplan task why-next --json/);
+  assert.match(installedUsingSuperplanSkill, /superplan task show <task_id> --json/);
+  assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task next --json/);
+  assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task why-next --json/);
 });
 
 test('interactive setup prints the current ascii wordmark once', async () => {

@@ -1,10 +1,4 @@
-import { task } from './task';
-
-interface ParsedTask {
-  task_id: string;
-  status: string;
-  is_ready: boolean;
-}
+import { loadTasks, type ParsedTask } from './task';
 
 export type StatusResult =
   | {
@@ -24,23 +18,12 @@ function sortTaskIds(taskIds: string[]): string[] {
 }
 
 export async function status(): Promise<StatusResult> {
-  const showTasksResult = await task(['show']);
-  if (!showTasksResult.ok) {
-    return showTasksResult;
+  const tasksResult = await loadTasks();
+  if (!tasksResult.ok) {
+    return tasksResult;
   }
 
-  if (!('tasks' in showTasksResult.data)) {
-    return {
-      ok: false,
-      error: {
-        code: 'STATUS_FAILED',
-        message: 'Unexpected task status result',
-        retryable: false,
-      },
-    };
-  }
-
-  const tasks = showTasksResult.data.tasks as ParsedTask[];
+  const tasks = tasksResult.data.tasks as ParsedTask[];
   const activeTask = tasks.find(taskItem => taskItem.status === 'in_progress');
   const readyTasks = tasks.filter(taskItem => taskItem.is_ready).map(taskItem => taskItem.task_id);
   const inReviewTasks = tasks.filter(taskItem => taskItem.status === 'in_review').map(taskItem => taskItem.task_id);

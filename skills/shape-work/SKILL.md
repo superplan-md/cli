@@ -99,7 +99,8 @@ Current CLI reality:
 
 - `superplan init` creates `.superplan/` and `.superplan/changes/`
 - `superplan parse [path] --json` parses task contract files, not `tasks.md`
-- `superplan task list|show|next` computes current task validity and readiness from task files plus runtime state
+- `superplan status` summarizes the ready frontier from task files plus runtime state
+- `superplan task show <task_id>` explains one task's current readiness in detail
 - `superplan doctor` checks setup and installation readiness, not shaped work correctness
 
 Therefore:
@@ -200,7 +201,8 @@ Treat the workspace's existing setup as the default operating surface.
 - choose the current CLI validation path:
   - `superplan doctor` for install/setup readiness
   - `superplan parse [path] --json` for task contract validity
-  - `superplan task show`, `superplan task list`, or `superplan task next` for current ready-frontier inspection
+  - `superplan status` for current ready-frontier inspection
+  - `superplan task show <task_id>` for one task's detailed readiness
 - choose an autonomy class:
   - `autopilot`
   - `checkpointed autopilot`
@@ -322,9 +324,8 @@ Current CLI:
 - `superplan init`
 - `superplan doctor`
 - `superplan parse [path] --json`
-- `superplan task list`
-- `superplan task show [task_id]`
-- `superplan task next`
+- `superplan status`
+- `superplan task show <task_id>`
 
 Future CLI hooks:
 
@@ -368,7 +369,7 @@ Should create investigation or decision-gate tasks:
 Should align honestly to the current CLI:
 
 - `tasks.md` may be authored for graph visibility, but task-file validation must run through `superplan parse`
-- ready-frontier checks should name `superplan task show`, `superplan task list`, or `superplan task next`
+- ready-frontier checks should name `superplan status` and `superplan task show <task_id>`
 - shaping should not invent current commands for change or task creation
 - shaping should still follow the hard contract even when the current parser only validates part of it
 

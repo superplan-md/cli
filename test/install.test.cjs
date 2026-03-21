@@ -15,7 +15,7 @@ function runCommand(command, args, options = {}) {
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: options.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [typeof options.input === 'string' ? 'pipe' : 'ignore', 'pipe', 'pipe'],
     });
 
     let stdout = '';
@@ -30,6 +30,10 @@ function runCommand(command, args, options = {}) {
     });
 
     child.on('error', reject);
+    if (typeof options.input === 'string' && child.stdin) {
+      child.stdin.write(options.input);
+      child.stdin.end();
+    }
     child.on('close', code => {
       resolve({ code, stdout, stderr });
     });
@@ -119,5 +123,14 @@ test('install script records and installs a bundled overlay companion when one i
   assert.match(
     await fs.readFile(path.join(sandbox.home, '.config', 'superplan', 'config.toml'), 'utf-8'),
     /\[overlay\][\s\S]*enabled = true/,
+  );
+});
+
+test('install script defaults bundled overlay installs to enabled', async () => {
+  const installerSource = await fs.readFile(path.join(REPO_ROOT, 'scripts', 'install.sh'), 'utf-8');
+
+  assert.match(
+    installerSource,
+    /SUPERPLAN_ENABLE_OVERLAY="\$\{SUPERPLAN_ENABLE_OVERLAY:-1\}"/,
   );
 });

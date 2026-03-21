@@ -165,7 +165,6 @@ Use the Superplan CLI in this repository as the source of truth for task state.
 Common commands:
 - \`superplan status --json\`
 - \`superplan run --json\`
-- \`superplan task why-next --json\`
 - \`superplan task show <task_id> --json\`
 - \`superplan task block <task_id> --reason "<reason>" --json\`
 - \`superplan task request-feedback <task_id> --message "<message>" --json\`
@@ -177,7 +176,7 @@ Common commands:
 Execution loop:
 1. Check \`superplan status --json\`
 2. Claim work with \`superplan run --json\`
-3. Inspect the selected task before editing code
+3. Use the task returned by \`superplan run --json\` before editing code; reach for \`superplan task show <task_id> --json\` only when you need one task's full details and readiness reasons
 4. Update runtime state with block, feedback, complete, or fix commands instead of editing markdown state by hand
 5. If overlay support is enabled for this workspace, task start/resume/run transitions will auto-reveal the overlay when work becomes active; use \`superplan overlay ensure --json\` only when you need to resync or reveal it explicitly, and \`superplan overlay hide --json\` when it becomes idle or empty
 

@@ -45,4 +45,5 @@ Typical resume path:
 
 - `superplan status --json`
 - `superplan run --json`
-- `superplan task show <task_id> --json`
+- use the task returned by `superplan run --json`
+- `superplan task show <task_id> --json` only when the handoff points to a specific task you need to reopen directly

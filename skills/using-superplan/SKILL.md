@@ -102,10 +102,8 @@ When Superplan is active in a repo, prefer the CLI as the execution control plan
 Common commands:
 
 - `superplan status --json` to see active, ready, blocked, and needs-feedback tasks
-- `superplan run --json` to claim the next ready task or continue the active task
-- `superplan task why-next --json` to explain why the current frontier was selected
-- `superplan task show <task_id> --json` to inspect the selected task contract
-- `superplan task why <task_id> --json` to understand why a task is not ready
+- `superplan run --json` to claim the next ready task or continue the active task, with the chosen task contract and selection reason in the payload
+- `superplan task show <task_id> --json` to inspect one task and its readiness reasons directly
 - `superplan task block <task_id> --reason "<reason>" --json` when execution cannot safely continue
 - `superplan task request-feedback <task_id> --message "<message>" --json` when the user must respond
 - `superplan task complete <task_id> --json` after the work and acceptance criteria are satisfied
@@ -117,7 +115,7 @@ Execution default:
 
 1. check `superplan status --json`
 2. claim work with `superplan run --json`
-3. inspect the chosen task with `superplan task show <task_id> --json`
+3. use the task returned by `superplan run --json`; only call `superplan task show <task_id> --json` when you need one task's full details and readiness reasons
 4. execute through the workflow spine, especially `execute-task-graph`, instead of ad hoc task mutation
 5. block, request feedback, or complete through the runtime commands rather than editing markdown state by hand
 6. if overlay support is enabled for the workspace, expect task start/resume/run transitions to auto-reveal the overlay when work becomes active; use `superplan overlay ensure --json` only when an explicit reveal or resync is needed, and `superplan overlay hide --json` when the workspace becomes idle again
@@ -249,8 +247,6 @@ Likely handoffs:
 - `superplan status --json`
 - `superplan run --json`
 - `superplan parse --json`
-- `superplan task next --json`
-- `superplan task why-next --json`
 - `superplan task show <task_id> --json`
 - `superplan overlay ensure --json`
 - `superplan overlay hide --json`

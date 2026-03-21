@@ -17,7 +17,7 @@ set -eu
 # - SUPERPLAN_OVERLAY_SOURCE_PATH: prebuilt overlay bundle or executable to install
 # - SUPERPLAN_OVERLAY_RELEASE_BASE_URL: base URL that hosts packaged overlay artifacts
 # - SUPERPLAN_OVERLAY_INSTALL_DIR: install directory for the overlay bundle or executable
-# - SUPERPLAN_ENABLE_OVERLAY: yes/no override for the machine-default overlay prompt
+# - SUPERPLAN_ENABLE_OVERLAY: yes/no override for machine-default overlay behavior
 # - SUPERPLAN_RUN_SETUP_AFTER_INSTALL: 1 to run machine setup after install, 0 to skip it
 
 SUPERPLAN_REPO_URL="${SUPERPLAN_REPO_URL:-https://github.com/superplan-md/cli.git}"
@@ -27,7 +27,7 @@ SUPERPLAN_INSTALL_PREFIX="${SUPERPLAN_INSTALL_PREFIX:-}"
 SUPERPLAN_OVERLAY_SOURCE_PATH="${SUPERPLAN_OVERLAY_SOURCE_PATH:-}"
 SUPERPLAN_OVERLAY_RELEASE_BASE_URL="${SUPERPLAN_OVERLAY_RELEASE_BASE_URL:-https://github.com/superplan-md/cli/releases/download/${SUPERPLAN_REF}}"
 SUPERPLAN_OVERLAY_INSTALL_DIR="${SUPERPLAN_OVERLAY_INSTALL_DIR:-${HOME}/.local/share/superplan/overlay}"
-SUPERPLAN_ENABLE_OVERLAY="${SUPERPLAN_ENABLE_OVERLAY:-}"
+SUPERPLAN_ENABLE_OVERLAY="${SUPERPLAN_ENABLE_OVERLAY:-1}"
 SUPERPLAN_RUN_SETUP_AFTER_INSTALL="${SUPERPLAN_RUN_SETUP_AFTER_INSTALL:-1}"
 
 OVERLAY_INSTALL_METHOD=""

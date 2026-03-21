@@ -22,7 +22,7 @@ Today, the executable surface is narrower:
 
 - `superplan init` creates `.superplan/` and `.superplan/changes/`
 - `superplan parse [path] --json` parses task contract markdown files
-- `superplan task list|show|next|start|complete` operates on parsed task files plus runtime state
+- `superplan status`, `superplan task show <task_id>`, `superplan task start`, and `superplan task complete` operate on parsed task files plus runtime state
 - `superplan doctor` checks installation and setup, not shaped work
 
 So shape work like this:
@@ -42,7 +42,7 @@ So shape work like this:
 5. Create one `T-xxx.md` file per executable task.
 6. Run `superplan parse --json .superplan/changes/<slug>`.
 7. Fix diagnostics until each executable task is valid.
-8. Use `superplan task show`, `superplan task list`, or `superplan task next` to confirm the ready frontier.
+8. Use `superplan status` to confirm the ready frontier and `superplan task show <task_id>` when one task needs deeper inspection.
 9. Hand off to execution with the exact validation commands already named.
 
 ## Task Contract Shape The Current CLI Parses
@@ -164,9 +164,8 @@ Use:
 
 - `superplan doctor` for install/setup readiness
 - `superplan parse --json` for task contract validity
-- `superplan task show [task_id]` for one task plus computed readiness
-- `superplan task list` for the current parsed set
-- `superplan task next` for the next ready task or current in-progress task
+- `superplan status` for the current ready-frontier summary
+- `superplan task show <task_id>` for one task plus computed readiness reasons
 
 Do not use:
 

@@ -1,4 +1,4 @@
-import { task } from './task';
+import { loadTasks } from './task';
 import { refreshOverlaySnapshot, setOverlayVisibilityRequest } from '../overlay-runtime';
 import {
   hasLocalSuperplanRoot,
@@ -85,28 +85,7 @@ function getPreferenceScope(args: string[]): OverlayPreferenceScope {
 }
 
 async function loadTasksForSnapshot() {
-  const showTasksResult = await task(['show']);
-  if (!showTasksResult.ok) {
-    return showTasksResult;
-  }
-
-  if (!('tasks' in showTasksResult.data)) {
-    return {
-      ok: false as const,
-      error: {
-        code: 'OVERLAY_REFRESH_FAILED',
-        message: 'Unexpected task show result',
-        retryable: false,
-      },
-    };
-  }
-
-  return {
-    ok: true as const,
-    data: {
-      tasks: showTasksResult.data.tasks,
-    },
-  };
+  return await loadTasks();
 }
 
 async function ensureOrShowOverlay(subcommand: 'ensure' | 'show'): Promise<OverlayResult> {

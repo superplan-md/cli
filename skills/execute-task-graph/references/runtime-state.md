@@ -73,12 +73,8 @@ These can still be skill outputs and handoff states even when the CLI does not s
 
 ## Useful CLI Reads
 
-- `superplan task current`
-- `superplan task next`
-- `superplan task why-next`
-- `superplan task why <task_id>`
-- `superplan task events [task_id]`
 - `superplan status`
+- `superplan task show <task_id>`
 
 ## Runtime Summary Today
 

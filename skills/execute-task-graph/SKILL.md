@@ -78,36 +78,30 @@ Align execution to the CLI that exists today.
 
 Current CLI execution surface:
 
-- `superplan task current`
-- `superplan task next`
-- `superplan task why-next`
-- `superplan task show [task_id]`
-- `superplan task why <task_id>`
-- `superplan task events [task_id]`
+- `superplan task show <task_id>`
 - `superplan task start <task_id>`
 - `superplan task resume <task_id>`
 - `superplan task block <task_id> --reason <reason>`
 - `superplan task request-feedback <task_id> --message <message>`
 - `superplan task complete <task_id>`
 - `superplan task fix`
-- `superplan task reset <task_id>`
 - `superplan run`
 - `superplan status`
 
 Current CLI truth:
 
 - readiness is computed from parsed task contracts plus runtime state
-- runtime states currently include `in_progress`, `done`, `blocked`, and `needs_feedback`
+- runtime states currently include `in_progress`, `in_review`, `done`, `blocked`, and `needs_feedback`
 - runtime events are append-only in `.superplan/runtime/events.ndjson`
+- `superplan task show <task_id>` includes one task's computed readiness reasons
 - `superplan status` is the current narrow runtime summary surface even though `.superplan/runtime/current.json` is still only a product target
-- review is still a workflow handoff, not a dedicated CLI lifecycle state
+- review handoff is now represented explicitly as `in_review`
 
 Therefore:
 
 - use CLI transitions instead of hand-editing execution state
-- use `task why` and `task why-next` when the frontier is unclear
-- use `task events` when runtime history matters
-- keep "ready for AC review" as a workflow output even though the current CLI does not store `review` as runtime state
+- use `status`, `run`, and `task show <task_id>` when the frontier is unclear
+- keep approval decisions explicit through `complete`, `approve`, and `reopen`
 
 ## Lifecycle Semantics And Recovery
 
@@ -116,7 +110,7 @@ Use the CLI as the transition gate for runtime state.
 - graph-blocked means dependencies are not yet satisfied
 - runtime-blocked means real execution trouble encountered while already working
 - `needs_feedback` means the task cannot proceed without a human decision
-- `ready for AC review` means execution work is complete enough for acceptance review, even though that state is not yet persisted by the CLI
+- `in_review` means implementation is complete enough for acceptance review and waiting on approval or reopen
 
 Strictness rules:
 
@@ -160,10 +154,8 @@ See `references/trajectory-changes.md`.
 - dispatch verification in parallel where safe and useful
 - dispatch subagents through existing repo scripts, custom skills, or harnesses when those are the trusted path
 - begin task execution
-- inspect the frontier with `superplan task current`, `superplan task next`, `superplan task why-next`, and `superplan status`
-- inspect specific readiness or blockage with `superplan task why <task_id>`
-- inspect runtime history with `superplan task events [task_id]`
-- repair invalid runtime drift deterministically with `superplan task fix` or `superplan task reset <task_id>` when warranted
+- inspect the frontier with `superplan status`, `superplan run`, and `superplan task show <task_id>`
+- repair invalid runtime drift deterministically with `superplan task fix` when warranted
 - surface blocked state
 - surface needs-feedback state
 - route toward review when work appears ready
@@ -196,7 +188,7 @@ See `references/subagent-dispatch.md`.
 - letting subagents silently redefine the task graph
 - treating major structural drift as a local execution detail
 - verifying against stale task contracts after the trajectory has materially changed
-- ignoring `task why`, `task why-next`, or `task fix` when runtime or readiness is unclear
+- ignoring `status`, `run`, `task show`, or `task fix` when runtime or readiness is unclear
 - treating every discovered issue as a reason to reshape
 - replacing a working user-owned harness with a Superplan-specific flow during execution
 - rewriting or bypassing existing custom skills or scripts unless explicitly asked
@@ -233,14 +225,13 @@ Runtime summary should keep legible:
 Use the runtime-aware CLI as the scheduler:
 
 1. `superplan status --json` to inspect the frontier
-2. `superplan run --json` to continue the current task or claim the next ready task
-3. `superplan task show <task_id> --json` before editing code
-4. `superplan task why <task_id> --json` when readiness is unclear
-5. `superplan task block <task_id> --reason "<reason>" --json` when blocked
-6. `superplan task request-feedback <task_id> --message "<message>" --json` when user input is required
-7. `superplan task complete <task_id> --json` only after the task contract is actually satisfied
-8. `superplan task fix --json` if runtime state becomes inconsistent
-9. if overlay support is enabled for the workspace, expect task start/resume/run transitions to auto-reveal the overlay as work becomes active; use `superplan overlay ensure --json` only when an explicit reveal or resync is still needed, and `superplan overlay hide --json` when the workspace becomes idle or empty
+2. `superplan run --json` to continue the current task or claim the next ready task, with the selected task contract and selection reason in the payload
+3. `superplan task show <task_id> --json` only when you need one task's full details and readiness reasons
+4. `superplan task block <task_id> --reason "<reason>" --json` when blocked
+5. `superplan task request-feedback <task_id> --message "<message>" --json` when user input is required
+6. `superplan task complete <task_id> --json` only after the task contract is actually satisfied
+7. `superplan task fix --json` if runtime state becomes inconsistent
+8. if overlay support is enabled for the workspace, expect task start/resume/run transitions to auto-reveal the overlay as work becomes active; use `superplan overlay ensure --json` only when an explicit reveal or resync is still needed, and `superplan overlay hide --json` when the workspace becomes idle or empty
 
 ## Decision And Gotcha Rules
 
@@ -273,19 +264,13 @@ Execution handoff to `review-task-against-ac` should name the evidence gathered 
 
 Current CLI:
 
-- `superplan task current`
-- `superplan task next`
-- `superplan task why-next`
-- `superplan task show [task_id]`
-- `superplan task why <task_id>`
-- `superplan task events [task_id]`
+- `superplan task show <task_id>`
 - `superplan task start <task_id>`
 - `superplan task resume <task_id>`
 - `superplan task block <task_id> --reason <reason>`
 - `superplan task request-feedback <task_id> --message <message>`
 - `superplan task complete <task_id>`
 - `superplan task fix`
-- `superplan task reset <task_id>`
 - `superplan run`
 - `superplan status`
 - `superplan overlay ensure`
@@ -311,12 +296,11 @@ Should dispatch subagents in parallel:
 
 Should use the CLI control plane explicitly:
 
-- `superplan task next` or `superplan run` to select or start work
-- `superplan task why` or `superplan task why-next` when readiness is unclear
+- `superplan run` to select or start work
+- `superplan task show <task_id>` when a specific task needs full detail or readiness explanation
 - `superplan task block` or `superplan task request-feedback` when execution must pause
 - `superplan task resume` when paused work becomes executable again
-- `superplan task events` when runtime history matters
-- `superplan task fix` or `superplan task reset` when runtime state has drifted
+- `superplan task fix` when runtime state has drifted
 
 Should avoid parallelism:
 
