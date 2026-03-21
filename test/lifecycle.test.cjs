@@ -44,6 +44,9 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.match(installedUsingSuperplanSkill, /superplan status --json/);
   assert.match(installedUsingSuperplanSkill, /superplan task show <task_id> --json/);
   assert.match(installedUsingSuperplanSkill, /superplan task batch <change-slug> --stdin --json/);
+  assert.match(installedUsingSuperplanSkill, /manual creation of individual `tasks\/T-xxx\.md` files is off limits/i);
+  assert.match(installedUsingSuperplanSkill, /Entry routing is not permission for a repo tour\./);
+  assert.match(installedUsingSuperplanSkill, /once the next workflow owner is clear, stop inspecting and hand off/i);
   assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task next --json/);
   assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task why-next --json/);
   assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task start <task_id> --json/);
@@ -57,6 +60,10 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.match(installedShapeSkill, /superplan task new <change-slug>/);
   assert.match(installedShapeSkill, /superplan task batch <change-slug> --stdin --json/);
   assert.match(installedShapeSkill, /tasks\.md/);
+  assert.match(installedShapeSkill, /Manual creation of individual `tasks\/T-xxx\.md` files is off limits\./);
+  assert.match(installedShapeSkill, /use one `superplan task batch <change-slug> --stdin --json` call over repeated `superplan task new` calls\./);
+  assert.match(installedShapeSkill, /Shaping is not license to read the whole repo\./);
+  assert.match(installedShapeSkill, /once the next executable frontier is clear, stop exploring and author the artifacts/i);
   assert.doesNotMatch(installedShapeSkill, /superplan task batch <change-slug> --file <path> --json/);
 
   const installedExecuteTaskGraphSkill = await fs.readFile(
@@ -66,9 +73,29 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.match(installedExecuteTaskGraphSkill, /superplan run --json/);
   assert.match(installedExecuteTaskGraphSkill, /superplan run <task_id> --json/);
   assert.match(installedExecuteTaskGraphSkill, /superplan task show <task_id> --json/);
+  assert.match(installedExecuteTaskGraphSkill, /Execution is not a discovery pass\./);
+  assert.match(installedExecuteTaskGraphSkill, /once you know the next command, edit, or blocker transition, stop reading and act/i);
   assert.doesNotMatch(installedExecuteTaskGraphSkill, /superplan task why <task_id> --json/);
   assert.doesNotMatch(installedExecuteTaskGraphSkill, /superplan task start <task_id>/);
   assert.doesNotMatch(installedExecuteTaskGraphSkill, /superplan task resume <task_id>/);
+
+  const installedRouteSkill = await fs.readFile(
+    path.join(sandbox.home, '.claude', 'skills', 'superplan-route', 'SKILL.md'),
+    'utf-8',
+  );
+  assert.match(installedRouteSkill, /Routing is not permission to tour the repo\./);
+
+  const installedBrainstormSkill = await fs.readFile(
+    path.join(sandbox.home, '.claude', 'skills', 'superplan-brainstorm', 'SKILL.md'),
+    'utf-8',
+  );
+  assert.match(installedBrainstormSkill, /Brainstorming is not permission for open-ended repo exploration\./);
+
+  const installedContextSkill = await fs.readFile(
+    path.join(sandbox.home, '.claude', 'skills', 'superplan-context', 'SKILL.md'),
+    'utf-8',
+  );
+  assert.match(installedContextSkill, /Context work is the only phase where broader repo reading may be justified/i);
 });
 
 test('interactive setup prints the current ascii wordmark once', async () => {

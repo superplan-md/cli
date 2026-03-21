@@ -134,7 +134,9 @@ The primary authoring loop is:
 Authoring rule:
 
 - let the main graph breakdown live in `.superplan/changes/<slug>/tasks.md` first
+- manual creation of individual `.superplan/changes/<slug>/tasks/T-xxx.md` files is off limits
 - once the graph structure is ready, use `superplan task new` for one task or `superplan task batch` for multiple tasks instead of hand-creating task files
+- when two or more tasks are already clear enough to author together, `superplan task batch --stdin --json` is the default path
 
 The repo-refresh loop is:
 
@@ -165,6 +167,7 @@ Review handoff now works in two steps:
 
 - The public product story is centered on planning, task pickup, resumption, and handoff rather than side experiments.
 - `change`, `task new`, and `task batch` are the primary authoring helpers for new tracked work.
+- Superplan skills should favor narrow targeted inspection and stop exploring once the next workflow action is clear; only `superplan-context` should permit broader repo reading, and even there it should stay bounded by durable context questions.
 - when overlay support is enabled, `task new`, `task batch`, `run`, `run <task_id>`, and `task reopen` can reveal the overlay to keep authoring or execution state visible.
 - `sync` refreshes Superplan's view of the current repo and does not reinstall skills.
 - `update` refreshes the installed CLI plus any existing global or repo-local skill installs; local source checkouts should still be updated from the checkout and reinstalled explicitly.

@@ -53,6 +53,7 @@ Assumptions:
 - not all work is fully deterministic at shaping time
 - some work should be represented as investigation, prototype, or decision-gate work before deeper decomposition
 - the right shaping output is often a trajectory, not a frozen perfect plan
+- shaping should stop once the minimum useful artifact set and next executable frontier are clear
 
 ## Artifact Distinction Rule
 
@@ -110,6 +111,7 @@ Therefore:
 
 - for tracked work, author root `tasks.md` according to the hard contract even though the current CLI does not yet validate that layer
 - when Superplan is staying out, do not create graph artifacts
+- manual creation of individual `tasks/T-xxx.md` task contracts is off limits
 - once the root graph is ready, use `superplan task new` for one executable task or `superplan task batch` for multiple executable tasks instead of hand-creating new `tasks/T-xxx.md` files
 - keep current executable truth in task contract files the CLI can parse today
 - choose current CLI validation commands explicitly during shaping
@@ -119,9 +121,13 @@ See `references/cli-authoring-now.md`.
 
 ## Task Authoring Rule
 
+Manual creation of individual `tasks/T-xxx.md` files is off limits.
+
+Agents should spend their shaping effort on the graph and dependency structure in `tasks.md`, then mint canonical task contracts through the CLI.
+
 When shaping produces exactly one new task contract, `superplan task new <change-slug> --title "<title>" --json` is the default scaffold path.
 
-When shaping produces two or more new task contracts that are clear enough to author now, prefer one `superplan task batch <change-slug> --stdin --json` call over repeated `superplan task new` calls.
+When shaping produces two or more new task contracts that are clear enough to author now, use one `superplan task batch <change-slug> --stdin --json` call over repeated `superplan task new` calls.
 
 For agent-first flows, prefer stdin over temporary files. Use `--file <path>` only when the batch spec itself must persist as a repo artifact.
 
@@ -187,11 +193,20 @@ For large tracked work, shape the graph according to the hard contract:
 
 Do not author "graph-like" markdown that ignores the contract shape.
 
+## Exploration Discipline
+
+Shaping is not license to read the whole repo.
+
+- inspect only the surfaces needed to choose artifact depth, graph boundaries, dependency edges, and the initial verification loop
+- prefer the current task surface, existing `.superplan/` artifacts, and one relevant harness over broad code tours
+- once the next executable frontier is clear, stop exploring and author the artifacts
+- if real uncertainty remains, capture it as investigation or dependency work, or route to `superplan-context`, instead of continuing ad hoc exploration
+
 ## Workspace Precedence Rule
 
 Treat the workspace's existing setup as the default operating surface.
 
-- inspect the workspace before inventing new Superplan-specific structure
+- inspect only the specific workspace surfaces needed before inventing new Superplan-specific structure
 - prefer repo-native scripts, harnesses, custom skills, and routines when they already solve the problem
 - add Superplan-specific help only when the workspace does not already provide a better path
 
@@ -238,6 +253,7 @@ Treat the workspace's existing setup as the default operating surface.
 - performing broad execution here
 - creating tracked work without a root `changes/<slug>/tasks.md`
 - hand-creating new `tasks/T-xxx.md` task contracts when `superplan task new` can mint the canonical ID and scaffold
+- manually creating individual task files instead of using `superplan task batch --stdin --json` when multiple tasks are ready together
 - authoring root graphs or shard files without the hard-contract section shape
 - inventing unstable IDs or renumbering existing task IDs
 - putting canonical dependency or workstream ownership in task files once graph truth exists
@@ -252,6 +268,8 @@ Treat the workspace's existing setup as the default operating surface.
 - using future commands as if they already exist
 - hiding real CLI contract gaps behind generic statements like "capture this in the task graph" when no current graph parser exists
 - pretending uncertain work is already cleanly decomposed
+- using shaping as an excuse for open-ended repo exploration after the artifact and frontier decisions are already clear
+- reading broad unrelated code instead of capturing real uncertainty as investigation, dependency, or context work
 - pushing all ambiguity downstream into execution
 - replacing a working repo-native workflow with a Superplan-specific one by default
 

@@ -122,6 +122,7 @@ test('task --help explains task subcommands explicitly', async () => {
   assert.match(result.stdout, /reopen <task_id>\s+Move a review or done task back into implementation/);
   assert.match(result.stdout, /block <task_id> --reason\s+Pause a task because something external is blocking it/);
   assert.match(result.stdout, /For a fast start:\s+superplan run --json/);
+  assert.match(result.stdout, /do not hand-create tasks\/T-xxx\.md/i);
   assert.match(result.stdout, /shape changes\/<slug>\/tasks\.md first, then use task new for one task or task batch for multiple tasks/i);
   assert.doesNotMatch(result.stdout, /\bstart <task_id>\b/);
   assert.doesNotMatch(result.stdout, /\bresume <task_id>\b/);

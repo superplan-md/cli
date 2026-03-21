@@ -41,6 +41,7 @@ Assumptions:
 
 - context should contain stable reusable truth
 - transient task, graph, and runtime state belong elsewhere
+- context work should answer specific durable questions rather than become indefinite repo exploration
 
 ## Stable Layer Model
 
@@ -53,6 +54,14 @@ Keep these layers distinct:
 Use `.superplan/context/README.md` as the entrypoint and `.superplan/context/INDEX.md` as the routing layer into deeper context docs.
 
 See `references/context-indexing.md` and `references/durable-context-rules.md`.
+
+## Exploration Discipline
+
+Context work is the only phase where broader repo reading may be justified, but it still must be bounded by the durable questions it is trying to answer.
+
+- gather only the stable repo truths needed for future shaping and execution
+- stop once those durable truths are captured clearly enough in `.superplan/context/`
+- do not keep exploring after the reusable context delta is already understood
 
 ## Allowed Actions
 
@@ -67,6 +76,7 @@ See `references/context-indexing.md` and `references/durable-context-rules.md`.
 - rewriting the whole context layer casually
 - turning every observation into context
 - hijacking active task shaping or execution responsibilities
+- broad repo tours with no durable context target
 
 ## Decision And Gotcha Rules
 

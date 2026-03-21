@@ -31,6 +31,7 @@ Today, the executable surface is narrower:
 So shape work like this:
 
 - author `tasks.md` only when graph visibility adds supervision value
+- manual creation of individual `tasks/T-xxx.md` files is off limits
 - once the graph in `tasks.md` is ready, use `superplan task new` for one task or `superplan task batch` for multiple tasks to mint the `T-xxx.md` task contracts
 - keep task contracts in `.superplan/changes/<slug>/tasks/T-xxx.md`
 - validate task contracts with `superplan parse`

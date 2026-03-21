@@ -164,6 +164,8 @@ superplan change new improve-task-authoring --json
 superplan task new improve-task-authoring --title "Add authoring scaffold" --json
 ```
 
+Do not hand-create `.superplan/changes/<change-slug>/tasks/T-xxx.md` files. Shape the graph and dependencies in `tasks.md`, then let the CLI mint canonical task contracts.
+
 If you already know several tasks for the same change, use one batch scaffold call instead of repeated single-task calls:
 
 ```bash
@@ -328,7 +330,7 @@ Superplan uses markdown task files stored under:
 .superplan/changes/<change-slug>/tasks/T-xxx.md
 ```
 
-Do not hand-create `tasks/T-xxx.md` just to allocate an ID. Shape the graph in `tasks.md` first, then use `superplan task new` for one task or `superplan task batch` for multiple tasks to mint canonical task contract shells.
+Do not hand-create `tasks/T-xxx.md` just to allocate an ID. Manual creation of individual task contract files is off limits. Shape the graph and dependencies in `tasks.md` first, then use `superplan task new` for one task or `superplan task batch` for multiple tasks to mint canonical task contract shells.
 
 You can scaffold the common path instead of writing everything by hand:
 
@@ -337,7 +339,7 @@ superplan change new improve-task-authoring --json
 superplan task new improve-task-authoring --title "Add change scaffolding" --json
 ```
 
-For multi-task shaping, batch scaffolding is usually faster and produces fewer follow-up CLI calls:
+For multi-task shaping, batch scaffolding is the default path and produces fewer follow-up CLI calls:
 
 ```bash
 printf '%s' '[{"title":"Add change scaffolding"},{"title":"Add help coverage"}]' | superplan task batch improve-task-authoring --stdin --json

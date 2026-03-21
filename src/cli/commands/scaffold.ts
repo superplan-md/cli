@@ -12,7 +12,7 @@ export interface ChangePaths {
   tasksIndexPath: string;
 }
 
-const CHANGE_TASKS_INDEX_PLACEHOLDER_LINE = '- Shape the graph here first, then mint executable tasks with `superplan task new` or `superplan task batch`.';
+const CHANGE_TASKS_INDEX_PLACEHOLDER_LINE = '- Do not hand-create `tasks/T-xxx.md`. Shape the graph and dependencies here first, then mint executable tasks with `superplan task new` or `superplan task batch`.';
 
 export async function pathExists(targetPath: string): Promise<boolean> {
   try {

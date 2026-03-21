@@ -42,7 +42,8 @@ test('change new creates a canonical change skeleton', async () => {
   assert.match(tasksIndexContent, /# Improve Planning/);
   assert.match(tasksIndexContent, /- Change ID: `improve-planning`/);
   assert.match(tasksIndexContent, /## Tasks/);
-  assert.match(tasksIndexContent, /Shape the graph here first, then mint executable tasks with `superplan task new` or `superplan task batch`\./);
+  assert.match(tasksIndexContent, /Do not hand-create `tasks\/T-xxx\.md`\./);
+  assert.match(tasksIndexContent, /Shape the graph and dependencies here first, then mint executable tasks with `superplan task new` or `superplan task batch`\./);
 });
 
 test('change new from a nested repo directory uses the repo-root superplan workspace', async () => {
@@ -345,7 +346,8 @@ test('task batch fails before writing when a dependency ref is unknown', async (
     path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks.md'),
     'utf-8',
   );
-  assert.match(tasksIndexContent, /Shape the graph here first, then mint executable tasks with `superplan task new` or `superplan task batch`\./);
+  assert.match(tasksIndexContent, /Do not hand-create `tasks\/T-xxx\.md`\./);
+  assert.match(tasksIndexContent, /Shape the graph and dependencies here first, then mint executable tasks with `superplan task new` or `superplan task batch`\./);
 });
 
 test('task batch using stdin fails clearly when the payload is empty', async () => {

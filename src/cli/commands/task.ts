@@ -379,7 +379,7 @@ export function getTaskCommandHelpMessage(options: {
     '',
     'For a fast start: superplan run --json',
     'To run a specific task: superplan run <task_id> --json',
-    'For tracked authoring: shape changes/<slug>/tasks.md first, then use task new for one task or task batch for multiple tasks.',
+    'For tracked authoring: do not hand-create tasks/T-xxx.md; shape changes/<slug>/tasks.md first, then use task new for one task or task batch for multiple tasks.',
     '',
     'Some recovery commands still exist but are intentionally hidden from the default help surface.',
     '',

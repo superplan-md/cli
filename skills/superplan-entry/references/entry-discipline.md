@@ -56,6 +56,7 @@ These thoughts usually mean the entry layer is being skipped or weakened:
 
 - "This is obvious, I can just start."
 - "I only need to glance at one file first."
+- "I should read a bunch of files before I even choose the phase."
 - "It is probably superplan-route."
 - "The user said bug, so debugging comes first."
 - "The user said done, so completion review can wait."

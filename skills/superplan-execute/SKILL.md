@@ -7,7 +7,7 @@ description: Use when tracked Superplan work exists and one or more tasks are re
 
 ## Overview
 
-Move graph-ready work forward without drifting into broad replanning.
+Move graph-ready work forward without drifting into broad replanning or repo exploration.
 
 This is the main execution control surface once work has been shaped.
 It should behave more like a scheduler and control plane than a single linear worker.
@@ -59,6 +59,7 @@ Assumptions:
 - implementation and verification can sometimes run in parallel, but only when their contracts and write surfaces make that safe
 - trajectory will change during execution; the key question is whether the change is local, structural, or strategic
 - execution should route into existing workspace workflows rather than trying to replace them
+- execution should stop reading and act once the next edit, command, or blocker transition is clear
 
 ## Graph, Contract, And Runtime Rule
 
@@ -101,6 +102,15 @@ Therefore:
 - use CLI transitions instead of hand-editing execution state
 - use `status --json` and `run --json` to inspect the frontier; use `task show <task_id> --json` only when one specific task needs deeper inspection
 - keep approval decisions explicit through `complete`, `approve`, and `reopen`
+
+## Exploration Discipline
+
+Execution is not a discovery pass.
+
+- start from the current task contract, the `superplan run` payload, and one relevant verification path
+- inspect only the code, tests, docs, or runtime facts that directly affect the current task or blocker
+- once you know the next command, edit, or blocker transition, stop reading and act
+- if progress depends on broader unknowns, classify that as structural drift or missing context and route upward instead of continuing ad hoc exploration
 
 ## Lifecycle Semantics And Recovery
 
@@ -191,6 +201,8 @@ See `references/subagent-dispatch.md`.
 - treating every discovered issue as a reason to reshape
 - replacing a working user-owned harness with a Superplan-specific flow during execution
 - rewriting or bypassing existing custom skills or scripts unless explicitly asked
+- falling into read-only repo exploration after the next execution step is already known
+- repeatedly polling `status` or `task show` without a concrete state, blocker, or handoff reason
 
 ## Outputs
 

@@ -84,8 +84,10 @@ When the proof path is known, write it in explicit command style:
 
 When the plan includes task scaffolding, be explicit:
 
+- do not hand-create individual `tasks/T-xxx.md` files in the plan or handoff
 - use `superplan task new <change-slug> --title "<title>" --json` only when one task contract should be created now
 - use `superplan task batch --stdin --json` when two or more task contracts are already clear enough to author in one pass
+- when a graph and dependencies are already clear for multiple tasks, prefer one batch authoring step over repeated single-task creation
 - prefer stdin over temporary files in agent-driven task authoring
 
 ## Forbidden Behavior

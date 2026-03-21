@@ -64,7 +64,7 @@ Do not use when:
 ## Ordered Process
 
 1. Confirm that a workflow skill has already routed here and that design clarification is the current blocker.
-2. Explore repo context first.
+2. Inspect only the narrow repo context needed to avoid asking questions the workspace already answers.
 3. Confirm the ambiguity is real and durable enough to justify superplan-brainstorm.
 4. If the request is overscoped, decompose it before deeper refinement.
 5. Ask one high-leverage question at a time.
@@ -77,9 +77,18 @@ Do not use when:
 
 Do not reorder this flow casually.
 
+## Exploration Discipline
+
+Brainstorming is not permission for open-ended repo exploration.
+
+- inspect only the smallest set of repo files, docs, or existing Superplan artifacts needed to remove avoidable questions
+- stop inspection once the next high-leverage question or the viable design options are clear
+- if design work starts needing broad repo understanding, route toward `superplan-context` instead of continuing a repo tour
+- keep the focus on clarifying expectations, constraints, and trade-offs rather than accumulating more background than the design decision needs
+
 ## Context-First Rules
 
-- inspect repo files, docs, nearby code, and existing Superplan artifacts before asking questions the workspace can already answer
+- inspect only the repo files, docs, nearby code, and existing Superplan artifacts needed to avoid asking questions the workspace can already answer
 - if this is clearly first-contact repo work, return to `superplan-entry` instead of continuing
 - treat the user's raw narrative as signal, not noise
 - prefer one high-leverage question at a time
@@ -161,6 +170,7 @@ It must not silently absorb the full shaping phase.
 - forcing a universal `spec -> plan -> tasks` ritual
 - writing a large spec when a decision log entry or short plan update would preserve the truth just as well
 - slipping into `superplan-shape`, execution, or completion review responsibilities
+- taking an open-ended repo tour before asking the first high-leverage question
 
 ## Decision And Gotcha Rules
 
@@ -209,7 +219,7 @@ Should stay out:
 Should fail if:
 
 - it becomes the first lane for repo work that should still route through `superplan-entry`
-- it skips context inspection and asks avoidable questions
+- it skips the minimal targeted context inspection needed to avoid avoidable questions
 - it asks multiple low-leverage questions in one burst
 - it presents only one path when real alternatives exist
 - it proceeds without approval
