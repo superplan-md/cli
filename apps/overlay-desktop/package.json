@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "tauri:icon": "tauri icon src/assets/superplan-app-icon.png -o src-tauri/icons",
     "tauri:check": "cargo check --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
