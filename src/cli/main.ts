@@ -3,6 +3,7 @@ import { routeCommand, router } from './router';
 import { getChangeCommandHelpMessage } from './commands/change';
 import { getTaskCommandHelpMessage } from './commands/task';
 import { getOverlayCommandHelpMessage } from './commands/overlay';
+import { getRemoveCommandHelpMessage } from './commands/remove';
 
 const { version } = require('../../package.json') as { version: string };
 
@@ -33,18 +34,23 @@ Usage:
   superplan <command>
 
 Commands:
-  change      Create tracked work structure
-  init        Initialize Superplan in this repo
-  setup       Setup Superplan on this machine or in this repo
-  sync        Refresh Superplan's view of this repo
-  update      Update the installed Superplan CLI and refresh skills
-  remove      Remove Superplan installation and state
-  doctor      Validate setup
-  parse       Parse superplan artifacts
-  run         Start, resume, or continue task execution
-  status      Show current task status summary
-  task        Task runtime and review operations
-  overlay     Overlay companion operations
+  Core loop:
+    status     Show active, ready, review, blocked, and feedback-needed queues
+    run        Start, resume, or continue tracked work
+    task       Inspect or transition one tracked task
+    change     Create tracked change scaffolding
+    init       Scaffold the repo-local Superplan workspace
+
+  Recovery and diagnostics:
+    parse      Parse task contracts and return diagnostics
+    sync       Reconcile repo state after task-file edits or runtime drift
+    overlay    Overlay companion operations
+    doctor     Validate install and overlay health
+
+  Installation and admin:
+    setup      Install config, skills, and agent integrations
+    update     Update an installed Superplan CLI and refresh skills
+    remove     Remove Superplan installation or state
 
 Options:
   -v, --version  Show CLI version
@@ -109,6 +115,22 @@ async function main() {
 
   if (command === 'change' && (args.includes('--help') || args[1] === 'help')) {
     const helpText = getChangeCommandHelpMessage({});
+    if (json || quiet) {
+      printJsonResult({
+        ok: true,
+        data: {
+          help: helpText,
+        },
+        error: null,
+      });
+    } else {
+      console.log(helpText);
+    }
+    return;
+  }
+
+  if (command === 'remove' && (args.includes('--help') || args[1] === 'help')) {
+    const helpText = getRemoveCommandHelpMessage();
     if (json || quiet) {
       printJsonResult({
         ok: true,

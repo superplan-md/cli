@@ -49,9 +49,9 @@ Meaning:
 
 Action:
 
-- guide the user to `superplan init`
+- guide the user to `superplan init --json`
 - if setup also appears missing, call that out first
-- if the user started with `init`, explain the shortcut flow: `setup` first, then `init`
+- if the user started with `init`, explain the shortcut flow: `setup` first, then `init --json`
 
 ### `context-missing`
 
@@ -100,7 +100,7 @@ Action:
 The March 17 product design settled these as distinct concepts:
 
 - `superplan setup`: machine and agent integration setup
-- `superplan init`: repo-local initialization
+- `superplan init --json`: repo-local initialization
 - global config: `~/.config/superplan/config.toml`
 - workspace config: `<repo>/.superplan/config.toml`
 
@@ -120,7 +120,7 @@ The user should understand which layer is missing, even if the product later off
 ## Useful Checks
 
 - `command -v superplan` or equivalent command discovery for CLI availability
-- `superplan doctor` when the CLI exists but readiness is unclear
+- `superplan doctor --json` when the CLI exists but readiness is unclear
 - `~/.config/superplan/config.toml` for durable host defaults
 - `<repo>/.superplan/config.toml` for repo-local initialization
 

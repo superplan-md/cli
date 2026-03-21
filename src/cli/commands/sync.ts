@@ -69,6 +69,19 @@ export async function sync(deps: Partial<SyncDeps> = {}): Promise<SyncResult> {
     };
   }
 
+  const runtimeFixed = fixResult.data.fixed;
+  const actions = fixResult.data.actions;
+  if (typeof runtimeFixed !== 'boolean' || !Array.isArray(actions)) {
+    return {
+      ok: false,
+      error: {
+        code: 'SYNC_FAILED',
+        message: 'Unexpected runtime repair result',
+        retryable: false,
+      },
+    };
+  }
+
   const statusResult = await runtimeDeps.statusFn();
   if (!statusResult.ok) {
     return statusResult;
@@ -86,8 +99,8 @@ export async function sync(deps: Partial<SyncDeps> = {}): Promise<SyncResult> {
     data: {
       parsed_tasks: parseResult.data.tasks.length,
       diagnostics: parseResult.data.diagnostics,
-      runtime_fixed: fixResult.data.fixed,
-      actions: fixResult.data.actions,
+      runtime_fixed: runtimeFixed,
+      actions,
       active: statusResult.data.active,
       ready: statusResult.data.ready,
       in_review: statusResult.data.in_review,

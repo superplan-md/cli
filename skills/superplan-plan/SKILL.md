@@ -28,6 +28,7 @@ Use when:
 - use exact artifact targets, verification paths, and handoffs rather than vague prose
 - pull in `.superplan/context/`, `.superplan/decisions.md`, and `.superplan/gotchas.md` when they materially affect the path
 - keep specs and plans distinct: specs capture target truth, plans capture trajectory
+- when the plan already defines two or more new task contracts that are ready to author now, prefer handing off one `superplan task batch <change-slug> --stdin --json` scaffold step instead of repeated `superplan task new` calls
 
 ## Plan Discipline
 
@@ -80,6 +81,12 @@ When the proof path is known, write it in explicit command style:
 
 - `Run:` exact command or workflow
 - `Expected:` what pass, fail, or decision signal should appear
+
+When the plan includes task scaffolding, be explicit:
+
+- use `superplan task new <change-slug> --title "<title>" --json` only when one task contract should be created now
+- use `superplan task batch --stdin --json` when two or more task contracts are already clear enough to author in one pass
+- prefer stdin over temporary files in agent-driven task authoring
 
 ## Forbidden Behavior
 

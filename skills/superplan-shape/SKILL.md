@@ -97,11 +97,14 @@ Product target:
 
 Current CLI reality:
 
-- `superplan init` creates `.superplan/` and `.superplan/changes/`
+- `superplan init --json` creates `.superplan/`, `.superplan/context/`, `.superplan/runtime/`, and `.superplan/changes/`
+- `superplan change new <change-slug> --json` scaffolds a tracked change root
+- `superplan task new <change-slug> --title "<title>" --json` scaffolds one task contract
+- `superplan task batch <change-slug> --stdin --json` scaffolds multiple task contracts from JSON stdin
 - `superplan parse [path] --json` parses task contract files, not `tasks.md`
-- `superplan status` summarizes the ready frontier from task files plus runtime state
-- `superplan task show <task_id>` explains one task's current readiness in detail
-- `superplan doctor` checks setup and installation readiness, not shaped work correctness
+- `superplan status --json` summarizes the ready frontier from task files plus runtime state
+- `superplan task show <task_id> --json` explains one task's current readiness in detail
+- `superplan doctor --json` checks setup and installation readiness, not shaped work correctness
 
 Therefore:
 
@@ -112,6 +115,16 @@ Therefore:
 - distinguish current CLI commands from future CLI hooks
 
 See `references/cli-authoring-now.md`.
+
+## Task Authoring Rule
+
+When shaping produces exactly one new task contract, `superplan task new <change-slug> --title "<title>" --json` is the default scaffold path.
+
+When shaping produces two or more new task contracts that are clear enough to author now, prefer one `superplan task batch <change-slug> --stdin --json` call over repeated `superplan task new` calls.
+
+For agent-first flows, prefer stdin over temporary files. Use `--file <path>` only when the batch spec itself must persist as a repo artifact.
+
+Use repeated single-task creation only when the remaining tasks are not honestly shapeable yet.
 
 ## Current Contract Gap
 
@@ -185,6 +198,7 @@ Treat the workspace's existing setup as the default operating surface.
 - create one lightweight task for `direct`
 - create one normal task for `task`
 - create `plan.md` plus tasks for `slice` when sequencing matters
+- use `superplan task batch --stdin --json` when two or more task contracts are ready to be scaffolded together
 - create specs when misunderstanding the target is a bigger risk than sequencing
 - create `changes/<slug>/tasks.md` as a human graph/index when dependency visibility is useful
 - create a richer graph, plan, spec, and task set for `program` when the work genuinely needs all layers
@@ -199,10 +213,10 @@ Treat the workspace's existing setup as the default operating surface.
 - migrate legacy task-only work toward root graph ownership when reshaping existing tracked changes
 - define multi-agent write boundaries when the graph is large enough to need them
 - choose the current CLI validation path:
-  - `superplan doctor` for install/setup readiness
+  - `superplan doctor --json` for install/setup readiness
   - `superplan parse [path] --json` for task contract validity
-  - `superplan status` for current ready-frontier inspection
-  - `superplan task show <task_id>` for one task's detailed readiness
+  - `superplan status --json` for current ready-frontier inspection
+  - `superplan task show <task_id> --json` for one task's detailed readiness
 - choose an autonomy class:
   - `autopilot`
   - `checkpointed autopilot`
@@ -321,11 +335,14 @@ For large graphs, execution handoff should also name the ownership boundary betw
 
 Current CLI:
 
-- `superplan init`
-- `superplan doctor`
+- `superplan init --json`
+- `superplan change new <change-slug> --json`
+- `superplan task new <change-slug> --title "<title>" --json`
+- `superplan task batch <change-slug> --stdin --json`
+- `superplan doctor --json`
 - `superplan parse [path] --json`
-- `superplan status`
-- `superplan task show <task_id>`
+- `superplan status --json`
+- `superplan task show <task_id> --json`
 
 Future CLI hooks:
 
@@ -354,6 +371,12 @@ Should create plan plus tasks:
 - work with sequencing or multiple meaningful steps
 - `slice` work should keep graph truth explicit even when the graph stays in one root file
 
+Should use batch task authoring:
+
+- when two or more new task contracts are already clear enough to scaffold now
+- when repeated `task new` calls would only add agent churn rather than clarity
+- when batch-local dependencies can be declared up front in one authoring pass
+
 Should create specs as well:
 
 - ambiguity or edge cases make a spec materially useful
@@ -369,8 +392,8 @@ Should create investigation or decision-gate tasks:
 Should align honestly to the current CLI:
 
 - `tasks.md` may be authored for graph visibility, but task-file validation must run through `superplan parse`
-- ready-frontier checks should name `superplan status` and `superplan task show <task_id>`
-- shaping should not invent current commands for change or task creation
+- ready-frontier checks should name `superplan status --json` and `superplan task show <task_id> --json`
+- shaping should use `superplan task new <change-slug> --title "<title>" --json` for one task and `superplan task batch --stdin --json` for two or more tasks
 - shaping should still follow the hard contract even when the current parser only validates part of it
 
 Should use root graph plus shards:

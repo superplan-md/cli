@@ -78,28 +78,28 @@ Align execution to the CLI that exists today.
 
 Current CLI execution surface:
 
-- `superplan task show <task_id>`
-- `superplan run`
-- `superplan run <task_id>`
-- `superplan task block <task_id> --reason <reason>`
-- `superplan task request-feedback <task_id> --message <message>`
-- `superplan task complete <task_id>`
-- `superplan task fix`
-- `superplan status`
+- `superplan task show <task_id> --json`
+- `superplan run --json`
+- `superplan run <task_id> --json`
+- `superplan task block <task_id> --reason <reason> --json`
+- `superplan task request-feedback <task_id> --message <message> --json`
+- `superplan task complete <task_id> --json`
+- `superplan task fix --json`
+- `superplan status --json`
 
 Current CLI truth:
 
 - readiness is computed from parsed task contracts plus runtime state
 - runtime states currently include `in_progress`, `in_review`, `done`, `blocked`, and `needs_feedback`
 - runtime events are append-only in `.superplan/runtime/events.ndjson`
-- `superplan task show <task_id>` includes one task's computed readiness reasons
-- `superplan status` is the current narrow runtime summary surface even though `.superplan/runtime/current.json` is still only a product target
+- `superplan task show <task_id> --json` includes one task's computed readiness reasons
+- `superplan status --json` is the current narrow runtime summary surface even though `.superplan/runtime/current.json` is still only a product target
 - review handoff is now represented explicitly as `in_review`
 
 Therefore:
 
 - use CLI transitions instead of hand-editing execution state
-- use `status` and `run` to inspect the frontier; use `task show <task_id>` only when one specific task needs deeper inspection
+- use `status --json` and `run --json` to inspect the frontier; use `task show <task_id> --json` only when one specific task needs deeper inspection
 - keep approval decisions explicit through `complete`, `approve`, and `reopen`
 
 ## Lifecycle Semantics And Recovery
@@ -153,7 +153,7 @@ See `references/trajectory-changes.md`.
 - dispatch verification in parallel where safe and useful
 - dispatch subagents through existing repo scripts, custom skills, or harnesses when those are the trusted path
 - begin task execution
-- inspect the frontier with `superplan status` and `superplan run`; use `superplan task show <task_id>` when one task needs full detail
+- inspect the frontier with `superplan status --json` and `superplan run --json`; use `superplan task show <task_id> --json` when one task needs full detail
 - repair invalid runtime drift deterministically with `superplan task fix` when warranted
 - surface blocked state
 - surface needs-feedback state
@@ -263,17 +263,17 @@ Execution handoff to `superplan-review` should name the evidence gathered and th
 
 Current CLI:
 
-- `superplan task show <task_id>`
-- `superplan run`
-- `superplan run <task_id>`
-- `superplan task block <task_id> --reason <reason>`
-- `superplan task request-feedback <task_id> --message <message>`
-- `superplan task complete <task_id>`
-- `superplan task fix`
-- `superplan task reset <task_id>`
-- `superplan status`
-- `superplan overlay ensure`
-- `superplan overlay hide`
+- `superplan task show <task_id> --json`
+- `superplan run --json`
+- `superplan run <task_id> --json`
+- `superplan task block <task_id> --reason <reason> --json`
+- `superplan task request-feedback <task_id> --message <message> --json`
+- `superplan task complete <task_id> --json`
+- `superplan task fix --json`
+- `superplan task reset <task_id> --json`
+- `superplan status --json`
+- `superplan overlay ensure --json`
+- `superplan overlay hide --json`
 
 Future CLI hooks:
 
@@ -295,11 +295,11 @@ Should dispatch subagents in parallel:
 
 Should use the CLI control plane explicitly:
 
-- `superplan run` to select or start work
-- `superplan run <task_id>` when one known task should become active explicitly
-- `superplan task show <task_id>` when a specific task needs full detail or readiness explanation
-- `superplan task block` or `superplan task request-feedback` when execution must pause
-- `superplan task fix` when runtime state has drifted
+- `superplan run --json` to select or start work
+- `superplan run <task_id> --json` when one known task should become active explicitly
+- `superplan task show <task_id> --json` when a specific task needs full detail or readiness explanation
+- `superplan task block ... --json` or `superplan task request-feedback ... --json` when execution must pause
+- `superplan task fix --json` when runtime state has drifted
 
 Should avoid parallelism:
 

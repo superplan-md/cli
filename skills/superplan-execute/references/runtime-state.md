@@ -73,12 +73,12 @@ These can still be skill outputs and handoff states even when the CLI does not s
 
 ## Useful CLI Reads
 
-- `superplan status`
-- `superplan task show <task_id>`
+- `superplan status --json`
+- `superplan task show <task_id> --json`
 
 ## Runtime Summary Today
 
-Today the narrow runtime summary surface is `superplan status`.
+Today the narrow runtime summary surface is `superplan status --json`.
 
 It gives:
 

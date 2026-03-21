@@ -78,8 +78,8 @@ export function getChangeCommandHelpMessage(options: {
     '  new <slug>                  Create a new tracked change',
     '',
     'Examples:',
-    '  superplan change new improve-task-authoring',
-    '  superplan change new improve-task-authoring --title "Improve Task Authoring"',
+    '  superplan change new improve-task-authoring --json',
+    '  superplan change new improve-task-authoring --title "Improve Task Authoring" --json',
   ].join('\n');
 }
 

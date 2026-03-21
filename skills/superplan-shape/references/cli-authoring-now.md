@@ -20,30 +20,85 @@ But the current CLI does **not** parse or validate `tasks.md` yet.
 
 Today, the executable surface is narrower:
 
-- `superplan init` creates `.superplan/` and `.superplan/changes/`
+- `superplan init --json` creates `.superplan/`, `.superplan/context/`, `.superplan/runtime/`, and `.superplan/changes/`
+- `superplan change new <change-slug> --json` scaffolds a tracked change root
+- `superplan task new <change-slug> --title "<title>" --json` scaffolds one task contract
+- `superplan task batch <change-slug> --stdin --json` scaffolds multiple task contracts from JSON stdin
 - `superplan parse [path] --json` parses task contract markdown files
-- `superplan status`, `superplan run`, `superplan task show <task_id>`, and `superplan task complete` operate on parsed task files plus runtime state
-- `superplan doctor` checks installation and setup, not shaped work
+- `superplan status --json`, `superplan run --json`, `superplan task show <task_id> --json`, and `superplan task complete --json` operate on parsed task files plus runtime state
+- `superplan doctor --json` checks installation and setup, not shaped work
 
 So shape work like this:
 
 - author `tasks.md` only when graph visibility adds supervision value
 - keep task contracts in `.superplan/changes/<slug>/tasks/T-xxx.md`
 - validate task contracts with `superplan parse`
-- inspect readiness with `superplan task`
+- inspect readiness with `superplan status --json`, `superplan run --json`, and `superplan task show <task_id> --json` as needed
 - do not claim the current CLI validates `tasks.md`
 
 ## Current Authoring Workflow
 
-1. Run `superplan init` if the repo is not initialized.
-2. Create `.superplan/changes/<slug>/`.
-3. Create `.superplan/changes/<slug>/tasks/`.
-4. Optionally create `.superplan/changes/<slug>/tasks.md` as the human graph/index.
-5. Create one `T-xxx.md` file per executable task.
-6. Run `superplan parse --json .superplan/changes/<slug>`.
-7. Fix diagnostics until each executable task is valid.
-8. Use `superplan status` to confirm the ready frontier and `superplan task show <task_id>` when one task needs deeper inspection.
-9. Hand off to execution with the exact validation commands already named.
+1. Run `superplan init --json` if the repo is not initialized.
+2. Run `superplan change new <slug> --json` to create `.superplan/changes/<slug>/` and `.superplan/changes/<slug>/tasks/`.
+3. Optionally create `.superplan/changes/<slug>/tasks.md` as the human graph/index.
+4. Use `superplan task new <slug> --title "<title>" --json` when exactly one new task contract is ready.
+5. Use `superplan task batch <slug> --stdin --json` when two or more new task contracts are ready and can be scaffolded together.
+6. Use the returned payload from `task new` or `task batch` directly instead of immediately calling `task show`.
+7. Run `superplan parse --json .superplan/changes/<slug>`.
+8. Fix diagnostics until each executable task is valid.
+9. Use `superplan status --json` to confirm the ready frontier and `superplan task show <task_id> --json` when one task needs deeper inspection.
+10. Hand off to execution with the exact validation commands already named.
+
+For agent-first flows, prefer stdin over temporary files. `--file <path>` remains available only as a fallback when the batch spec itself should persist.
+
+## Batch Spec Shape
+
+`superplan task batch` accepts either:
+
+- a top-level array of task objects
+- an object with a top-level `tasks` array
+
+Useful fields per task object:
+
+- `ref`: optional local alias for other tasks in the same batch
+- `title`: required summary used for the change index
+- `priority`: optional `high`, `medium`, or `low`
+- `description`: optional description body; defaults to the title when omitted
+- `acceptance_criteria`: optional array of checkbox text
+- `depends_on_all`: optional array of existing task ids
+- `depends_on_any`: optional array of existing task ids
+- `depends_on_all_refs`: optional array of same-batch refs
+- `depends_on_any_refs`: optional array of same-batch refs
+
+Example:
+
+```json
+[
+  {
+    "ref": "parser",
+    "title": "Add batch parser",
+    "priority": "high",
+    "acceptance_criteria": [
+      "CLI accepts a JSON batch file.",
+      "Invalid batch payloads fail clearly."
+    ]
+  },
+  {
+    "ref": "tests",
+    "title": "Add scaffold coverage",
+    "depends_on_all_refs": ["parser"],
+    "acceptance_criteria": [
+      "Batch creation tests cover dependency ref resolution."
+    ]
+  }
+]
+```
+
+Agent-first example:
+
+```bash
+printf '%s' '[{"ref":"parser","title":"Add batch parser"},{"title":"Add scaffold coverage","depends_on_all_refs":["parser"]}]' | superplan task batch improve-planning --stdin --json
+```
 
 ## Task Contract Shape The Current CLI Parses
 
@@ -162,13 +217,15 @@ Keep these distinctions explicit in the skill.
 
 Use:
 
-- `superplan doctor` for install/setup readiness
+- `superplan task new <change-slug> --title "<title>" --json` for one task contract
+- `superplan task batch <change-slug> --stdin --json` for two or more task contracts
+- `superplan doctor --json` for install/setup readiness
 - `superplan parse --json` for task contract validity
-- `superplan status` for the current ready-frontier summary
-- `superplan task show <task_id>` for one task plus computed readiness reasons
+- `superplan status --json` for the current ready-frontier summary
+- `superplan task show <task_id> --json` for one task plus computed readiness reasons
 
 Do not use:
 
-- `superplan doctor` as a task validator
+- `superplan doctor --json` as a task validator
 - future commands as if they already ship
 - `tasks.md` as the only executable truth today

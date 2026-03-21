@@ -19,6 +19,8 @@ type AgentScope = 'project' | 'global';
 export interface RemoveOptions {
   json?: boolean;
   quiet?: boolean;
+  scope?: RemoveScope;
+  yes?: boolean;
 }
 
 interface RemoveDeps {
@@ -38,6 +40,58 @@ export type RemoveResult =
       };
     }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
+
+function getOptionValue(args: string[], optionName: string): string | undefined {
+  const optionIndex = args.indexOf(optionName);
+  if (optionIndex === -1) {
+    return undefined;
+  }
+
+  const optionValue = args[optionIndex + 1];
+  if (!optionValue || optionValue.startsWith('--')) {
+    return undefined;
+  }
+
+  return optionValue;
+}
+
+function isRemoveScope(value: string | undefined): value is RemoveScope {
+  return value === 'global' || value === 'local' || value === 'both' || value === 'skip';
+}
+
+export function getRemoveCommandHelpMessage(invalidScope?: string): string {
+  const intro = invalidScope
+    ? `Invalid remove scope: ${invalidScope}`
+    : 'Remove deletes Superplan installation and state.';
+
+  return [
+    intro,
+    '',
+    'Usage:',
+    '  superplan remove --scope <local|global|both|skip> --yes --json',
+    '  superplan remove                 # interactive mode',
+    '',
+    'Options:',
+    '  --scope <scope>   local, global, both, or skip',
+    '  --yes             confirm the destructive action without a prompt',
+    '  --json            return structured output',
+    '',
+    'Examples:',
+    '  superplan remove --scope local --yes --json',
+    '  superplan remove --scope global --yes --json',
+  ].join('\n');
+}
+
+function getInvalidRemoveCommandError(message: string): RemoveResult {
+  return {
+    ok: false,
+    error: {
+      code: 'INVALID_REMOVE_COMMAND',
+      message,
+      retryable: false,
+    },
+  };
+}
 
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
@@ -286,17 +340,7 @@ async function removeCommand(
   deps: Partial<RemoveDeps> = {},
 ): Promise<RemoveResult> {
   try {
-    if (options.json || options.quiet) {
-      return {
-        ok: false,
-        error: {
-          code: 'INTERACTIVE_REQUIRED',
-          message: 'remove must be run interactively',
-          retryable: false,
-        },
-      };
-    }
-
+    const nonInteractive = Boolean(options.json || options.quiet);
     const cwd = process.cwd();
     const homeDir = os.homedir();
     const sourceSkillsDir = path.resolve(__dirname, '../../skills');
@@ -306,15 +350,26 @@ async function removeCommand(
     const globalSuperplanDir = path.join(homeDir, '.config', 'superplan');
     const localSuperplanDir = path.join(localRootDir, '.superplan');
 
-    const scope = await select<RemoveScope>({
-      message: 'Where do you want to remove Superplan?',
-      choices: [
-        { name: 'Global (machine-level)', value: 'global' },
-        { name: 'Local (current repository)', value: 'local' },
-        { name: 'Both', value: 'both' },
-        { name: 'Skip', value: 'skip' },
-      ],
-    });
+    let scope = options.scope;
+    if (!scope) {
+      if (nonInteractive) {
+        return getInvalidRemoveCommandError([
+          'Remove requires --scope in non-interactive mode.',
+          '',
+          getRemoveCommandHelpMessage(),
+        ].join('\n'));
+      }
+
+      scope = await select<RemoveScope>({
+        message: 'Where do you want to remove Superplan?',
+        choices: [
+          { name: 'Global (machine-level)', value: 'global' },
+          { name: 'Local (current repository)', value: 'local' },
+          { name: 'Both', value: 'both' },
+          { name: 'Skip', value: 'skip' },
+        ],
+      });
+    }
 
     if (scope === 'skip') {
       return {
@@ -328,16 +383,26 @@ async function removeCommand(
       };
     }
 
-    const proceed = await confirm({ message: 'Proceed with remove?' });
-    if (!proceed) {
-      return {
-        ok: false,
-        error: {
-          code: 'USER_ABORTED',
-          message: 'remove aborted by user',
-          retryable: false,
-        },
-      };
+    if (!options.yes) {
+      if (nonInteractive) {
+        return getInvalidRemoveCommandError([
+          'Remove requires --yes in non-interactive mode.',
+          '',
+          getRemoveCommandHelpMessage(),
+        ].join('\n'));
+      }
+
+      const proceed = await confirm({ message: 'Proceed with remove?' });
+      if (!proceed) {
+        return {
+          ok: false,
+          error: {
+            code: 'USER_ABORTED',
+            message: 'remove aborted by user',
+            retryable: false,
+          },
+        };
+      }
     }
 
     const removedPaths: string[] = [];
@@ -392,4 +457,22 @@ async function removeCommand(
 
 export async function remove(options: RemoveOptions, deps: Partial<RemoveDeps> = {}): Promise<RemoveResult> {
   return removeCommand(options, deps);
+}
+
+export async function removeCli(
+  args: string[],
+  options: RemoveOptions,
+  deps: Partial<RemoveDeps> = {},
+): Promise<RemoveResult> {
+  const rawScope = getOptionValue(args, '--scope');
+  if (rawScope && !isRemoveScope(rawScope)) {
+    return getInvalidRemoveCommandError(getRemoveCommandHelpMessage(rawScope));
+  }
+  const scope = rawScope as RemoveScope | undefined;
+
+  return removeCommand({
+    ...options,
+    ...(scope ? { scope } : {}),
+    yes: args.includes('--yes'),
+  }, deps);
 }

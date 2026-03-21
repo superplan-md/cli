@@ -4,7 +4,7 @@ import { doctor } from "./commands/doctor";
 import { parse } from "./commands/parse";
 import { init } from "./commands/init";
 import { task } from "./commands/task";
-import { remove } from "./commands/remove";
+import { removeCli } from "./commands/remove";
 import { run } from "./commands/run";
 import { sync } from "./commands/sync";
 import { status } from "./commands/status";
@@ -65,7 +65,7 @@ export const router: Record<string, CommandHandler> = {
   change: async (args) => change(args),
   init: async (_args, options) => init(options),
   setup: async (_args, options) => setup(options),
-  remove: async (_args, options) => remove(options),
+  remove: async (args, options) => removeCli(args, options),
   doctor: async (args) => doctor(args),
   parse: async (args, options) => parse(args, options),
   run: async (args) => run(args),

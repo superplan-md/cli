@@ -15,8 +15,10 @@ import {
   buildTaskContract,
   getChangePaths,
   getNextTaskId,
+  getNextTaskIds,
   isValidChangeSlug,
   pathExists,
+  type ChangePaths,
   type ScaffoldPriority,
 } from './scaffold';
 
@@ -71,6 +73,25 @@ interface TaskFixAction {
   reason?: string;
 }
 
+interface TaskBatchCreatedTask {
+  task_id: string;
+  ref: string | null;
+  title: string;
+  path: string;
+}
+
+interface TaskBatchItem {
+  ref: string | null;
+  title: string;
+  priority: ScaffoldPriority;
+  description?: string;
+  acceptanceCriteria: string[];
+  dependsOnAll: string[];
+  dependsOnAny: string[];
+  dependsOnAllRefs: string[];
+  dependsOnAnyRefs: string[];
+}
+
 type TaskLifecycleStatus = 'in_progress' | 'in_review' | 'done' | 'blocked' | 'needs_feedback';
 type TaskSelectionStatus = 'in_progress' | 'ready' | null;
 type TaskActivationAction = 'start' | 'resume' | 'continue';
@@ -94,41 +115,32 @@ export type TaskActivationResult =
     }
   | TaskErrorResult;
 
+interface TaskCommandSuccessData {
+  task?: ParsedTask | null;
+  tasks?: ParsedTask[];
+  created?: TaskBatchCreatedTask[];
+  task_id?: string | null;
+  change_id?: string;
+  path?: string;
+  status?: TaskLifecycleStatus | TaskSelectionStatus | string | null;
+  action?: TaskActivationAction;
+  reason?: string;
+  reasons?: string[];
+  is_ready?: boolean;
+  reset?: true;
+  fixed?: boolean;
+  actions?: TaskFixAction[];
+  overlay?: OverlayRuntimeNotice;
+}
+
 type TaskCommandResult =
-  | { ok: true; data: ({
-      task: ParsedTask | null;
-    } | {
-      tasks: ParsedTask[];
-    } | {
-      task_id: string; status: 'in_progress';
-    } | {
-      task_id: string; status: 'in_review';
-    } | {
-      task_id: string; status: 'done';
-    } | {
-      task_id: string; status: 'blocked';
-    } | {
-      task_id: string; status: 'needs_feedback';
-    } | {
-      task_id: string | null; status: 'in_progress' | 'ready' | null;
-    } | {
-      task_id: string; status: string; is_ready: boolean; reasons: string[];
-    } | {
-      task_id: string | null; reason: string;
-    } | {
-      task_id: string; reset: true;
-    } | {
-      fixed: boolean; actions: TaskFixAction[];
-    } | {
-      task_id: string; change_id: string; path: string;
-    }) & {
-      overlay?: OverlayRuntimeNotice;
-    } }
+  | { ok: true; data: TaskCommandSuccessData }
   | TaskErrorResult;
 
 const TASK_SUBCOMMANDS = new Set([
   'show',
   'new',
+  'batch',
   'complete',
   'approve',
   'reopen',
@@ -293,6 +305,7 @@ export function getTaskCommandHelpMessage(options: {
     'Task commands:',
     '  show <task_id>               Show one task and its readiness details',
     '  new <change-slug>            Create a new task file in a change',
+    '  batch <change-slug> --stdin  Create multiple task files from JSON stdin',
     '  complete <task_id>           Finish implementation and send the task to review',
     '  approve <task_id>            Approve an in-review task and mark it done',
     '  reopen <task_id>             Move a review or done task back into implementation',
@@ -300,18 +313,19 @@ export function getTaskCommandHelpMessage(options: {
     '  request-feedback <task_id>   Pause a task because you need user input',
     '  fix                          Repair runtime conflicts deterministically',
     '',
-    'For a fast start: superplan run',
-    'To run a specific task: superplan run <task_id>',
+    'For a fast start: superplan run --json',
+    'To run a specific task: superplan run <task_id> --json',
     '',
     'Some recovery commands still exist but are intentionally hidden from the default help surface.',
     '',
     'Examples:',
-    '  superplan task show T-001',
+    '  superplan task show T-001 --json',
     '  superplan task --help',
-    '  superplan task new improve-task-authoring --title "Add task template"',
-    '  superplan run T-001',
-    '  superplan task approve T-001',
-    '  superplan task block T-001 --reason "Waiting on review"',
+    '  superplan task new improve-task-authoring --title "Add task template" --json',
+    '  printf \'[{"ref":"parser","title":"Add parser"},{"title":"Add tests","depends_on_all_refs":["parser"]}]\' | superplan task batch improve-task-authoring --stdin --json',
+    '  superplan run T-001 --json',
+    '  superplan task approve T-001 --json',
+    '  superplan task block T-001 --reason "Waiting on review" --json',
   ].join('\n');
 }
 
@@ -345,6 +359,303 @@ function getRemovedTaskCommandError(subcommand: string): TaskErrorResult {
       retryable: true,
     },
   };
+}
+
+function getTaskBatchError(code: string, message: string): TaskErrorResult {
+  return {
+    ok: false,
+    error: {
+      code,
+      message,
+      retryable: false,
+    },
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizeOptionalString(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalizedValue = value.trim();
+  return normalizedValue ? normalizedValue : null;
+}
+
+function normalizeStringListField(
+  value: unknown,
+  itemLabel: string,
+  fieldName: string,
+): { values?: string[]; error?: TaskErrorResult } {
+  if (value === undefined) {
+    return { values: [] };
+  }
+
+  if (!Array.isArray(value)) {
+    return {
+      error: getTaskBatchError(
+        'TASK_BATCH_INVALID_PAYLOAD',
+        `${itemLabel} ${fieldName} must be an array of non-empty strings`,
+      ),
+    };
+  }
+
+  const values: string[] = [];
+
+  for (const entry of value) {
+    const normalizedEntry = normalizeOptionalString(entry);
+    if (!normalizedEntry) {
+      return {
+        error: getTaskBatchError(
+          'TASK_BATCH_INVALID_PAYLOAD',
+          `${itemLabel} ${fieldName} must be an array of non-empty strings`,
+        ),
+      };
+    }
+
+    values.push(normalizedEntry);
+  }
+
+  return { values };
+}
+
+async function readStdin(): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const chunks: string[] = [];
+    process.stdin.setEncoding('utf-8');
+    process.stdin.on('data', chunk => {
+      chunks.push(String(chunk));
+    });
+    process.stdin.on('end', () => {
+      resolve(chunks.join(''));
+    });
+    process.stdin.on('error', reject);
+    process.stdin.resume();
+  });
+}
+
+async function resolveTaskCreationTarget(changeSlug: string): Promise<{ changePaths?: ChangePaths; error?: TaskErrorResult }> {
+  if (!isValidChangeSlug(changeSlug)) {
+    return {
+      error: {
+        ok: false,
+        error: {
+          code: 'INVALID_CHANGE_SLUG',
+          message: 'Change slug must use lowercase letters, numbers, and hyphens',
+          retryable: false,
+        },
+      },
+    };
+  }
+
+  const changePaths = getChangePaths(changeSlug);
+  if (!await pathExists(changePaths.changesRoot)) {
+    return {
+      error: {
+        ok: false,
+        error: {
+          code: 'INIT_REQUIRED',
+          message: 'Run superplan init before creating a task',
+          retryable: true,
+        },
+      },
+    };
+  }
+
+  if (!await pathExists(changePaths.changeRoot)) {
+    return {
+      error: {
+        ok: false,
+        error: {
+          code: 'CHANGE_NOT_FOUND',
+          message: 'Change not found',
+          retryable: false,
+        },
+      },
+    };
+  }
+
+  return { changePaths };
+}
+
+function normalizeTaskBatchPayload(rawPayload: unknown): { items?: TaskBatchItem[]; error?: TaskErrorResult } {
+  const rawItems = Array.isArray(rawPayload)
+    ? rawPayload
+    : isRecord(rawPayload) && Array.isArray(rawPayload.tasks)
+      ? rawPayload.tasks
+      : null;
+
+  if (!rawItems) {
+    return {
+      error: getTaskBatchError(
+        'TASK_BATCH_INVALID_PAYLOAD',
+        'Task batch payload must be an array or an object with a "tasks" array',
+      ),
+    };
+  }
+
+  if (rawItems.length === 0) {
+    return {
+      error: getTaskBatchError(
+        'TASK_BATCH_EMPTY',
+        'Task batch payload must contain at least one task',
+      ),
+    };
+  }
+
+  const items: TaskBatchItem[] = [];
+  const seenRefs = new Set<string>();
+
+  for (const [index, rawItem] of rawItems.entries()) {
+    const itemLabel = `Task batch item ${index + 1}`;
+
+    if (!isRecord(rawItem)) {
+      return {
+        error: getTaskBatchError(
+          'TASK_BATCH_INVALID_PAYLOAD',
+          `${itemLabel} must be an object`,
+        ),
+      };
+    }
+
+    const title = normalizeOptionalString(rawItem.title);
+    if (!title) {
+      return {
+        error: getTaskBatchError(
+          'TASK_BATCH_TITLE_REQUIRED',
+          `${itemLabel} title is required and must be a non-empty string`,
+        ),
+      };
+    }
+
+    let ref: string | null = null;
+    if (rawItem.ref !== undefined) {
+      ref = normalizeOptionalString(rawItem.ref);
+      if (!ref) {
+        return {
+          error: getTaskBatchError(
+            'TASK_BATCH_INVALID_PAYLOAD',
+            `${itemLabel} ref must be a non-empty string when provided`,
+          ),
+        };
+      }
+
+      if (seenRefs.has(ref)) {
+        return {
+          error: getTaskBatchError(
+            'TASK_BATCH_DUPLICATE_REF',
+            `Task batch ref "${ref}" is duplicated`,
+          ),
+        };
+      }
+
+      seenRefs.add(ref);
+    }
+
+    if (rawItem.priority !== undefined && typeof rawItem.priority !== 'string') {
+      return {
+        error: getTaskBatchError(
+          'TASK_BATCH_INVALID_PAYLOAD',
+          `${itemLabel} priority must be a string when provided`,
+        ),
+      };
+    }
+
+    const priority = parsePriority(rawItem.priority as string | undefined);
+    if (!priority) {
+      return {
+        error: getTaskBatchError(
+          'INVALID_PRIORITY',
+          `${itemLabel} priority must be one of: high, medium, low`,
+        ),
+      };
+    }
+
+    let description: string | undefined;
+    if (rawItem.description !== undefined) {
+      const normalizedDescription = normalizeOptionalString(rawItem.description);
+      if (!normalizedDescription) {
+        return {
+          error: getTaskBatchError(
+            'TASK_BATCH_INVALID_PAYLOAD',
+            `${itemLabel} description must be a non-empty string when provided`,
+          ),
+        };
+      }
+
+      description = normalizedDescription;
+    }
+
+    const acceptanceCriteriaResult = normalizeStringListField(
+      rawItem.acceptance_criteria,
+      itemLabel,
+      'acceptance_criteria',
+    );
+    if (acceptanceCriteriaResult.error) {
+      return acceptanceCriteriaResult;
+    }
+
+    const dependsOnAllResult = normalizeStringListField(rawItem.depends_on_all, itemLabel, 'depends_on_all');
+    if (dependsOnAllResult.error) {
+      return dependsOnAllResult;
+    }
+
+    const dependsOnAnyResult = normalizeStringListField(rawItem.depends_on_any, itemLabel, 'depends_on_any');
+    if (dependsOnAnyResult.error) {
+      return dependsOnAnyResult;
+    }
+
+    const dependsOnAllRefsResult = normalizeStringListField(rawItem.depends_on_all_refs, itemLabel, 'depends_on_all_refs');
+    if (dependsOnAllRefsResult.error) {
+      return dependsOnAllRefsResult;
+    }
+
+    const dependsOnAnyRefsResult = normalizeStringListField(rawItem.depends_on_any_refs, itemLabel, 'depends_on_any_refs');
+    if (dependsOnAnyRefsResult.error) {
+      return dependsOnAnyRefsResult;
+    }
+
+    items.push({
+      ref,
+      title,
+      priority,
+      ...(description ? { description } : {}),
+      acceptanceCriteria: acceptanceCriteriaResult.values!,
+      dependsOnAll: dependsOnAllResult.values!,
+      dependsOnAny: dependsOnAnyResult.values!,
+      dependsOnAllRefs: dependsOnAllRefsResult.values!,
+      dependsOnAnyRefs: dependsOnAnyRefsResult.values!,
+    });
+  }
+
+  const knownRefs = new Set(items.map(item => item.ref).filter((ref): ref is string => Boolean(ref)));
+
+  for (const item of items) {
+    for (const dependencyRef of [...item.dependsOnAllRefs, ...item.dependsOnAnyRefs]) {
+      if (!knownRefs.has(dependencyRef)) {
+        return {
+          error: getTaskBatchError(
+            'TASK_BATCH_UNKNOWN_REF',
+            `Task batch dependency ref "${dependencyRef}" was not found in the payload`,
+          ),
+        };
+      }
+
+      if (item.ref && dependencyRef === item.ref) {
+        return {
+          error: getTaskBatchError(
+            'TASK_BATCH_SELF_REF',
+            `Task batch item "${item.ref}" cannot depend on itself`,
+          ),
+        };
+      }
+    }
+  }
+
+  return { items };
 }
 
 function parsePriority(rawPriority: string | undefined): ScaffoldPriority | null {
@@ -1438,17 +1749,6 @@ async function resetTask(taskId: string): Promise<TaskCommandResult> {
 }
 
 async function createTask(changeSlug: string, title?: string, rawPriority?: string): Promise<TaskCommandResult> {
-  if (!isValidChangeSlug(changeSlug)) {
-    return {
-      ok: false,
-      error: {
-        code: 'INVALID_CHANGE_SLUG',
-        message: 'Change slug must use lowercase letters, numbers, and hyphens',
-        retryable: false,
-      },
-    };
-  }
-
   const priority = parsePriority(rawPriority);
   if (!priority) {
     return {
@@ -1461,29 +1761,12 @@ async function createTask(changeSlug: string, title?: string, rawPriority?: stri
     };
   }
 
-  const changePaths = getChangePaths(changeSlug);
-  if (!await pathExists(changePaths.changesRoot)) {
-    return {
-      ok: false,
-      error: {
-        code: 'INIT_REQUIRED',
-        message: 'Run superplan init before creating a task',
-        retryable: true,
-      },
-    };
+  const taskCreationTarget = await resolveTaskCreationTarget(changeSlug);
+  if (taskCreationTarget.error) {
+    return taskCreationTarget.error;
   }
 
-  if (!await pathExists(changePaths.changeRoot)) {
-    return {
-      ok: false,
-      error: {
-        code: 'CHANGE_NOT_FOUND',
-        message: 'Change not found',
-        retryable: false,
-      },
-    };
-  }
-
+  const changePaths = taskCreationTarget.changePaths!;
   await fs.mkdir(changePaths.tasksDir, { recursive: true });
 
   const taskId = await getNextTaskId(changePaths.changesRoot);
@@ -1496,6 +1779,7 @@ async function createTask(changeSlug: string, title?: string, rawPriority?: stri
     priority,
   }), 'utf-8');
   await appendTaskEntryToIndex(changePaths.tasksIndexPath, changeSlug, taskId, summary);
+  const createdTaskResult = await getParsedTask(taskId);
 
   return {
     ok: true,
@@ -1503,6 +1787,145 @@ async function createTask(changeSlug: string, title?: string, rawPriority?: stri
       task_id: taskId,
       change_id: changeSlug,
       path: path.relative(process.cwd(), taskPath) || taskPath,
+      ...(createdTaskResult.task ? { task: createdTaskResult.task } : {}),
+    },
+  };
+}
+
+async function createTaskBatch(options: {
+  changeSlug: string;
+  batchFilePath?: string;
+  useStdin?: boolean;
+}): Promise<TaskCommandResult> {
+  const { changeSlug, batchFilePath, useStdin } = options;
+  const taskCreationTarget = await resolveTaskCreationTarget(changeSlug);
+  if (taskCreationTarget.error) {
+    return taskCreationTarget.error;
+  }
+
+  const changePaths = taskCreationTarget.changePaths!;
+
+  let rawPayload: unknown;
+  try {
+    let batchContent = '';
+
+    if (useStdin) {
+      batchContent = await readStdin();
+      if (!batchContent.trim()) {
+        return getTaskBatchError(
+          'TASK_BATCH_STDIN_EMPTY',
+          'Task batch stdin payload was empty',
+        );
+      }
+    } else if (batchFilePath) {
+      const resolvedBatchFilePath = path.resolve(process.cwd(), batchFilePath);
+      batchContent = await fs.readFile(resolvedBatchFilePath, 'utf-8');
+    } else {
+      return getTaskBatchError(
+        'TASK_BATCH_INPUT_REQUIRED',
+        'Task batch requires JSON input via --stdin (preferred) or --file <path>',
+      );
+    }
+
+    rawPayload = JSON.parse(batchContent);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      const inputLabel = useStdin
+        ? 'stdin'
+        : batchFilePath
+          ? path.relative(process.cwd(), path.resolve(process.cwd(), batchFilePath)) || path.resolve(process.cwd(), batchFilePath)
+          : 'batch input';
+      return getTaskBatchError(
+        'TASK_BATCH_INVALID_JSON',
+        `Task batch input is not valid JSON: ${inputLabel}`,
+      );
+    }
+
+    if (!useStdin && batchFilePath) {
+      const resolvedBatchFilePath = path.resolve(process.cwd(), batchFilePath);
+      const batchFileLabel = path.relative(process.cwd(), resolvedBatchFilePath) || resolvedBatchFilePath;
+      return getTaskBatchError(
+        'TASK_BATCH_FILE_READ_FAILED',
+        `Could not read task batch file: ${batchFileLabel}`,
+      );
+    }
+
+    return getTaskBatchError(
+      'TASK_BATCH_STDIN_READ_FAILED',
+      'Could not read task batch stdin payload',
+    );
+  }
+
+  return await createTaskBatchFromPayload(changeSlug, changePaths, rawPayload);
+}
+
+async function createTaskBatchFromPayload(
+  changeSlug: string,
+  changePaths: ChangePaths,
+  rawPayload: unknown,
+): Promise<TaskCommandResult> {
+  const normalizedBatch = normalizeTaskBatchPayload(rawPayload);
+  if (normalizedBatch.error) {
+    return normalizedBatch.error;
+  }
+
+  const taskIds = await getNextTaskIds(changePaths.changesRoot, normalizedBatch.items!.length);
+  const refToTaskId = new Map<string, string>();
+
+  normalizedBatch.items!.forEach((item, index) => {
+    if (item.ref) {
+      refToTaskId.set(item.ref, taskIds[index]);
+    }
+  });
+
+  await fs.mkdir(changePaths.tasksDir, { recursive: true });
+
+  const created: TaskBatchCreatedTask[] = [];
+
+  for (const [index, item] of normalizedBatch.items!.entries()) {
+    const taskId = taskIds[index];
+    const taskPath = path.join(changePaths.tasksDir, `${taskId}.md`);
+    const dependsOnAll = [...new Set([
+      ...item.dependsOnAll,
+      ...item.dependsOnAllRefs.map(ref => refToTaskId.get(ref)!),
+    ])];
+    const dependsOnAny = [...new Set([
+      ...item.dependsOnAny,
+      ...item.dependsOnAnyRefs.map(ref => refToTaskId.get(ref)!),
+    ])];
+
+    await fs.writeFile(taskPath, buildTaskContract({
+      taskId,
+      title: item.title,
+      priority: item.priority,
+      description: item.description ?? item.title,
+      acceptanceCriteria: item.acceptanceCriteria,
+      dependsOnAll,
+      dependsOnAny,
+    }), 'utf-8');
+    await appendTaskEntryToIndex(changePaths.tasksIndexPath, changeSlug, taskId, item.title);
+
+    created.push({
+      task_id: taskId,
+      ref: item.ref,
+      title: item.title,
+      path: path.relative(process.cwd(), taskPath) || taskPath,
+    });
+  }
+
+  const parsedTasksResult = await getParsedTasks();
+  const createdTasks = parsedTasksResult.tasks
+    ? taskIds
+      .map(taskId => parsedTasksResult.tasks!.find(taskItem => taskItem.task_id === taskId))
+      .filter((taskItem): taskItem is ParsedTask => Boolean(taskItem))
+    : [];
+
+  return {
+    ok: true,
+    data: {
+      change_id: changeSlug,
+      created,
+      tasks: createdTasks,
     },
   };
 }
@@ -1521,17 +1944,21 @@ function getOptionValue(args: string[], optionName: string): string | undefined 
   return optionValue;
 }
 
+function hasFlag(args: string[], flag: string): boolean {
+  return args.includes(flag);
+}
+
 function getPositionalArgs(args: string[]): string[] {
   const positionalArgs: string[] = [];
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
 
-    if (arg === '--json' || arg === '--quiet') {
+    if (arg === '--json' || arg === '--quiet' || arg === '--stdin') {
       continue;
     }
 
-    if (arg === '--reason' || arg === '--message' || arg === '--title' || arg === '--priority') {
+    if (arg === '--reason' || arg === '--message' || arg === '--title' || arg === '--priority' || arg === '--file') {
       index += 1;
       continue;
     }
@@ -1545,11 +1972,13 @@ function getPositionalArgs(args: string[]): string[] {
 export async function task(args: string[]): Promise<TaskCommandResult> {
   const positionalArgs = getPositionalArgs(args);
   const subcommand = positionalArgs[0];
-  const taskId = positionalArgs[1];
+  const subjectId = positionalArgs[1];
   const reason = getOptionValue(args, '--reason');
   const message = getOptionValue(args, '--message');
   const title = getOptionValue(args, '--title');
   const priority = getOptionValue(args, '--priority');
+  const filePath = getOptionValue(args, '--file');
+  const useStdin = hasFlag(args, '--stdin');
 
   if (!subcommand) {
     return getInvalidTaskCommandError({ subcommand });
@@ -1564,18 +1993,18 @@ export async function task(args: string[]): Promise<TaskCommandResult> {
   }
 
   if (subcommand === 'show') {
-    if (!taskId) {
+    if (!subjectId) {
       return getInvalidTaskCommandError({
         subcommand,
         requiresTaskId: true,
       });
     }
 
-    return showTask(taskId);
+    return showTask(subjectId);
   }
 
   if (subcommand === 'new') {
-    if (!taskId) {
+    if (!subjectId) {
       return getInvalidTaskCommandError({
         subcommand,
         requiresTaskId: true,
@@ -1583,14 +2012,44 @@ export async function task(args: string[]): Promise<TaskCommandResult> {
       });
     }
 
-    return createTask(taskId, title, priority);
+    return createTask(subjectId, title, priority);
+  }
+
+  if (subcommand === 'batch') {
+    if (!subjectId) {
+      return getInvalidTaskCommandError({
+        subcommand,
+        requiresTaskId: true,
+        requiredArgumentLabel: '<change-slug>',
+      });
+    }
+
+    if (useStdin && filePath) {
+      return getTaskBatchError(
+        'TASK_BATCH_INPUT_CONFLICT',
+        'Task batch accepts one input source at a time. Prefer --stdin for agents, or use --file <path>.',
+      );
+    }
+
+    if (!useStdin && !filePath) {
+      return getTaskBatchError(
+        'TASK_BATCH_INPUT_REQUIRED',
+        'Task batch requires JSON input via --stdin (preferred) or --file <path>.',
+      );
+    }
+
+    return createTaskBatch({
+      changeSlug: subjectId,
+      batchFilePath: filePath,
+      useStdin,
+    });
   }
 
   if (subcommand === 'fix') {
     return fixTasks();
   }
 
-  if (!taskId) {
+  if (!subjectId) {
     return getInvalidTaskCommandError({
       subcommand,
       requiresTaskId: true,
@@ -1598,24 +2057,24 @@ export async function task(args: string[]): Promise<TaskCommandResult> {
   }
 
   if (subcommand === 'approve') {
-    return approveTask(taskId);
+    return approveTask(subjectId);
   }
 
   if (subcommand === 'reopen') {
-    return reopenTask(taskId, reason);
+    return reopenTask(subjectId, reason);
   }
 
   if (subcommand === 'reset') {
-    return resetTask(taskId);
+    return resetTask(subjectId);
   }
 
   if (subcommand === 'block') {
-    return blockTask(taskId, reason);
+    return blockTask(subjectId, reason);
   }
 
   if (subcommand === 'request-feedback') {
-    return requestFeedbackTask(taskId, message);
+    return requestFeedbackTask(subjectId, message);
   }
 
-  return completeTask(taskId);
+  return completeTask(subjectId);
 }

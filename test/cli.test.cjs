@@ -24,15 +24,18 @@ test('cli without a command shows the main Superplan command list', async () => 
 
   assert.equal(result.code, 0);
   assert.match(result.stdout, /Commands:/);
-  assert.match(result.stdout, /change\s+Create tracked work structure/);
-  assert.match(result.stdout, /setup\s+Setup Superplan on this machine or in this repo/);
-  assert.match(result.stdout, /sync\s+Refresh Superplan's view of this repo/);
-  assert.match(result.stdout, /update\s+Update the installed Superplan CLI and refresh skills/);
-  assert.match(result.stdout, /doctor\s+Validate setup/);
-  assert.match(result.stdout, /parse\s+Parse superplan artifacts/);
-  assert.match(result.stdout, /remove\s+Remove Superplan installation and state/);
-  assert.match(result.stdout, /status\s+Show current task status summary/);
-  assert.match(result.stdout, /task\s+Task runtime and review operations/);
+  assert.match(result.stdout, /Core loop:/);
+  assert.match(result.stdout, /change\s+Create tracked change scaffolding/);
+  assert.match(result.stdout, /init\s+Scaffold the repo-local Superplan workspace/);
+  assert.match(result.stdout, /status\s+Show active, ready, review, blocked, and feedback-needed queues/);
+  assert.match(result.stdout, /Recovery and diagnostics:/);
+  assert.match(result.stdout, /sync\s+Reconcile repo state after task-file edits or runtime drift/);
+  assert.match(result.stdout, /doctor\s+Validate install and overlay health/);
+  assert.match(result.stdout, /parse\s+Parse task contracts and return diagnostics/);
+  assert.match(result.stdout, /Installation and admin:/);
+  assert.match(result.stdout, /setup\s+Install config, skills, and agent integrations/);
+  assert.match(result.stdout, /update\s+Update an installed Superplan CLI and refresh skills/);
+  assert.match(result.stdout, /remove\s+Remove Superplan installation or state/);
   assert.doesNotMatch(result.stdout, /server\s+Start the local dummy server/);
   assert.doesNotMatch(result.stdout, /popup\s+Open or refocus the current task popup/);
   assert.doesNotMatch(result.stdout, /\bpurge\b/);
@@ -111,6 +114,7 @@ test('task --help explains task subcommands explicitly', async () => {
   assert.equal(result.code, 0);
   assert.match(result.stdout, /Task commands:/);
   assert.match(result.stdout, /new <change-slug>\s+Create a new task file in a change/);
+  assert.match(result.stdout, /batch <change-slug> --stdin\s+Create multiple task files from JSON stdin/);
   assert.match(result.stdout, /show <task_id>\s+Show one task and its readiness details/);
   assert.match(result.stdout, /complete <task_id>\s+Finish implementation and send the task to review/);
   assert.match(result.stdout, /approve <task_id>\s+Approve an in-review task and mark it done/);
@@ -125,6 +129,15 @@ test('task --help explains task subcommands explicitly', async () => {
   assert.doesNotMatch(result.stdout, /\blist\s+List all parsed tasks/);
   assert.doesNotMatch(result.stdout, /\bwhy-next\b/);
   assert.doesNotMatch(result.stdout, /\bwhy <task_id>\b/);
+});
+
+test('remove --help explains the explicit non-interactive agent-safe path', async () => {
+  const result = await runCli(['remove', '--help']);
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /Remove deletes Superplan installation and state/);
+  assert.match(result.stdout, /superplan remove --scope <local\|global\|both\|skip> --yes --json/);
+  assert.match(result.stdout, /superplan remove\s+# interactive mode/);
 });
 
 test('change --help explains change scaffolding commands', async () => {

@@ -6,7 +6,7 @@ Use this reference when entry routing needs to explain where setup state, init s
 
 - CLI install: `superplan` must exist as a machine-level command before normal workflow use
 - host setup: `superplan setup` makes Superplan available to the current agent environment
-- workspace init: `superplan init` makes the current repo participate in Superplan
+- workspace init: `superplan init --json` makes the current repo participate in Superplan
 
 Keep these layers distinct in user guidance.
 

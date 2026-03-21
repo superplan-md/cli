@@ -11,6 +11,7 @@ export type InitResult =
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
 
 export interface InitOptions {
+  json?: boolean;
   quiet?: boolean;
 }
 
@@ -24,6 +25,7 @@ async function pathExists(targetPath: string): Promise<boolean> {
 }
 
 export async function init(options: InitOptions = {}): Promise<InitResult> {
+  const nonInteractive = options.quiet || options.json;
   const cwd = process.cwd();
   const workspaceRoot = resolveWorkspaceRoot(cwd);
   const superplanRoot = path.join(workspaceRoot, '.superplan');
@@ -36,7 +38,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
 
   try {
     if (!await pathExists(globalConfigPath)) {
-      if (options.quiet) {
+      if (nonInteractive) {
         return {
           ok: false,
           error: {
@@ -80,7 +82,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
     }
 
     if (await pathExists(superplanRoot)) {
-      if (options.quiet) {
+      if (nonInteractive) {
         return {
           ok: true,
           data: {
@@ -106,7 +108,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
     await fs.mkdir(changesDir, { recursive: true });
     await fs.writeFile(configPath, 'version = "0.1"\n', 'utf-8');
 
-    if (!options.quiet) {
+    if (!nonInteractive) {
       const enableOverlay = await confirm({ message: 'Enable desktop overlay in this repository?' });
       await writeOverlayPreference(enableOverlay, { scope: 'local', cwd: workspaceRoot });
     }

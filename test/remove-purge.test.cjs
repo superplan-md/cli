@@ -6,7 +6,9 @@ const path = require('node:path');
 const {
   loadDistModule,
   makeSandbox,
+  parseCliJson,
   pathExists,
+  runCli,
   withSandboxEnv,
   writeFile,
 } = require('./helpers.cjs');
@@ -226,4 +228,47 @@ test('remove from a nested subdirectory deletes the nearest parent local superpl
   assert.equal(result.data.scope, 'local');
   assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan')), false);
   assert.equal(await pathExists(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-entry')), false);
+});
+
+test('remove supports explicit non-interactive local cleanup for agents', async () => {
+  const sandbox = await makeSandbox('superplan-remove-cli-local-');
+
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'config.toml'), 'version = "0.1"\n');
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), '# task\n');
+  await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-entry', 'SKILL.md'), '# superplan-entry\n');
+
+  const result = await runCli(['remove', '--scope', 'local', '--yes', '--json'], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  });
+  const payload = parseCliJson(result);
+
+  assert.equal(result.code, 0);
+  assert.deepEqual(payload, {
+    ok: true,
+    data: {
+      scope: 'local',
+      mode: 'remove',
+      removed_paths: payload.data.removed_paths,
+      agents: payload.data.agents,
+    },
+    error: null,
+  });
+  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan')), false);
+  assert.equal(await pathExists(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-entry')), false);
+});
+
+test('remove rejects non-interactive agent mode without explicit scope and confirmation', async () => {
+  const sandbox = await makeSandbox('superplan-remove-cli-invalid-');
+  const result = await runCli(['remove', '--json'], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  });
+  const payload = parseCliJson(result);
+
+  assert.equal(result.code, 1);
+  assert.equal(payload.ok, false);
+  assert.equal(payload.error.code, 'INVALID_REMOVE_COMMAND');
+  assert.match(payload.error.message, /Remove requires --scope in non-interactive mode/);
+  assert.match(payload.error.message, /superplan remove --scope <local\|global\|both\|skip> --yes --json/);
 });

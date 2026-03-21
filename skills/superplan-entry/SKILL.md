@@ -81,6 +81,7 @@ Assumptions:
 
 - users should not need to think about which skill comes next
 - host environments may auto-trigger this skill
+- agents should not need to choose between multiple overlapping commands for the same intent
 - Superplan should improve the workflow, not hijack it
 
 ## Allowed Actions
@@ -101,6 +102,9 @@ When Superplan is active in a repo, prefer the CLI as the execution control plan
 
 Common commands:
 
+- `superplan change new <change-slug> --json` to create one tracked change root
+- `superplan task new <change-slug> --title "<title>" --json` to create exactly one new task contract
+- `superplan task batch <change-slug> --stdin --json` to create two or more new task contracts in one pass
 - `superplan status --json` to see active, ready, blocked, and needs-feedback tasks
 - `superplan run --json` to claim the next ready task or continue the active task, with the chosen task contract and selection reason in the payload
 - `superplan run <task_id> --json` to explicitly start or resume one known task
@@ -121,6 +125,20 @@ Execution default:
 4. execute through the workflow spine, especially `superplan-execute`, instead of ad hoc task mutation
 5. block, request feedback, or complete through the runtime commands rather than editing markdown state by hand
 6. if overlay support is enabled for the workspace, expect `superplan run`, `superplan run <task_id>`, and `superplan task reopen` to auto-reveal the overlay when work becomes active; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle again
+
+Authoring default:
+
+1. create the tracked change once with `superplan change new <change-slug> --json`
+2. use `superplan task new <change-slug> --title "<title>" --json` only when exactly one task should be created now
+3. use `superplan task batch <change-slug> --stdin --json` when two or more tasks are clear enough to create in one pass
+4. prefer stdin over temporary files for batch task authoring in agent flows
+5. use the returned task payloads directly after authoring instead of immediately calling `superplan task show`
+
+Canonical command rule:
+
+- prefer the one obvious command for the current intent
+- do not choose between multiple overlapping commands when one canonical path exists
+- prefer commands that already return the needed task payload instead of making extra follow-up calls
 
 ## Entry Decision Order
 
@@ -196,8 +214,8 @@ See `references/routing-boundaries.md`.
 
 - If the `superplan` CLI itself appears missing, give brief installation or availability guidance and stop.
 - If the CLI exists but host or agent integration appears missing, guide `superplan setup` and stop.
-- If the repo is not initialized, give readiness guidance for `superplan init` and stop.
-- If the user starts from `superplan init` but setup is missing too, call out the shortcut order clearly: `superplan setup`, then `superplan init`.
+- If the repo is not initialized, give readiness guidance for `superplan init --json` and stop.
+- If the user starts from `superplan init --json` but setup is missing too, call out the shortcut order clearly: `superplan setup`, then `superplan init --json`.
 - If the repo is initialized but serious brownfield context is missing or stale, route to `superplan-context`.
 - If the request targets existing tracked work, resume the owning later phase instead of forcing a fresh routing pass.
 - If the request is repo work but the structure decision is still open, route to `superplan-route`.
@@ -223,7 +241,7 @@ One of:
 - readiness guidance with the concrete missing layer called out
 - installation or availability guidance for the `superplan` CLI
 - `superplan setup` guidance
-- `superplan init` guidance
+- `superplan init --json` guidance
 - route to `superplan-context`
 - route to `superplan-route`
 - route to `superplan-execute`
@@ -246,6 +264,9 @@ Likely handoffs:
 - `superplan doctor --json`
 - `superplan setup`
 - `superplan init --json`
+- `superplan change new <change-slug> --json`
+- `superplan task new <change-slug> --title "<title>" --json`
+- `superplan task batch <change-slug> --stdin --json`
 - `superplan status --json`
 - `superplan run --json`
 - `superplan parse --json`

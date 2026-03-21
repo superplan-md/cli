@@ -65,28 +65,44 @@ export function buildTaskContract(options: {
   taskId: string;
   title?: string;
   priority: ScaffoldPriority;
+  description?: string;
+  acceptanceCriteria?: string[];
+  dependsOnAll?: string[];
+  dependsOnAny?: string[];
 }): string {
-  const description = options.title?.trim() || 'Describe the task.';
+  const description = options.description?.trim() || options.title?.trim() || 'Describe the task.';
+  const acceptanceCriteria = (options.acceptanceCriteria ?? [])
+    .map(criterion => criterion
+      .split(/\r?\n/)
+      .map(segment => segment.trim())
+      .filter(Boolean)
+      .join(' '))
+    .filter(Boolean);
+  const normalizedAcceptanceCriteria = acceptanceCriteria.length > 0
+    ? acceptanceCriteria
+    : ['Define the first acceptance criterion.'];
+  const dependsOnAll = options.dependsOnAll ?? [];
+  const dependsOnAny = options.dependsOnAny ?? [];
 
   return [
     '---',
     `task_id: ${options.taskId}`,
     'status: pending',
     `priority: ${options.priority}`,
-    'depends_on_all: []',
-    'depends_on_any: []',
+    `depends_on_all: ${JSON.stringify(dependsOnAll)}`,
+    `depends_on_any: ${JSON.stringify(dependsOnAny)}`,
     '---',
     '',
     '## Description',
     description,
     '',
     '## Acceptance Criteria',
-    '- [ ] Define the first acceptance criterion.',
+    ...normalizedAcceptanceCriteria.map(criterion => `- [ ] ${criterion}`),
     '',
   ].join('\n');
 }
 
-export async function getNextTaskId(changesRoot: string): Promise<string> {
+async function getHighestTaskNumber(changesRoot: string): Promise<number> {
   try {
     const changeEntries = await fs.readdir(changesRoot, { withFileTypes: true });
     let maxTaskNumber = 0;
@@ -116,10 +132,25 @@ export async function getNextTaskId(changesRoot: string): Promise<string> {
       maxTaskNumber = Math.max(maxTaskNumber, changeMaxTaskNumber);
     }
 
-    return `T-${String(maxTaskNumber + 1).padStart(3, '0')}`;
+    return maxTaskNumber;
   } catch {
-    return 'T-001';
+    return 0;
   }
+}
+
+export async function getNextTaskIds(changesRoot: string, count: number): Promise<string[]> {
+  if (count <= 0) {
+    return [];
+  }
+
+  const highestTaskNumber = await getHighestTaskNumber(changesRoot);
+
+  return Array.from({ length: count }, (_item, index) => `T-${String(highestTaskNumber + index + 1).padStart(3, '0')}`);
+}
+
+export async function getNextTaskId(changesRoot: string): Promise<string> {
+  const [taskId] = await getNextTaskIds(changesRoot, 1);
+  return taskId;
 }
 
 export async function appendTaskEntryToIndex(

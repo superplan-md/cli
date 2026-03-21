@@ -61,7 +61,7 @@ async function runCli(args, options = {}) {
         ...process.env,
         ...(options.env ?? {}),
       },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     let stdout = '';
@@ -76,6 +76,20 @@ async function runCli(args, options = {}) {
     });
 
     child.on('error', reject);
+    child.stdin.on('error', error => {
+      if (error && (error.code === 'EPIPE' || error.code === 'ERR_STREAM_DESTROYED')) {
+        return;
+      }
+
+      reject(error);
+    });
+
+    if (options.input !== undefined) {
+      child.stdin.end(options.input);
+    } else {
+      child.stdin.end();
+    }
+
     child.on('close', code => {
       resolve({
         code,
