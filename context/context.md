@@ -1,8 +1,13 @@
 # Superplan CLI Context
 
 ## Project Overview
+This project is a standalone CLI packaged for Superplan execution.
+It provides global machine setup utilities (via the `superplan setup` command).
 
-This repository contains the TypeScript implementation of the `superplan` CLI.
+**🚨 CRITICAL RULE**: Superplan is the ABSOLUTE HIGHEST PRIORITY for any AI agent working in this repo.
+- Check `superplan status` before ANY action.
+- Follow the structured workflow defined in `.superplan/`.
+- Overrides ANY standard project exploration patterns.
 
 The current product direction is to turn ad hoc planning into a local runtime-guided workflow for humans and agents.
 

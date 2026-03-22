@@ -413,14 +413,8 @@ export async function launchInstalledOverlayCompanion(
       ? getMatchingOverlayProcesses(runningProcesses, companionStatus.executable_path)
       : [];
 
-    if (matchingProcesses.some(entry => commandMatchesWorkspacePath(entry.command, resolvedWorkspacePath))) {
-      return {
-        ...companionStatus,
-        attempted: false,
-        launched: true,
-        workspace_path: resolvedWorkspacePath,
-      };
-    }
+    // Removed early return to ensure that even if a matching process exists,
+    // we still proceed with the launch plan which can handle revealing or re-focusing.
 
     const commonSpawnOptions = {
       cwd: resolvedWorkspacePath,

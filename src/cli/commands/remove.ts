@@ -425,8 +425,10 @@ async function removeCommand(
       for (const installedCliTarget of installedCliTargets) {
         await removePath(installedCliTarget, removedPaths);
       }
-      await removePath(installMetadata?.overlay?.install_path ?? '', removedPaths);
+      // Thoroughly wipe the global config directory including metadata and binaries
       await removePath(globalSuperplanDir, removedPaths);
+      // Ensure install metadata is also gone if it was outside the main config dir (it isn't, but for safety)
+      await removePath(path.join(homeDir, '.config', 'superplan'), removedPaths);
     }
 
     if (scope === 'local' || scope === 'both') {

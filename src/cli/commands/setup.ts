@@ -1,7 +1,8 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { checkbox, confirm, select } from '@inquirer/prompts';
+import { confirm, select, checkbox } from '@inquirer/prompts';
+import { readInstallMetadata, getInstallMetadataPath, type InstallMetadata } from '../install-metadata';
 import { writeOverlayPreference } from '../overlay-preferences';
 import { CURRENT_ENTRY_SKILL_NAME, LEGACY_SUPERPLAN_SKILL_NAMES } from '../skill-names';
 import { resolveWorkspaceRoot } from '../workspace-root';
@@ -150,14 +151,10 @@ async function installSkillsNamespace(sourceDir: string, targetDir: string): Pro
 
     await fs.rm(targetPath, { recursive: true, force: true });
 
-    try {
-      await fs.symlink(sourcePath, targetPath, entry.isDirectory() ? 'dir' : 'file');
-    } catch {
-      if (entry.isDirectory()) {
-        await fs.cp(sourcePath, targetPath, { recursive: true, force: true });
-      } else {
-        await fs.copyFile(sourcePath, targetPath);
-      }
+    if (entry.isDirectory()) {
+      await fs.cp(sourcePath, targetPath, { recursive: true, force: true });
+    } else {
+      await fs.copyFile(sourcePath, targetPath);
     }
   }
 }
@@ -343,6 +340,79 @@ async function detectAgents(baseDir: string, scope: AgentScope): Promise<AgentEn
   // Always return all supported agents so they can be selected and initialized
   // from the setup menu even if their config directories don't exist yet.
   return getAgentDefinitions(baseDir, scope);
+}
+
+async function installOverlayCompanion(globalConfigDir: string): Promise<void> {
+  const repoRoot = path.resolve(__dirname, '../../..');
+  const platform = process.platform;
+  let sourceBundlePath: string | null = null;
+  let targetBundleName: string | null = null;
+  let executableRelativePath: string | null = null;
+
+  if (platform === 'darwin') {
+    sourceBundlePath = path.join(
+      repoRoot,
+      'apps',
+      'overlay-desktop',
+      'src-tauri',
+      'target',
+      'release',
+      'bundle',
+      'macos',
+      'Superplan Overlay Desktop.app',
+    );
+    targetBundleName = 'Superplan Overlay Desktop.app';
+    executableRelativePath = 'Contents/MacOS/superplan-overlay-desktop';
+  } else if (platform === 'linux') {
+    // Search for AppImage
+    const appImageDir = path.join(
+      repoRoot,
+      'apps',
+      'overlay-desktop',
+      'src-tauri',
+      'target',
+      'release',
+      'bundle',
+      'appimage',
+    );
+    if (await pathExists(appImageDir)) {
+      const entries = await fs.readdir(appImageDir);
+      const appImage = entries.find(e => e.endsWith('.AppImage'));
+      if (appImage) {
+        sourceBundlePath = path.join(appImageDir, appImage);
+        targetBundleName = 'superplan-overlay.AppImage';
+      }
+    }
+  }
+
+  if (sourceBundlePath && await pathExists(sourceBundlePath)) {
+    const binDir = path.join(globalConfigDir, 'bin');
+    await fs.mkdir(binDir, { recursive: true });
+    const targetPath = path.join(binDir, targetBundleName!);
+
+    await fs.rm(targetPath, { recursive: true, force: true });
+
+    if (platform === 'darwin') {
+      await fs.cp(sourceBundlePath, targetPath, { recursive: true });
+    } else {
+      await fs.copyFile(sourceBundlePath, targetPath);
+      await fs.chmod(targetPath, 0o755);
+    }
+
+    const installMetadataPath = getInstallMetadataPath();
+    const existingMetadata = await readInstallMetadata();
+    const nextMetadata: InstallMetadata = {
+      ...existingMetadata,
+      overlay: {
+        install_method: 'copied_prebuilt',
+        install_path: targetPath,
+        executable_path: executableRelativePath ? path.join(targetPath, executableRelativePath) : targetPath,
+        installed_at: new Date().toISOString(),
+      },
+    };
+
+    await fs.writeFile(installMetadataPath, JSON.stringify(nextMetadata, null, 2), 'utf-8');
+  }
 }
 
 async function installAgentSkills(skillsDir: string, agents: AgentEnvironment[]): Promise<void> {
@@ -803,6 +873,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
 
     if (scope === 'global' || scope === 'both') {
       await ensureGlobalSetup(globalConfigDir, globalConfigPath, globalSkillsDir, sourceSkillsDir);
+      await installOverlayCompanion(globalConfigDir);
       await writeOverlayPreference(enableGlobalOverlay, { scope: 'global', cwd });
       if (homeAgents.length > 0) {
         await installAgentSkills(globalSkillsDir, homeAgents);
