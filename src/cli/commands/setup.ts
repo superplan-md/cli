@@ -331,32 +331,18 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
     },
     {
       name: 'antigravity',
-      path: path.join(baseDir, '.agents'),
-      install_path: path.join(baseDir, '.agents', 'workflows'),
+      path: path.join(baseDir, '.antigravity'),
+      install_path: path.join(baseDir, '.antigravity', 'workflows'),
       install_kind: 'skills_namespace',
-      cleanup_paths: [path.join(baseDir, '.agents', 'workflows', 'superplan')],
+      cleanup_paths: [path.join(baseDir, '.antigravity', 'workflows', 'superplan')],
     },
   ];
 }
 
 async function detectAgents(baseDir: string, scope: AgentScope): Promise<AgentEnvironment[]> {
-  const detectedAgents: AgentEnvironment[] = [];
-  const supportedAgents = getAgentDefinitions(baseDir, scope);
-
-  for (const agent of supportedAgents) {
-    const agentDir = agent.path;
-
-    try {
-      const stat = await fs.stat(agentDir);
-      if (stat.isDirectory()) {
-        detectedAgents.push(agent);
-      }
-    } catch {
-      // Agent directory doesn't exist
-    }
-  }
-
-  return detectedAgents;
+  // Always return all supported agents so they can be selected and initialized
+  // from the setup menu even if their config directories don't exist yet.
+  return getAgentDefinitions(baseDir, scope);
 }
 
 async function installAgentSkills(skillsDir: string, agents: AgentEnvironment[]): Promise<void> {
