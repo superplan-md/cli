@@ -33,6 +33,8 @@ Superplan keeps three layers separate:
 - **Durable context**: reusable repo truths under `.superplan/context`
 
 That split makes it easier to reason about what work exists, what is happening now, and what future agents should know.
+<br/>
+![Visual Selection](src/assets/visual_selection.png)
 
 ## Installation
 

@@ -40,7 +40,8 @@ Supported install paths in the current repo are:
 
 - curl installer: `curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/alpha.4/scripts/install.sh | SUPERPLAN_REF=alpha.4 sh`
 - curl installer with custom prefix: `curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/alpha.4/scripts/install.sh | SUPERPLAN_REF=alpha.4 SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh`
-- npm from a local checkout after build: `npm install -g .`
+- npm from a local checkout after build (release mode): `npm install -g .`
+- npm link for active local development: `npm link` from the project root after `npm run build`.
 
 Important install note:
 
@@ -101,6 +102,13 @@ Important install note:
   - `depends_on_any`
 - Dependency arrays can be authored either inline like `depends_on_all: [T-001]` or as multi-line YAML-style lists.
 - Required markdown sections include:
+  - `## Graph Metadata` (must include `- Change ID: `)
+  - `## Graph Layout` (mandatory section for the parser)
+- **Graph Layout Format**: Task entries must use the exact syntax `` - `T-xxx` Task title ``.
+  - The ID must be backtick-wrapped.
+  - Dependencies are indented sub-items: `  - depends_on_all: [T-001]`.
+  - The scaffolded `tasks.md` template includes a commented-out example showing this format.
+- Required sections in the resulting task contracts (`T-xxx.md`) include:
   - `## Description`
   - `## Acceptance Criteria`
 
