@@ -15,6 +15,15 @@ export interface PrototypeTask {
   message?: string;
 }
 
+export interface PrototypeFocusedChange {
+  change_id: string;
+  title: string;
+  status: 'tracking' | 'backlog' | 'in_progress' | 'blocked' | 'needs_feedback' | 'done';
+  task_total: number;
+  task_done: number;
+  updated_at: string;
+}
+
 export interface PrototypeBoard {
   in_progress: PrototypeTask[];
   backlog: PrototypeTask[];
@@ -35,6 +44,7 @@ export interface PrototypeSnapshot {
   workspace_path: string;
   session_id: string;
   updated_at: string;
+  focused_change: PrototypeFocusedChange | null;
   active_task: PrototypeTask | null;
   board: PrototypeBoard;
   attention_state: 'normal' | 'needs_feedback' | 'all_tasks_done';
@@ -49,6 +59,7 @@ export interface PrototypeViewModel {
   secondaryLabel: string;
   workspaceLabel: string;
   updatedLabel: string;
+  focusedChange: PrototypeFocusedChange | null;
   primaryTask: PrototypeTask | null;
   columnCounts: {
     in_progress: number;

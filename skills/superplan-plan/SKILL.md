@@ -86,8 +86,10 @@ When the plan includes task scaffolding, be explicit:
 
 - do not hand-create individual `tasks/T-xxx.md` files in the plan or handoff
 - do not propose shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > ...`, `printf > ...`, or here-docs for task-file creation; shell is fine only when used to pipe JSON into `superplan task batch --stdin --json`
-- use `superplan task new <change-slug> --title "<title>" --json` only when one task contract should be created now
-- use `superplan task batch --stdin --json` when two or more task contracts are already clear enough to author in one pass
+- author `.superplan/changes/<change-slug>/tasks.md` first and include explicit `task_id` ownership there before proposing task scaffolding
+- run `superplan validate <change-slug> --json` before task scaffolding so graph errors fail fast
+- use `superplan task new <change-slug> --task-id <task_id> --json` only when one graph-declared task contract should be created now
+- use `superplan task batch --stdin --json` when two or more graph-declared task contracts are already clear enough to author in one pass
 - when a graph and dependencies are already clear for multiple tasks, prefer one batch authoring step over repeated single-task creation
 - prefer stdin over temporary files in agent-driven task authoring
 

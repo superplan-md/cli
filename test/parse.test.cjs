@@ -8,6 +8,7 @@ const {
   parseCliJson,
   pathExists,
   runCli,
+  writeChangeGraph,
   writeFile,
 } = require('./helpers.cjs');
 
@@ -29,6 +30,12 @@ test('parse from a nested repo directory resolves the repo-root superplan worksp
 
   await fs.mkdir(path.join(sandbox.cwd, '.git'), { recursive: true });
   await fs.mkdir(nestedCwd, { recursive: true });
+  await writeChangeGraph(sandbox.cwd, 'feature-a', {
+    title: 'Feature A',
+    entries: [
+      { task_id: 'T-001', title: 'Parse from nested cwd' },
+    ],
+  });
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'feature-a', 'tasks', 'T-001.md'), `---
 task_id: T-001
 status: pending
@@ -55,6 +62,21 @@ Parse from nested cwd
 test('parse extracts task fields, dependencies, priority, and acceptance criteria from a task file', async () => {
   const sandbox = await makeSandbox('superplan-parse-file-');
   const taskPath = path.join(sandbox.cwd, '.superplan', 'changes', 'feature-a', 'tasks', 'T-001.md');
+
+  await writeChangeGraph(sandbox.cwd, 'feature-a', {
+    title: 'Feature A',
+    entries: [
+      {
+        task_id: 'T-001',
+        title: 'Ship the parser',
+        depends_on_all: ['T-000'],
+        depends_on_any: ['T-010', 'T-011'],
+      },
+      { task_id: 'T-000', title: 'Upstream all dependency' },
+      { task_id: 'T-010', title: 'Any dependency A' },
+      { task_id: 'T-011', title: 'Any dependency B' },
+    ],
+  });
 
   await writeFile(taskPath, `---
 task_id: T-001
@@ -99,6 +121,22 @@ test('parse accepts multi-line yaml-style dependency lists in frontmatter', asyn
   const sandbox = await makeSandbox('superplan-parse-multiline-');
   const taskPath = path.join(sandbox.cwd, '.superplan', 'changes', 'feature-b', 'tasks', 'T-002.md');
 
+  await writeChangeGraph(sandbox.cwd, 'feature-b', {
+    title: 'Feature B',
+    entries: [
+      {
+        task_id: 'T-002',
+        title: 'Ship the parser with friendlier frontmatter',
+        depends_on_all: ['T-000', 'T-001'],
+        depends_on_any: ['T-010', 'T-011'],
+      },
+      { task_id: 'T-000', title: 'Upstream all dependency A' },
+      { task_id: 'T-001', title: 'Upstream all dependency B' },
+      { task_id: 'T-010', title: 'Any dependency A' },
+      { task_id: 'T-011', title: 'Any dependency B' },
+    ],
+  });
+
   await writeFile(taskPath, `---
 task_id: T-002
 status: pending
@@ -132,6 +170,14 @@ Ship the parser with friendlier frontmatter
 
 test('parse reports duplicate ids and invalid task diagnostics across a change set', async () => {
   const sandbox = await makeSandbox('superplan-parse-diagnostics-');
+
+  await writeChangeGraph(sandbox.cwd, 'demo', {
+    title: 'Demo',
+    entries: [
+      { task_id: 'T-001', title: 'Valid enough' },
+      { task_id: 'T-002', title: 'Broken duplicate' },
+    ],
+  });
 
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), `---
 task_id: T-001

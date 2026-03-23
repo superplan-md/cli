@@ -1,4 +1,4 @@
-import type { PrototypeSnapshot, PrototypeTask } from './prototype-state.js';
+import type { PrototypeFocusedChange, PrototypeSnapshot, PrototypeTask } from './prototype-state.js';
 
 export function isTaskReadyForReview(task: PrototypeTask | null | undefined): boolean;
 
@@ -18,6 +18,8 @@ export function createCompactPresentationModel(
   options?: { detailExpanded?: boolean },
 ): {
   primaryTask: PrototypeTask | null;
+  focusedChange: PrototypeFocusedChange | null;
+  focusKind: 'task' | 'change' | null;
   presentation: 'chip' | 'detail';
   showHideAction: boolean;
   showCollapseAction: boolean;

@@ -7,7 +7,7 @@ description: Use when Superplan is active and a repo-work request needs an engag
 
 ## Overview
 
-Decide whether Superplan should engage at all, and if it should, choose the smallest useful structure depth.
+Decide whether Superplan should engage at all, and if it should, choose the smallest useful structure depth without under-shaping ambiguous work.
 
 This skill owns the `should_superplan_engage?` decision and the initial depth choice.
 
@@ -67,6 +67,7 @@ Use this decision order:
 
 Prefer under-ceremony over over-ceremony only until trust or coordination would be lost.
 If lack of structure would hide real dependencies, choose the next deeper mode.
+If the input is a dense requirement dump, JTBD list, or multi-constraint brief, bias upward rather than pretending it is already a clean task graph.
 
 ## CLI Discipline
 
@@ -81,15 +82,15 @@ Routing is not permission to explore the CLI surface.
 - `stay_out`: direct answer, no durable artifact
 - `direct`: engaged but tiny and obvious; usually create one lightweight tracked task for visibility, then execute immediately
 - `task`: one bounded, reviewable task contract is enough
-- `slice`: bounded multi-step work; usually needs a small implementation plan plus a small task graph
-- `program`: broad, ambiguous, multi-workstream, or major-interface work; may need plan plus graph plus specs
+- `slice`: bounded multi-step work; usually needs a small implementation plan plus a small task graph, and should add a spec when target truth is still fuzzy
+- `program`: broad, ambiguous, multi-workstream, or major-interface work; should usually route through clarification plus plan/spec work before final task-graph authoring
 
 Expected artifact pattern by depth:
 
-- `direct`: usually `tasks.md` plus one lightweight CLI-minted task contract
-- `task`: `tasks.md` plus one normal CLI-minted task contract
-- `slice`: usually `plan.md`, `tasks.md`, and CLI-minted `tasks/T-*.md`; add specs only when target misunderstanding is the bigger risk than sequencing
-- `program`: `plan.md`, `tasks.md`, CLI-minted `tasks/T-*.md`, and specs where multiple interfaces, expectations, or product truths need durable capture
+- `direct`: usually `tasks.md` plus one CLI-scaffolded lightweight task contract
+- `task`: `tasks.md` plus one CLI-scaffolded normal task contract
+- `slice`: usually `plan.md`, `tasks.md`, and CLI-scaffolded `tasks/T-*.md`; add specs when target misunderstanding is the bigger risk than sequencing
+- `program`: clarification and/or brainstorm output, then `plan.md`, `tasks.md`, CLI-scaffolded `tasks/T-*.md`, and specs where multiple interfaces, expectations, or product truths need durable capture
 
 Graph rule:
 
@@ -121,6 +122,7 @@ See `references/depth-modes.md`.
 - implementing the work here
 - forcing spec-first or plan-first ritual
 - over-decomposing small work
+- under-shaping large ambiguous work just to preserve the appearance of low ceremony
 - routing to context first just because the repo is large
 - treating task files as the whole tracked model
 - choosing `program` just because the request sounds important
@@ -191,6 +193,8 @@ Likely handoffs:
 - `superplan-context` when context is the real blocker
 - no further Superplan action for `stay_out`
 
+For large ambiguous `program` work, the handoff should make clear that downstream shaping is expected to capture clarification, spec, or plan truth before the final task graph is scaffolded.
+
 ## Future CLI Hooks
 
 - `superplan route --json`
@@ -227,6 +231,7 @@ Should route to `program`:
 - large, ambiguous, or multi-workstream work
 - work spanning multiple interfaces or product truths
 - work where richer artifact structure is needed to preserve alignment
+- dense pasted requirement or JTBD dumps that are not yet trustworthy as a final task graph
 
 Should route to context first:
 
@@ -241,4 +246,4 @@ Pressure cases:
 
 Pass condition:
 
-The skill chooses the smallest useful depth, preserves stay-out behavior, routes context gaps correctly, and does not silently absorb shaping or execution.
+The skill chooses the smallest useful depth, preserves stay-out behavior, routes context gaps correctly, does not silently absorb shaping or execution, and does not flatten dense ambiguous work into an under-shaped task graph.

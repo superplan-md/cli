@@ -44,10 +44,20 @@ type OverlayTask = {
   message?: string;
 };
 
+type OverlayChange = {
+  change_id: string;
+  title: string;
+  status: 'tracking' | 'backlog' | 'in_progress' | 'blocked' | 'needs_feedback' | 'done';
+  task_total: number;
+  task_done: number;
+  updated_at: string;
+};
+
 type OverlaySnapshot = {
   workspace_path: string;
   session_id: string;
   updated_at: string;
+  focused_change: OverlayChange | null;
   active_task: OverlayTask | null;
   board: {
     in_progress: OverlayTask[];
@@ -242,6 +252,10 @@ function getCompactStatusLabel(viewModel: PrototypeViewModel): string {
   }
 
   if (!viewModel.primaryTask) {
+    if (viewModel.focusedChange) {
+      return `Tracking ${viewModel.focusedChange.title}.`;
+    }
+
     return 'Waiting for the next task.';
   }
 
@@ -251,6 +265,10 @@ function getCompactStatusLabel(viewModel: PrototypeViewModel): string {
 function getCompactBoardLabel(viewModel: PrototypeViewModel): string {
   if (viewModel.primaryTask) {
     return `Open full board for ${viewModel.primaryTask.title}.`;
+  }
+
+  if (viewModel.focusedChange) {
+    return `Open full board for ${viewModel.focusedChange.title}.`;
   }
 
   return 'Open full board.';
@@ -680,6 +698,43 @@ function compactDetailDescriptionMarkup(
   return escapeHtml(viewModel.secondaryLabel);
 }
 
+function getCompactChangeEyebrow(change: OverlayChange): string {
+  if (change.status === 'tracking') {
+    return 'Tracking change';
+  }
+
+  if (change.status === 'blocked') {
+    return 'Change blocked';
+  }
+
+  if (change.status === 'needs_feedback') {
+    return 'Needs your input';
+  }
+
+  if (change.status === 'done') {
+    return 'Change complete';
+  }
+
+  return 'Change in motion';
+}
+
+function getCompactChangeHint(change: OverlayChange): string {
+  if (change.task_total === 0) {
+    return 'Waiting for the first task contract.';
+  }
+
+  if (change.status === 'done') {
+    return 'All tracked tasks are complete.';
+  }
+
+  const remainingTasks = Math.max(0, change.task_total - change.task_done);
+  if (remainingTasks === 0) {
+    return 'No remaining tasks.';
+  }
+
+  return `${remainingTasks} ${remainingTasks === 1 ? 'task remains' : 'tasks remain'}.`;
+}
+
 function compactProgressMarkup(snapshot: OverlaySnapshot): string {
   const progress = getCompactTaskProgress(snapshot);
   const radius = 17;
@@ -765,6 +820,53 @@ function compactIndicatorMarkup(viewModel: PrototypeViewModel): string {
           >
             ${compactBoardIconMarkup()}
           </button>
+        </div>
+      </section>
+    `;
+  }
+
+  if (shouldShowDetail && presentation?.focusKind === 'change' && presentation.focusedChange) {
+    const change = presentation.focusedChange;
+    const hint = compactHintMessage ?? getCompactChangeHint(change);
+
+    return `
+      <section
+        class="compact-indicator compact-indicator--change_notice"
+        aria-label="${escapeHtml(statusLabel)}"
+      >
+        <div
+          class="compact-indicator__main"
+          data-action="show-compact-message"
+          data-overlay-drag
+        >
+          ${compactMarkMarkup(false)}
+          <span class="compact-indicator__content">
+            <span class="compact-indicator__eyebrow">${escapeHtml(getCompactChangeEyebrow(change))}</span>
+            <span class="compact-indicator__title">${escapeHtml(change.title)}</span>
+            <span class="compact-indicator__hint" role="status">${escapeHtml(hint)}</span>
+          </span>
+        </div>
+        <div class="compact-indicator__attention-actions">
+          <button
+            class="compact-indicator__utility-button compact-indicator__utility-button--close"
+            data-action="hide-overlay"
+            aria-label="Hide overlay"
+            type="button"
+          >
+            ${compactCloseIconMarkup()}
+          </button>
+          ${presentation.showBoardAction
+            ? `
+              <button
+                class="compact-indicator__board-button compact-indicator__board-button--attention"
+                data-action="open-board"
+                aria-label="${escapeHtml(boardLabel)}"
+                type="button"
+              >
+                ${compactBoardIconMarkup()}
+              </button>
+            `
+            : ''}
         </div>
       </section>
     `;

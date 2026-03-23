@@ -2,6 +2,7 @@
 
 Structure depth is a workflow choice.
 Choose the smallest mode that preserves trust, visibility, and correct downstream shaping.
+Do not use "smallest" as an excuse to skip clarification, spec, or plan work when ambiguity is the real blocker.
 
 ## `stay_out`
 
@@ -67,6 +68,7 @@ Use when:
 - the work is bounded but non-trivial
 - sequencing or decomposition matters
 - one workstream contains multiple meaningful steps
+- the request is clear enough that a small plan and graph can be trusted without broader clarification
 
 Examples:
 
@@ -88,6 +90,7 @@ Use when:
 - the work is broad, ambiguous, or multi-workstream
 - multiple interfaces or product truths need durable alignment
 - richer artifact structure is needed before execution stays trustworthy
+- the raw request is a dense requirement dump, JTBD list, or multi-constraint brief that should not be trusted as a final task graph yet
 
 Examples:
 
@@ -97,6 +100,7 @@ Examples:
 
 Result:
 
+- clarification or brainstorm output when expectations are still unclear
 - `plan.md`
 - `tasks.md`
 - `tasks/T-*.md`

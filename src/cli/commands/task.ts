@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { loadChangeGraph } from '../graph';
 import { parse } from './parse';
 import { refreshOverlaySnapshot } from '../overlay-runtime';
 import {
@@ -11,11 +12,8 @@ import {
 import { resolveSuperplanRoot } from '../workspace-root';
 import type { OverlayEventKind, OverlayRequestedAction } from '../../shared/overlay';
 import {
-  appendTaskEntryToIndex,
   buildTaskContract,
   getChangePaths,
-  getNextTaskId,
-  getNextTaskIds,
   isValidChangeSlug,
   pathExists,
   type ChangePaths,
@@ -82,15 +80,10 @@ interface TaskBatchCreatedTask {
 }
 
 interface TaskBatchItem {
-  ref: string | null;
-  title: string;
+  taskId: string;
   priority: ScaffoldPriority;
   description?: string;
   acceptanceCriteria: string[];
-  dependsOnAll: string[];
-  dependsOnAny: string[];
-  dependsOnAllRefs: string[];
-  dependsOnAnyRefs: string[];
 }
 
 type TaskLifecycleStatus = 'in_progress' | 'in_review' | 'done' | 'blocked' | 'needs_feedback';
@@ -337,6 +330,24 @@ async function refreshOverlayFromMergedTasks(options: {
   return null;
 }
 
+async function ensureOverlayFromMergedTasks(options: {
+  command: string;
+  preferredAlerts?: OverlayEventKind[];
+}): Promise<OverlayRuntimeNotice | undefined> {
+  const overlayVisibility = await refreshOverlayFromMergedTasks({
+    preferredAlerts: options.preferredAlerts,
+    requestedAction: 'ensure',
+  });
+
+  await appendOverlayEvent({
+    command: options.command,
+    requestedAction: 'ensure',
+    visibility: overlayVisibility,
+  });
+
+  return createOverlayRuntimeNotice('ensure', overlayVisibility);
+}
+
 function getTaskInvalidError(): TaskErrorResult {
   return {
     ok: false,
@@ -368,8 +379,8 @@ export function getTaskCommandHelpMessage(options: {
     'Available task commands:',
     'Task commands:',
     '  show <task_id>               Show one task and its readiness details',
-    '  new <change-slug>            Create one task contract in a change',
-    '  batch <change-slug> --stdin  Create multiple task contracts from JSON stdin',
+    '  new <change-slug>            Scaffold one graph-declared task contract',
+    '  batch <change-slug> --stdin  Scaffold multiple graph-declared task contracts from JSON stdin',
     '  complete <task_id>           Finish implementation and send the task to review',
     '  approve <task_id>            Approve an in-review task and mark it done',
     '  reopen <task_id>             Move a review or done task back into implementation',
@@ -379,15 +390,15 @@ export function getTaskCommandHelpMessage(options: {
     '',
     'For a fast start: superplan run --json',
     'To run a specific task: superplan run <task_id> --json',
-    'For tracked authoring: do not hand-create tasks/T-xxx.md; shape changes/<slug>/tasks.md first, then use task new for one task or task batch for multiple tasks.',
+    'For tracked authoring: shape changes/<slug>/tasks.md first, validate it, then scaffold task contracts from graph-declared ids.',
     '',
     'Some recovery commands still exist but are intentionally hidden from the default help surface.',
     '',
     'Examples:',
     '  superplan task show T-001 --json',
     '  superplan task --help',
-    '  superplan task new improve-task-authoring --title "Add task template" --json',
-    '  printf \'[{"ref":"parser","title":"Add parser"},{"title":"Add tests","depends_on_all_refs":["parser"]}]\' | superplan task batch improve-task-authoring --stdin --json',
+    '  superplan task new improve-task-authoring --task-id T-001 --json',
+    '  printf \'{"tasks":[{"task_id":"T-001"},{"task_id":"T-002","priority":"high"}]}\' | superplan task batch improve-task-authoring --stdin --json',
     '  superplan run T-001 --json',
     '  superplan task approve T-001 --json',
     '  superplan task block T-001 --reason "Waiting on review" --json',
@@ -546,6 +557,30 @@ async function resolveTaskCreationTarget(changeSlug: string): Promise<{ changePa
   return { changePaths };
 }
 
+async function loadValidatedChangeGraph(changeSlug: string, changeRoot: string): Promise<{
+  graphTasks?: Map<string, { task_id: string; title: string }>;
+  error?: TaskErrorResult;
+}> {
+  const graphResult = await loadChangeGraph(changeRoot);
+
+  if (!graphResult.graph || graphResult.diagnostics.length > 0) {
+    return {
+      error: {
+        ok: false,
+        error: {
+          code: 'GRAPH_INVALID',
+          message: 'Task graph is invalid. Run superplan validate <change-slug> --json and fix graph diagnostics before scaffolding task contracts.',
+          retryable: false,
+        },
+      },
+    };
+  }
+
+  return {
+    graphTasks: new Map(graphResult.graph.tasks.map(task => [task.task_id, task])),
+  };
+}
+
 function normalizeTaskBatchPayload(rawPayload: unknown): { items?: TaskBatchItem[]; error?: TaskErrorResult } {
   const rawItems = Array.isArray(rawPayload)
     ? rawPayload
@@ -572,7 +607,7 @@ function normalizeTaskBatchPayload(rawPayload: unknown): { items?: TaskBatchItem
   }
 
   const items: TaskBatchItem[] = [];
-  const seenRefs = new Set<string>();
+  const seenTaskIds = new Set<string>();
 
   for (const [index, rawItem] of rawItems.entries()) {
     const itemLabel = `Task batch item ${index + 1}`;
@@ -586,39 +621,25 @@ function normalizeTaskBatchPayload(rawPayload: unknown): { items?: TaskBatchItem
       };
     }
 
-    const title = normalizeOptionalString(rawItem.title);
-    if (!title) {
+    const taskId = normalizeOptionalString(rawItem.task_id);
+    if (!taskId) {
       return {
         error: getTaskBatchError(
-          'TASK_BATCH_TITLE_REQUIRED',
-          `${itemLabel} title is required and must be a non-empty string`,
+          'TASK_BATCH_TASK_ID_REQUIRED',
+          `${itemLabel} task_id is required and must be a non-empty string`,
         ),
       };
     }
 
-    let ref: string | null = null;
-    if (rawItem.ref !== undefined) {
-      ref = normalizeOptionalString(rawItem.ref);
-      if (!ref) {
-        return {
-          error: getTaskBatchError(
-            'TASK_BATCH_INVALID_PAYLOAD',
-            `${itemLabel} ref must be a non-empty string when provided`,
-          ),
-        };
-      }
-
-      if (seenRefs.has(ref)) {
-        return {
-          error: getTaskBatchError(
-            'TASK_BATCH_DUPLICATE_REF',
-            `Task batch ref "${ref}" is duplicated`,
-          ),
-        };
-      }
-
-      seenRefs.add(ref);
+    if (seenTaskIds.has(taskId)) {
+      return {
+        error: getTaskBatchError(
+          'TASK_BATCH_DUPLICATE_TASK_ID',
+          `Task batch task_id "${taskId}" is duplicated`,
+        ),
+      };
     }
+    seenTaskIds.add(taskId);
 
     if (rawItem.priority !== undefined && typeof rawItem.priority !== 'string') {
       return {
@@ -663,61 +684,12 @@ function normalizeTaskBatchPayload(rawPayload: unknown): { items?: TaskBatchItem
       return acceptanceCriteriaResult;
     }
 
-    const dependsOnAllResult = normalizeStringListField(rawItem.depends_on_all, itemLabel, 'depends_on_all');
-    if (dependsOnAllResult.error) {
-      return dependsOnAllResult;
-    }
-
-    const dependsOnAnyResult = normalizeStringListField(rawItem.depends_on_any, itemLabel, 'depends_on_any');
-    if (dependsOnAnyResult.error) {
-      return dependsOnAnyResult;
-    }
-
-    const dependsOnAllRefsResult = normalizeStringListField(rawItem.depends_on_all_refs, itemLabel, 'depends_on_all_refs');
-    if (dependsOnAllRefsResult.error) {
-      return dependsOnAllRefsResult;
-    }
-
-    const dependsOnAnyRefsResult = normalizeStringListField(rawItem.depends_on_any_refs, itemLabel, 'depends_on_any_refs');
-    if (dependsOnAnyRefsResult.error) {
-      return dependsOnAnyRefsResult;
-    }
-
     items.push({
-      ref,
-      title,
+      taskId,
       priority,
       ...(description ? { description } : {}),
       acceptanceCriteria: acceptanceCriteriaResult.values!,
-      dependsOnAll: dependsOnAllResult.values!,
-      dependsOnAny: dependsOnAnyResult.values!,
-      dependsOnAllRefs: dependsOnAllRefsResult.values!,
-      dependsOnAnyRefs: dependsOnAnyRefsResult.values!,
     });
-  }
-
-  const knownRefs = new Set(items.map(item => item.ref).filter((ref): ref is string => Boolean(ref)));
-
-  for (const item of items) {
-    for (const dependencyRef of [...item.dependsOnAllRefs, ...item.dependsOnAnyRefs]) {
-      if (!knownRefs.has(dependencyRef)) {
-        return {
-          error: getTaskBatchError(
-            'TASK_BATCH_UNKNOWN_REF',
-            `Task batch dependency ref "${dependencyRef}" was not found in the payload`,
-          ),
-        };
-      }
-
-      if (item.ref && dependencyRef === item.ref) {
-        return {
-          error: getTaskBatchError(
-            'TASK_BATCH_SELF_REF',
-            `Task batch item "${item.ref}" cannot depend on itself`,
-          ),
-        };
-      }
-    }
   }
 
   return { items };
@@ -899,8 +871,8 @@ function computeMergedTaskReadiness(tasks: ParsedTask[]): ParsedTask[] {
   });
 }
 
-export async function loadTasks(): Promise<TaskListResult> {
-  const mergedTasksResult = await getMergedTasks();
+export async function loadTasks(options?: { skipInvariant?: boolean }): Promise<TaskListResult> {
+  const mergedTasksResult = await getMergedTasks(options);
   if (mergedTasksResult.error) {
     return mergedTasksResult.error;
   }
@@ -1111,13 +1083,22 @@ async function fixTasks(command = 'task fix'): Promise<TaskCommandResult> {
 
   if (actions.length > 0) {
     await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
-    await refreshOverlayFromMergedTasks();
+    const overlay = await ensureOverlayFromMergedTasks({ command });
+
+    return {
+      ok: true,
+      data: {
+        fixed: true,
+        actions,
+        ...(overlay ? { overlay } : {}),
+      },
+    };
   }
 
   return {
     ok: true,
     data: {
-      fixed: actions.length > 0,
+      fixed: false,
       actions,
     },
   };
@@ -1551,7 +1532,7 @@ async function completeTask(taskId: string, command = 'task complete'): Promise<
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.review_requested', taskId, { command, workflowPhase: 'review' });
-  await refreshOverlayFromMergedTasks();
+  const overlay = await ensureOverlayFromMergedTasks({ command });
 
   return {
     ok: true,
@@ -1559,6 +1540,7 @@ async function completeTask(taskId: string, command = 'task complete'): Promise<
       task_id: taskId,
       status: 'in_review',
       task: buildRuntimeTaskSnapshot(matchedTask, runtimeState.tasks[taskId]),
+      ...(overlay ? { overlay } : {}),
     },
   };
 }
@@ -1608,7 +1590,7 @@ async function approveTask(taskId: string, command = 'task approve'): Promise<Ta
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.approved', taskId, { command, workflowPhase: 'review' });
-  await refreshOverlayFromMergedTasks();
+  const overlay = await ensureOverlayFromMergedTasks({ command });
 
   return {
     ok: true,
@@ -1616,6 +1598,7 @@ async function approveTask(taskId: string, command = 'task approve'): Promise<Ta
       task_id: taskId,
       status: 'done',
       task: buildRuntimeTaskSnapshot(matchedTask, runtimeState.tasks[taskId]),
+      ...(overlay ? { overlay } : {}),
     },
   };
 }
@@ -1658,7 +1641,7 @@ async function blockTask(taskId: string, reason?: string, command = 'task block'
     workflowPhase: 'feedback',
     ...(reason ? { reasonCode: reason } : {}),
   });
-  await refreshOverlayFromMergedTasks();
+  const overlay = await ensureOverlayFromMergedTasks({ command });
 
   return {
     ok: true,
@@ -1666,6 +1649,7 @@ async function blockTask(taskId: string, reason?: string, command = 'task block'
       task_id: taskId,
       status: 'blocked',
       task: buildRuntimeTaskSnapshot(matchedTask, runtimeState.tasks[taskId]),
+      ...(overlay ? { overlay } : {}),
     },
   };
 }
@@ -1708,7 +1692,10 @@ async function requestFeedbackTask(taskId: string, message?: string, command = '
     workflowPhase: 'feedback',
     ...(message ? { reasonCode: message } : {}),
   });
-  await refreshOverlayFromMergedTasks({ preferredAlerts: ['needs_feedback'] });
+  const overlay = await ensureOverlayFromMergedTasks({
+    command,
+    preferredAlerts: ['needs_feedback'],
+  });
 
   return {
     ok: true,
@@ -1716,6 +1703,7 @@ async function requestFeedbackTask(taskId: string, message?: string, command = '
       task_id: taskId,
       status: 'needs_feedback',
       task: buildRuntimeTaskSnapshot(matchedTask, runtimeState.tasks[taskId]),
+      ...(overlay ? { overlay } : {}),
     },
   };
 }
@@ -1834,18 +1822,19 @@ async function resetTask(taskId: string, command = 'task reset'): Promise<TaskCo
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.reset', taskId, { command, workflowPhase: 'runtime' });
-  await refreshOverlayFromMergedTasks();
+  const overlay = await ensureOverlayFromMergedTasks({ command });
 
   return {
     ok: true,
     data: {
       task_id: taskId,
       reset: true,
+      ...(overlay ? { overlay } : {}),
     },
   };
 }
 
-async function createTask(changeSlug: string, title?: string, rawPriority?: string): Promise<TaskCommandResult> {
+async function createTask(changeSlug: string, taskId: string | undefined, rawPriority?: string): Promise<TaskCommandResult> {
   const priority = parsePriority(rawPriority);
   if (!priority) {
     return {
@@ -1864,18 +1853,54 @@ async function createTask(changeSlug: string, title?: string, rawPriority?: stri
   }
 
   const changePaths = taskCreationTarget.changePaths!;
-  await fs.mkdir(changePaths.tasksDir, { recursive: true });
+  const graphResult = await loadValidatedChangeGraph(changeSlug, changePaths.changeRoot);
+  if (graphResult.error) {
+    return graphResult.error;
+  }
 
-  const taskId = await getNextTaskId(changePaths.changesRoot);
+  if (!taskId) {
+    return {
+      ok: false,
+      error: {
+        code: 'TASK_ID_REQUIRED',
+        message: 'Task scaffolding requires --task-id <task_id> so the task contract matches a graph-declared entry.',
+        retryable: false,
+      },
+    };
+  }
+
+  const graphTask = graphResult.graphTasks!.get(taskId);
+  if (!graphTask) {
+    return {
+      ok: false,
+      error: {
+        code: 'TASK_NOT_IN_GRAPH',
+        message: `Task ${taskId} is not declared in ${path.relative(process.cwd(), changePaths.tasksIndexPath) || changePaths.tasksIndexPath}.`,
+        retryable: false,
+      },
+    };
+  }
+
+  await fs.mkdir(changePaths.tasksDir, { recursive: true });
   const taskPath = path.join(changePaths.tasksDir, `${taskId}.md`);
-  const summary = title?.trim() || 'Describe the task.';
+  if (await pathExists(taskPath)) {
+    return {
+      ok: false,
+      error: {
+        code: 'TASK_ALREADY_SCAFFOLDED',
+        message: `Task contract already exists for ${taskId}.`,
+        retryable: false,
+      },
+    };
+  }
 
   await fs.writeFile(taskPath, buildTaskContract({
     taskId,
-    title,
+    changeId: changeSlug,
+    title: graphTask.title,
     priority,
+    description: graphTask.title,
   }), 'utf-8');
-  await appendTaskEntryToIndex(changePaths.tasksIndexPath, changeSlug, taskId, summary);
   const overlayVisibility = await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
   await appendOverlayEvent({
     command: 'task new',
@@ -1974,53 +1999,61 @@ async function createTaskBatchFromPayload(
     return normalizedBatch.error;
   }
 
-  const taskIds = await getNextTaskIds(changePaths.changesRoot, normalizedBatch.items!.length);
-  const refToTaskId = new Map<string, string>();
-
-  normalizedBatch.items!.forEach((item, index) => {
-    if (item.ref) {
-      refToTaskId.set(item.ref, taskIds[index]);
-    }
-  });
+  const graphResult = await loadValidatedChangeGraph(changeSlug, changePaths.changeRoot);
+  if (graphResult.error) {
+    return graphResult.error;
+  }
 
   await fs.mkdir(changePaths.tasksDir, { recursive: true });
 
   const created: TaskBatchCreatedTask[] = [];
 
-  for (const [index, item] of normalizedBatch.items!.entries()) {
-    const taskId = taskIds[index];
+  for (const item of normalizedBatch.items!) {
+    const taskId = item.taskId;
+    const graphTask = graphResult.graphTasks!.get(taskId);
+    if (!graphTask) {
+      return {
+        ok: false,
+        error: {
+          code: 'TASK_NOT_IN_GRAPH',
+          message: `Task ${taskId} is not declared in ${path.relative(process.cwd(), changePaths.tasksIndexPath) || changePaths.tasksIndexPath}.`,
+          retryable: false,
+        },
+      };
+    }
+
     const taskPath = path.join(changePaths.tasksDir, `${taskId}.md`);
-    const dependsOnAll = [...new Set([
-      ...item.dependsOnAll,
-      ...item.dependsOnAllRefs.map(ref => refToTaskId.get(ref)!),
-    ])];
-    const dependsOnAny = [...new Set([
-      ...item.dependsOnAny,
-      ...item.dependsOnAnyRefs.map(ref => refToTaskId.get(ref)!),
-    ])];
+    if (await pathExists(taskPath)) {
+      return {
+        ok: false,
+        error: {
+          code: 'TASK_ALREADY_SCAFFOLDED',
+          message: `Task contract already exists for ${taskId}.`,
+          retryable: false,
+        },
+      };
+    }
 
     await fs.writeFile(taskPath, buildTaskContract({
       taskId,
-      title: item.title,
+      changeId: changeSlug,
+      title: graphTask.title,
       priority: item.priority,
-      description: item.description ?? item.title,
+      description: item.description ?? graphTask.title,
       acceptanceCriteria: item.acceptanceCriteria,
-      dependsOnAll,
-      dependsOnAny,
     }), 'utf-8');
-    await appendTaskEntryToIndex(changePaths.tasksIndexPath, changeSlug, taskId, item.title);
 
     created.push({
       task_id: taskId,
-      ref: item.ref,
-      title: item.title,
+      ref: null,
+      title: graphTask.title,
       path: path.relative(process.cwd(), taskPath) || taskPath,
     });
   }
 
   const parsedTasksResult = await getParsedTasks();
   const createdTasks = parsedTasksResult.tasks
-    ? taskIds
+    ? normalizedBatch.items!.map(item => item.taskId)
       .map(taskId => parsedTasksResult.tasks!.find(taskItem => taskItem.task_id === taskId))
       .filter((taskItem): taskItem is ParsedTask => Boolean(taskItem))
     : [];
@@ -2071,7 +2104,7 @@ function getPositionalArgs(args: string[]): string[] {
       continue;
     }
 
-    if (arg === '--reason' || arg === '--message' || arg === '--title' || arg === '--priority' || arg === '--file') {
+    if (arg === '--reason' || arg === '--message' || arg === '--title' || arg === '--priority' || arg === '--file' || arg === '--task-id') {
       index += 1;
       continue;
     }
@@ -2088,9 +2121,9 @@ export async function task(args: string[]): Promise<TaskCommandResult> {
   const subjectId = positionalArgs[1];
   const reason = getOptionValue(args, '--reason');
   const message = getOptionValue(args, '--message');
-  const title = getOptionValue(args, '--title');
   const priority = getOptionValue(args, '--priority');
   const filePath = getOptionValue(args, '--file');
+  const taskIdOption = getOptionValue(args, '--task-id');
   const useStdin = hasFlag(args, '--stdin');
 
   if (!subcommand) {
@@ -2125,7 +2158,7 @@ export async function task(args: string[]): Promise<TaskCommandResult> {
       });
     }
 
-    return createTask(subjectId, title, priority);
+    return createTask(subjectId, taskIdOption, priority);
   }
 
   if (subcommand === 'batch') {

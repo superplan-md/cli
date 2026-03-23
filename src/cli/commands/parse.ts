@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { loadChangeGraph } from '../graph';
 import { resolveWorkspaceRoot } from '../workspace-root';
 
 interface ParseOptions {
@@ -11,13 +12,13 @@ interface AcceptanceCriterion {
   done: boolean;
 }
 
-interface ParseDiagnostic {
+export interface ParseDiagnostic {
   code: string;
   message: string;
   task_id?: string;
 }
 
-interface ParsedTask {
+export interface ParsedTask {
   task_id: string;
   status: string;
   priority: 'high' | 'medium' | 'low';
@@ -51,7 +52,7 @@ function parseStringArray(value: string): string[] {
 
   return normalizedValue
     .split(',')
-    .map(item => item.trim().replace(/^['"]|['"]$/g, ''))
+    .map(item => item.trim().replace(/^['"`]|['"`]$/g, ''))
     .filter(Boolean);
 }
 
@@ -65,7 +66,7 @@ function parseIndentedStringList(lines: string[], startIndex: number): { values:
       break;
     }
 
-    const value = matchedLine[1].trim().replace(/^['"]|['"]$/g, '');
+    const value = matchedLine[1].trim().replace(/^['"`]|['"`]$/g, '');
     if (value) {
       values.push(value);
     }
@@ -304,8 +305,6 @@ function buildTask(lines: string[], filePath: string): { task: ParsedTask; diagn
   };
 
   const diagnostics = buildTaskDiagnostics(task, filePath);
-  task.issues = diagnostics.map(diagnostic => diagnostic.code);
-  task.is_valid = task.issues.length === 0;
 
   return {
     task,
@@ -335,6 +334,15 @@ function computeTaskReadiness(tasks: ParsedTask[]): void {
   }
 }
 
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function resolveTaskFiles(targetPath: string): Promise<string[]> {
   const stats = await fs.stat(targetPath);
 
@@ -342,7 +350,9 @@ async function resolveTaskFiles(targetPath: string): Promise<string[]> {
     return [targetPath];
   }
 
-  const tasksDir = path.join(targetPath, 'tasks');
+  const tasksDir = path.basename(targetPath) === 'tasks'
+    ? targetPath
+    : path.join(targetPath, 'tasks');
   const taskEntries = await fs.readdir(tasksDir, { withFileTypes: true });
 
   return taskEntries
@@ -357,32 +367,175 @@ async function parseTaskFile(filePath: string): Promise<{ task: ParsedTask; diag
   return buildTask(lines, filePath);
 }
 
-async function resolveDefaultTaskFiles(changesDir: string): Promise<string[]> {
-  const entries = await fs.readdir(changesDir, { withFileTypes: true });
-  const taskFiles: string[] = [];
+async function resolveChangeDirs(targetPath: string): Promise<string[]> {
+  const stats = await fs.stat(targetPath);
+  if (stats.isFile()) {
+    return [];
+  }
+
+  const directTasksDir = path.basename(targetPath) === 'tasks'
+    ? targetPath
+    : path.join(targetPath, 'tasks');
+  if (await pathExists(directTasksDir)) {
+    return [path.basename(targetPath) === 'tasks' ? path.dirname(targetPath) : targetPath];
+  }
+
+  const entries = await fs.readdir(targetPath, { withFileTypes: true });
+  const changeDirs: string[] = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) {
       continue;
     }
 
-    const changeDir = path.join(changesDir, entry.name);
-    const tasksDir = path.join(changeDir, 'tasks');
+    const changeDir = path.join(targetPath, entry.name);
+    if (await pathExists(path.join(changeDir, 'tasks'))) {
+      changeDirs.push(changeDir);
+    }
+  }
 
+  return changeDirs.sort((left, right) => left.localeCompare(right));
+}
+
+function getChangeDirForTaskFile(filePath: string): string | null {
+  const tasksDir = path.dirname(filePath);
+  if (path.basename(tasksDir) !== 'tasks') {
+    return null;
+  }
+
+  return path.dirname(tasksDir);
+}
+
+function applyDiagnosticsToTask(task: ParsedTask, taskDiagnostics: ParseDiagnostic[]): void {
+  task.issues = taskDiagnostics.map(diagnostic => diagnostic.code);
+  task.is_valid = task.issues.length === 0;
+}
+
+async function parseChangeDir(changeDir: string): Promise<{ tasks: ParsedTask[]; diagnostics: ParseDiagnostic[] }> {
+  const taskFiles = await resolveTaskFiles(changeDir).catch(() => []);
+  const tasks: ParsedTask[] = [];
+  const diagnostics: ParseDiagnostic[] = [];
+
+  for (const taskFile of taskFiles) {
     try {
-      const tasksDirStat = await fs.stat(tasksDir);
-      if (!tasksDirStat.isDirectory()) {
-        continue;
-      }
+      const parsed = await parseTaskFile(taskFile);
+      tasks.push(parsed.task);
+      diagnostics.push(...parsed.diagnostics);
     } catch {
+      diagnostics.push({
+        code: 'TASK_READ_FAILED',
+        message: `Failed to read task file ${path.relative(process.cwd(), taskFile) || taskFile}`,
+      });
+    }
+  }
+
+  const graphResult = await loadChangeGraph(changeDir);
+  diagnostics.push(...graphResult.diagnostics);
+
+  const graphTaskById = new Map((graphResult.graph?.tasks ?? []).map(task => [task.task_id, task]));
+  const graphInvalid = graphResult.diagnostics.length > 0;
+
+  for (const task of tasks) {
+    const graphTask = graphTaskById.get(task.task_id);
+    if (graphTask) {
+      task.depends_on_all = graphTask.depends_on_all;
+      task.depends_on_any = graphTask.depends_on_any;
+    } else {
+      diagnostics.push({
+        code: 'TASK_FILE_UNREFERENCED',
+        message: `Task contract ${task.task_id} is not declared in the task graph.`,
+        task_id: task.task_id || undefined,
+      });
+    }
+
+    if (graphInvalid) {
+      diagnostics.push({
+        code: 'TASK_GRAPH_CONTRACT_CONFLICT',
+        message: `Task ${task.task_id} cannot be trusted until the task graph is valid.`,
+        task_id: task.task_id,
+      });
+    }
+
+    applyDiagnosticsToTask(task, diagnostics.filter(diagnostic => diagnostic.task_id === task.task_id));
+  }
+
+  const taskIdCounts = new Map<string, number>();
+  for (const task of tasks) {
+    if (!task.task_id) {
       continue;
     }
 
-    const changeTaskFiles = await resolveTaskFiles(changeDir);
-    taskFiles.push(...changeTaskFiles);
+    taskIdCounts.set(task.task_id, (taskIdCounts.get(task.task_id) ?? 0) + 1);
   }
 
-  return taskFiles.sort((left, right) => left.localeCompare(right));
+  for (const task of tasks) {
+    if (!task.task_id || taskIdCounts.get(task.task_id) === 1) {
+      continue;
+    }
+
+    diagnostics.push({
+      code: 'DUPLICATE_TASK_ID',
+      message: `Duplicate task_id found: ${task.task_id}`,
+      task_id: task.task_id,
+    });
+  }
+
+  for (const task of tasks) {
+    applyDiagnosticsToTask(
+      task,
+      diagnostics.filter(diagnostic => diagnostic.task_id === task.task_id),
+    );
+  }
+
+  computeTaskReadiness(tasks);
+
+  return {
+    tasks,
+    diagnostics,
+  };
+}
+
+async function parseSingleTaskFile(filePath: string): Promise<{ tasks: ParsedTask[]; diagnostics: ParseDiagnostic[] }> {
+  const parsed = await parseTaskFile(filePath);
+  const diagnostics = [...parsed.diagnostics];
+  const changeDir = getChangeDirForTaskFile(filePath);
+  const tasks = [parsed.task];
+
+  if (changeDir) {
+    const graphResult = await loadChangeGraph(changeDir);
+    diagnostics.push(...graphResult.diagnostics);
+
+    const graphTask = graphResult.graph?.tasks.find(task => task.task_id === parsed.task.task_id);
+    if (graphTask) {
+      parsed.task.depends_on_all = graphTask.depends_on_all;
+      parsed.task.depends_on_any = graphTask.depends_on_any;
+    } else {
+      diagnostics.push({
+        code: 'TASK_FILE_UNREFERENCED',
+        message: `Task contract ${parsed.task.task_id} is not declared in the task graph.`,
+        task_id: parsed.task.task_id || undefined,
+      });
+    }
+
+    if (graphResult.diagnostics.length > 0) {
+      diagnostics.push({
+        code: 'TASK_GRAPH_CONTRACT_CONFLICT',
+        message: `Task ${parsed.task.task_id} cannot be trusted until the task graph is valid.`,
+        task_id: parsed.task.task_id,
+      });
+    }
+  }
+
+  applyDiagnosticsToTask(
+    parsed.task,
+    diagnostics.filter(diagnostic => diagnostic.task_id === parsed.task.task_id),
+  );
+  computeTaskReadiness(tasks);
+
+  return {
+    tasks,
+    diagnostics,
+  };
 }
 
 export async function parse(args: string[], _options: ParseOptions): Promise<ParseResult> {
@@ -410,55 +563,36 @@ export async function parse(args: string[], _options: ParseOptions): Promise<Par
         },
       };
     }
+
+    return {
+      ok: false,
+      error: {
+        code: 'TASK_READ_FAILED',
+        message: 'Failed to read task file',
+        retryable: false,
+      },
+    };
   }
 
   try {
-    const taskFiles = positionalArgs.length === 0
-      ? await resolveDefaultTaskFiles(resolvedInputPath)
-      : await resolveTaskFiles(resolvedInputPath);
+    const stats = await fs.stat(resolvedInputPath);
+    if (stats.isFile()) {
+      const parsedSingleFile = await parseSingleTaskFile(resolvedInputPath);
+      return {
+        ok: true,
+        data: parsedSingleFile,
+      };
+    }
+
+    const changeDirs = await resolveChangeDirs(resolvedInputPath);
     const tasks: ParsedTask[] = [];
     const diagnostics: ParseDiagnostic[] = [];
 
-    for (const taskFile of taskFiles) {
-      try {
-        const parsed = await parseTaskFile(taskFile);
-        tasks.push(parsed.task);
-        diagnostics.push(...parsed.diagnostics);
-      } catch {
-        diagnostics.push({
-          code: 'TASK_READ_FAILED',
-          message: `Failed to read task file ${path.relative(process.cwd(), taskFile) || taskFile}`,
-        });
-      }
+    for (const changeDir of changeDirs) {
+      const parsedChange = await parseChangeDir(changeDir);
+      tasks.push(...parsedChange.tasks);
+      diagnostics.push(...parsedChange.diagnostics);
     }
-
-    const taskIdCounts = new Map<string, number>();
-    for (const task of tasks) {
-      if (!task.task_id) {
-        continue;
-      }
-
-      taskIdCounts.set(task.task_id, (taskIdCounts.get(task.task_id) ?? 0) + 1);
-    }
-
-    for (const task of tasks) {
-      if (!task.task_id || taskIdCounts.get(task.task_id) === 1) {
-        continue;
-      }
-
-      diagnostics.push({
-        code: 'DUPLICATE_TASK_ID',
-        message: `Duplicate task_id found: ${task.task_id}`,
-        task_id: task.task_id,
-      });
-
-      if (!task.issues.includes('DUPLICATE_TASK_ID')) {
-        task.issues.push('DUPLICATE_TASK_ID');
-        task.is_valid = false;
-      }
-    }
-
-    computeTaskReadiness(tasks);
 
     return {
       ok: true,

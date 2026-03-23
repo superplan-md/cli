@@ -388,7 +388,8 @@ p {
 }
 
 .compact-indicator--needs_feedback,
-.compact-indicator--all_tasks_done {
+.compact-indicator--all_tasks_done,
+.compact-indicator--change_notice {
   min-width: 100%;
   min-height: 100%;
   padding: 0;
@@ -405,7 +406,8 @@ p {
 }
 
 .compact-indicator--needs_feedback::before,
-.compact-indicator--all_tasks_done::before {
+.compact-indicator--all_tasks_done::before,
+.compact-indicator--change_notice::before {
   inset: 1px;
 }
 
@@ -424,8 +426,19 @@ p {
   background: linear-gradient(180deg, rgba(111, 221, 176, 0.08), transparent 48%);
 }
 
+.compact-indicator--change_notice {
+  border-color: rgba(135, 185, 255, 0.18);
+  background: linear-gradient(180deg, rgba(19, 27, 38, 0.92), rgba(14, 20, 29, 0.88));
+  box-shadow: 0 18px 34px rgba(6, 8, 12, 0.18);
+}
+
+.compact-indicator--change_notice::before {
+  background: linear-gradient(180deg, rgba(135, 185, 255, 0.1), transparent 48%);
+}
+
 .compact-indicator--needs_feedback .compact-indicator__main,
-.compact-indicator--all_tasks_done .compact-indicator__main {
+.compact-indicator--all_tasks_done .compact-indicator__main,
+.compact-indicator--change_notice .compact-indicator__main {
   display: flex;
   align-items: center;
   width: 100%;
@@ -434,7 +447,8 @@ p {
 }
 
 .compact-indicator--needs_feedback .compact-indicator__content,
-.compact-indicator--all_tasks_done .compact-indicator__content {
+.compact-indicator--all_tasks_done .compact-indicator__content,
+.compact-indicator--change_notice .compact-indicator__content {
   display: grid;
   gap: 4px;
   align-items: center;
@@ -443,7 +457,8 @@ p {
 }
 
 .compact-indicator--needs_feedback .compact-indicator__core,
-.compact-indicator--all_tasks_done .compact-indicator__core {
+.compact-indicator--all_tasks_done .compact-indicator__core,
+.compact-indicator--change_notice .compact-indicator__core {
   width: 34px;
   height: 34px;
   border-radius: 10px;
@@ -454,7 +469,8 @@ p {
 }
 
 .compact-indicator--needs_feedback .compact-indicator__mark,
-.compact-indicator--all_tasks_done .compact-indicator__mark {
+.compact-indicator--all_tasks_done .compact-indicator__mark,
+.compact-indicator--change_notice .compact-indicator__mark {
   width: 22px;
 }
 
@@ -462,8 +478,16 @@ p {
   color: rgba(205, 247, 224, 0.86);
 }
 
+.compact-indicator--change_notice .compact-indicator__eyebrow {
+  color: rgba(180, 213, 255, 0.84);
+}
+
 .compact-indicator--all_tasks_done .compact-indicator__hint {
   color: rgba(210, 232, 219, 0.76);
+}
+
+.compact-indicator--change_notice .compact-indicator__hint {
+  color: rgba(211, 226, 244, 0.76);
 }
 
 .compact-indicator__corner-badge {

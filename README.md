@@ -210,7 +210,9 @@ That creates the repo-local Superplan scaffold:
 
 ```bash
 superplan change new improve-task-authoring --json
-superplan task new improve-task-authoring --title "Add authoring scaffold" --json
+# author .superplan/changes/improve-task-authoring/tasks.md
+superplan validate improve-task-authoring --json
+superplan task new improve-task-authoring --task-id T-001 --json
 ```
 
 Do not hand-create `.superplan/changes/<change-slug>/tasks/T-xxx.md` files. Shape the graph and dependencies in `tasks.md`, then let the CLI mint canonical task contracts.
@@ -218,14 +220,14 @@ Do not hand-create `.superplan/changes/<change-slug>/tasks/T-xxx.md` files. Shap
 If you already know several tasks for the same change, use one batch scaffold call instead of repeated single-task calls:
 
 ```bash
-printf '%s' '[{"title":"Add authoring scaffold"},{"title":"Add help coverage"}]' | superplan task batch improve-task-authoring --stdin --json
+printf '%s' '[{"task_id":"T-001"},{"task_id":"T-002","priority":"high"}]' | superplan task batch improve-task-authoring --stdin --json
 ```
 
 ## How It Works
 
 Superplan starts from the moment an agent needs durable structure in a repo. Instead of relying on chat memory, scratch notes, or ad hoc TODOs, it gives the work a local home under `.superplan/`.
 
-First, it shapes the work into tracked changes and task contracts. `superplan change new` creates the change root, `superplan task new` creates one task, and `superplan task batch` creates multiple tasks when the graph is already clear.
+First, it shapes the work into tracked changes, a graph, and task contracts. `superplan change new` creates the change root, `tasks.md` becomes graph truth, `superplan validate` checks that graph, and then `superplan task new` or `superplan task batch` scaffold the executable task contracts by explicit `task_id`.
 
 Once the work is shaped, the execution loop stays narrow on purpose. `superplan status --json` shows the frontier, `superplan run --json` claims or continues work, and `superplan task show <task_id> --json` is there only when one task needs deeper inspection.
 
@@ -238,7 +240,7 @@ Because task contracts, runtime state, and durable context all live locally in t
 1. Install Superplan and verify `superplan --version`.
 2. Initialize the repo with `superplan init --json`.
 3. Create a tracked change with `superplan change new <change-slug> --json`.
-4. Create one task with `superplan task new ... --json`, or multiple tasks with `superplan task batch --stdin --json`.
+4. Author `tasks.md`, run `superplan validate <change-slug> --json`, then scaffold one task with `superplan task new ... --task-id ... --json` or multiple tasks with `superplan task batch --stdin --json`.
 5. Use `superplan status --json` and `superplan run --json` as the default execution loop.
 6. Move work through `block`, `request-feedback`, `complete`, `approve`, and `reopen` instead of editing lifecycle state by hand.
 7. Resume later from the same local task contracts, runtime state, and context instead of rebuilding state from chat history.
@@ -257,8 +259,9 @@ Use the task returned by `superplan run --json` directly. Reach for `superplan t
 Canonical agent authoring rule:
 
 - use `superplan change new <change-slug> --json` once per tracked change
-- use `superplan task new <change-slug> --title "..." --json` only when exactly one task should be created now
-- use `superplan task batch --stdin --json` when two or more tasks are ready to be created in one pass
+- author `.superplan/changes/<change-slug>/tasks.md` first and run `superplan validate <change-slug> --json`
+- use `superplan task new <change-slug> --task-id <task_id> --json` only when exactly one graph-declared task should be created now
+- use `superplan task batch --stdin --json` when two or more graph-declared tasks are ready to be created in one pass
 - prefer commands that already return the needed task payload over extra follow-up calls
 - use the returned payload from `task new` or `task batch` directly instead of immediately calling `task show`
 
@@ -267,13 +270,14 @@ When you are shaping new work instead of executing existing work, start with:
 ```bash
 superplan change new <change-slug> --json
 # shape .superplan/changes/<change-slug>/tasks.md
-superplan task new <change-slug> --title "Describe the first task" --json
+superplan validate <change-slug> --json
+superplan task new <change-slug> --task-id T-001 --json
 ```
 
 If you are creating more than one task at once after the graph is ready, prefer:
 
 ```bash
-printf '%s' '[{"title":"Describe the first task"},{"title":"Describe the second task"}]' | superplan task batch <change-slug> --stdin --json
+printf '%s' '[{"task_id":"T-001"},{"task_id":"T-002"}]' | superplan task batch <change-slug> --stdin --json
 ```
 
 Let the main graph breakdown live in `.superplan/changes/<change-slug>/tasks.md` first. Once that structure is ready, use `superplan task new` for one task or `superplan task batch` for multiple tasks instead of hand-creating `tasks/T-xxx.md`.
@@ -375,20 +379,22 @@ You can scaffold the common path instead of writing everything by hand:
 
 ```bash
 superplan change new improve-task-authoring --json
-superplan task new improve-task-authoring --title "Add change scaffolding" --json
+# author .superplan/changes/improve-task-authoring/tasks.md
+superplan validate improve-task-authoring --json
+superplan task new improve-task-authoring --task-id T-001 --json
 ```
 
 For multi-task shaping, batch scaffolding is the default path and produces fewer follow-up CLI calls:
 
 ```bash
-printf '%s' '[{"title":"Add change scaffolding"},{"title":"Add help coverage"}]' | superplan task batch improve-task-authoring --stdin --json
+printf '%s' '[{"task_id":"T-001"},{"task_id":"T-002"}]' | superplan task batch improve-task-authoring --stdin --json
 ```
 
 Task IDs are allocated globally across `.superplan/changes/` so dependencies and runtime references stay unambiguous across changes.
 
 Each task contract is expected to include:
 
-- frontmatter with fields such as `task_id`, `status`, `priority`, `depends_on_all`, and `depends_on_any`
+- frontmatter with fields such as `task_id`, `change_id`, `title`, `status`, and `priority`
 - a `## Description` section
 - a `## Acceptance Criteria` section using markdown checkboxes
 
@@ -397,10 +403,10 @@ Example:
 ```md
 ---
 task_id: T-001
+change_id: improve-task-authoring
+title: Add change scaffolding
 status: pending
 priority: high
-depends_on_all: []
-depends_on_any: []
 ---
 
 ## Description

@@ -17,6 +17,7 @@ test('overlay snapshot factory supplies stable defaults', () => {
     workspace_path: '/tmp/workspace',
     session_id: 'session-123',
     updated_at: '2026-03-19T21:30:00.000Z',
+    focused_change: null,
     active_task: null,
     board: {
       in_progress: [],
@@ -49,11 +50,20 @@ test('overlay snapshot factory preserves explicit event and board payloads', () 
     kind: 'needs_feedback',
     created_at: '2026-03-19T21:29:00.000Z',
   };
+  const focusedChange = {
+    change_id: 'shape-spec',
+    title: 'Shape Spec',
+    status: 'tracking',
+    task_total: 0,
+    task_done: 0,
+    updated_at: '2026-03-19T21:30:00.000Z',
+  };
 
   const snapshot = createOverlaySnapshot({
     workspace_path: '/tmp/workspace',
     session_id: 'session-123',
     updated_at: '2026-03-19T21:30:00.000Z',
+    focused_change: focusedChange,
     active_task: activeTask,
     board: {
       in_progress: [activeTask],
@@ -67,6 +77,7 @@ test('overlay snapshot factory preserves explicit event and board payloads', () 
     workspace_path: '/tmp/workspace',
     session_id: 'session-123',
     updated_at: '2026-03-19T21:30:00.000Z',
+    focused_change: focusedChange,
     active_task: activeTask,
     board: {
       in_progress: [activeTask],

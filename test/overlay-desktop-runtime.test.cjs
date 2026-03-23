@@ -170,6 +170,37 @@ test('renderable snapshot helper still shows actionable backlog and needs-feedba
   );
 });
 
+test('renderable snapshot helper shows a focused tracked change before any tasks exist', async () => {
+  const { hasRenderableSnapshotContent } = await loadRuntimeHelpersModule();
+
+  assert.equal(
+    hasRenderableSnapshotContent({
+      workspace_path: '/tmp/workspace',
+      session_id: 'workspace:/tmp/workspace',
+      updated_at: '2026-03-20T00:00:00.000Z',
+      focused_change: {
+        change_id: 'shape-spec',
+        title: 'Shape Spec',
+        status: 'tracking',
+        task_total: 0,
+        task_done: 0,
+        updated_at: '2026-03-20T00:00:00.000Z',
+      },
+      active_task: null,
+      board: {
+        in_progress: [],
+        backlog: [],
+        done: [],
+        blocked: [],
+        needs_feedback: [],
+      },
+      attention_state: 'normal',
+      events: [],
+    }),
+    true,
+  );
+});
+
 test('attention sound helper returns fresh needs-feedback events once', async () => {
   const { getAttentionSoundKind } = await loadRuntimeHelpersModule();
 

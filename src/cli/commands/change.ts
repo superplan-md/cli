@@ -1,5 +1,12 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { loadTasks, type TaskListResult } from './task';
+import { refreshOverlaySnapshot } from '../overlay-runtime';
+import {
+  applyRequestedOverlayAction,
+  createOverlayRuntimeNotice,
+  type OverlayRuntimeNotice,
+} from '../overlay-visibility';
 import {
   buildChangeTasksIndex,
   formatTitleFromSlug,
@@ -15,6 +22,7 @@ export type ChangeResult =
         change_id: string;
         root: string;
         files: string[];
+        overlay?: OverlayRuntimeNotice;
       };
     }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
@@ -138,6 +146,7 @@ async function createChange(changeSlug: string, title?: string): Promise<ChangeR
     buildChangeTasksIndex(changeSlug, title?.trim() || formatTitleFromSlug(changeSlug)),
     'utf-8',
   );
+  const overlay = await refreshChangeOverlay();
 
   return {
     ok: true,
@@ -148,8 +157,20 @@ async function createChange(changeSlug: string, title?: string): Promise<ChangeR
         path.relative(process.cwd(), changePaths.tasksIndexPath) || changePaths.tasksIndexPath,
         path.relative(process.cwd(), changePaths.tasksDir) || changePaths.tasksDir,
       ],
+      ...(overlay ? { overlay } : {}),
     },
   };
+}
+
+async function refreshChangeOverlay(): Promise<OverlayRuntimeNotice | undefined> {
+  const tasksResult: TaskListResult = await loadTasks({ skipInvariant: true });
+  if (!tasksResult.ok) {
+    return undefined;
+  }
+
+  const { snapshot } = await refreshOverlaySnapshot(tasksResult.data.tasks);
+  const visibility = await applyRequestedOverlayAction('ensure', snapshot);
+  return createOverlayRuntimeNotice('ensure', visibility);
 }
 
 export async function change(args: string[]): Promise<ChangeResult> {

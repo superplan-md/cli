@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
-const { loadDistModule, makeSandbox, parseCliJson, runCli, withSandboxEnv, writeFile } = require('./helpers.cjs');
+const { loadDistModule, makeSandbox, parseCliJson, runCli, withSandboxEnv, writeChangeGraph, writeFile } = require('./helpers.cjs');
 
 test('cli returns NO_COMMAND in json mode', async () => {
   const result = await runCli(['--json']);
@@ -30,6 +30,7 @@ test('cli without a command shows the main Superplan command list', async () => 
   assert.match(result.stdout, /status\s+Show active, ready, review, blocked, and feedback-needed queues/);
   assert.match(result.stdout, /Recovery and diagnostics:/);
   assert.match(result.stdout, /sync\s+Reconcile repo state after task-file edits or runtime drift/);
+  assert.match(result.stdout, /validate\s+Validate tasks\.md graph and task-contract consistency/);
   assert.match(result.stdout, /visibility\s+Inspect run visibility and health evidence/);
   assert.match(result.stdout, /doctor\s+Validate install and overlay health/);
   assert.match(result.stdout, /parse\s+Parse task contracts and return diagnostics/);
@@ -114,16 +115,15 @@ test('task --help explains task subcommands explicitly', async () => {
 
   assert.equal(result.code, 0);
   assert.match(result.stdout, /Task commands:/);
-  assert.match(result.stdout, /new <change-slug>\s+Create one task contract in a change/);
-  assert.match(result.stdout, /batch <change-slug> --stdin\s+Create multiple task contracts from JSON stdin/);
+  assert.match(result.stdout, /new <change-slug>\s+Scaffold one graph-declared task contract/);
+  assert.match(result.stdout, /batch <change-slug> --stdin\s+Scaffold multiple graph-declared task contracts from JSON stdin/);
   assert.match(result.stdout, /show <task_id>\s+Show one task and its readiness details/);
   assert.match(result.stdout, /complete <task_id>\s+Finish implementation and send the task to review/);
   assert.match(result.stdout, /approve <task_id>\s+Approve an in-review task and mark it done/);
   assert.match(result.stdout, /reopen <task_id>\s+Move a review or done task back into implementation/);
   assert.match(result.stdout, /block <task_id> --reason\s+Pause a task because something external is blocking it/);
   assert.match(result.stdout, /For a fast start:\s+superplan run --json/);
-  assert.match(result.stdout, /do not hand-create tasks\/T-xxx\.md/i);
-  assert.match(result.stdout, /shape changes\/<slug>\/tasks\.md first, then use task new for one task or task batch for multiple tasks/i);
+  assert.match(result.stdout, /shape changes\/<slug>\/tasks\.md first, validate it, then scaffold task contracts from graph-declared ids/i);
   assert.doesNotMatch(result.stdout, /\bstart <task_id>\b/);
   assert.doesNotMatch(result.stdout, /\bresume <task_id>\b/);
   assert.doesNotMatch(result.stdout, /\bcurrent\b/);
@@ -154,10 +154,16 @@ test('change --help explains change scaffolding commands', async () => {
 test('task show includes readiness reasons without a separate why command', async () => {
   const sandbox = await makeSandbox('superplan-cli-task-show-why-');
 
+  await writeChangeGraph(sandbox.cwd, 'demo', {
+    title: 'Demo',
+    entries: [
+      { task_id: 'T-001', title: 'Blocked by dependency', depends_on_all: ['T-999'] },
+      { task_id: 'T-999', title: 'Upstream blocker' },
+    ],
+  });
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), `---
 task_id: T-001
 status: pending
-depends_on_all: [T-999]
 ---
 
 ## Description
@@ -237,6 +243,13 @@ test('setup in human mode prints a concise success message instead of the full p
   const { routeCommand } = loadDistModule('cli/router.js', {
     select: async () => 'global',
     confirm: async () => false,
+    checkbox: async options => {
+      if (!Array.isArray(options?.choices) || options.choices.length === 0) {
+        return [];
+      }
+
+      return [options.choices[0].value];
+    },
   });
 
   const originalConsoleLog = console.log;

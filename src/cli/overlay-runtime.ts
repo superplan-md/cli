@@ -1,17 +1,22 @@
 import * as fs from 'fs/promises';
+import * as path from 'path';
 import {
   createOverlayControlState,
   createOverlaySnapshot,
   getOverlayRuntimePaths,
   type OverlayAttentionState,
+  type OverlayChangeStatus,
   type OverlayEvent,
   type OverlayEventKind,
+  type OverlayFocusedChange,
   type OverlayRequestedAction,
   type OverlayRuntimePaths,
   type OverlaySnapshot,
   type OverlayTaskStatus,
   type OverlayTaskSummary,
 } from '../shared/overlay';
+import { loadChangeGraph } from './graph';
+import { formatTitleFromSlug } from './commands/scaffold';
 import { resolveWorkspaceRoot } from './workspace-root';
 
 type TaskPriority = 'high' | 'medium' | 'low';
@@ -29,6 +34,15 @@ export interface OverlayTaskSource {
   updated_at?: string;
   reason?: string;
   message?: string;
+}
+
+interface OverlayTrackedChange {
+  change_id: string;
+  title: string;
+  status: OverlayChangeStatus;
+  task_total: number;
+  task_done: number;
+  updated_at: string;
 }
 
 interface RefreshOverlaySnapshotOptions {
@@ -113,6 +127,21 @@ function getTaskDescription(task: OverlayTaskSource): string | undefined {
   return excerpt || undefined;
 }
 
+function parseTimestamp(value: string | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsedValue = Date.parse(value);
+  return Number.isNaN(parsedValue) ? null : parsedValue;
+}
+
+function getTaskTimestamp(task: OverlayTaskSource): number | null {
+  return parseTimestamp(task.updated_at)
+    ?? parseTimestamp(task.completed_at)
+    ?? parseTimestamp(task.started_at);
+}
+
 function toOverlayTaskSummary(task: OverlayTaskSource): OverlayTaskSummary {
   const description = getTaskDescription(task);
   return {
@@ -137,12 +166,13 @@ function toOverlayTaskSummary(task: OverlayTaskSource): OverlayTaskSummary {
   };
 }
 
-function getAttentionState(tasks: OverlayTaskSource[]): OverlayAttentionState {
+function getAttentionState(tasks: OverlayTaskSource[], trackedChanges: OverlayTrackedChange[]): OverlayAttentionState {
   if (tasks.some(task => task.status === 'needs_feedback')) {
     return 'needs_feedback';
   }
 
-  if (tasks.length > 0 && tasks.every(task => task.status === 'done')) {
+  const hasIncompleteTrackedChange = trackedChanges.some(change => change.status !== 'done');
+  if (tasks.length > 0 && tasks.every(task => task.status === 'done') && !hasIncompleteTrackedChange) {
     return 'all_tasks_done';
   }
 
@@ -165,6 +195,159 @@ function createAlertEvents(previousEvents: OverlayEvent[], alertKinds: OverlayEv
   return [...previousEvents, ...newEvents].slice(-MAX_OVERLAY_EVENTS);
 }
 
+async function getTrackedChangeTaskIds(changeDir: string): Promise<string[]> {
+  const tasksDir = path.join(changeDir, 'tasks');
+  let taskEntries: Array<{ isFile(): boolean; name: string }> = [];
+
+  try {
+    taskEntries = await fs.readdir(tasksDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  return taskEntries
+    .filter(entry => entry.isFile() && entry.name.endsWith('.md'))
+    .map(entry => path.basename(entry.name, '.md'))
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function getTrackedChangeStatus(taskTotal: number, tasks: OverlayTaskSource[]): OverlayChangeStatus {
+  if (taskTotal === 0) {
+    return 'tracking';
+  }
+
+  if (tasks.some(task => task.status === 'needs_feedback')) {
+    return 'needs_feedback';
+  }
+
+  if (tasks.some(task => task.status === 'in_progress')) {
+    return 'in_progress';
+  }
+
+  if (tasks.some(task => task.status === 'blocked')) {
+    return 'blocked';
+  }
+
+  if (tasks.length === taskTotal && tasks.every(task => task.status === 'done')) {
+    return 'done';
+  }
+
+  return 'backlog';
+}
+
+async function getTrackedChangeUpdatedAt(options: {
+  changeDir: string;
+  taskIds: string[];
+  matchedTasks: OverlayTaskSource[];
+}): Promise<string> {
+  const candidateTimestamps: number[] = [];
+
+  try {
+    const graphStats = await fs.stat(path.join(options.changeDir, 'tasks.md'));
+    candidateTimestamps.push(graphStats.mtimeMs);
+  } catch {}
+
+  for (const taskId of options.taskIds) {
+    try {
+      const taskStats = await fs.stat(path.join(options.changeDir, 'tasks', `${taskId}.md`));
+      candidateTimestamps.push(taskStats.mtimeMs);
+    } catch {}
+  }
+
+  for (const task of options.matchedTasks) {
+    const taskTimestamp = getTaskTimestamp(task);
+    if (taskTimestamp !== null) {
+      candidateTimestamps.push(taskTimestamp);
+    }
+  }
+
+  const latestTimestamp = candidateTimestamps.length > 0
+    ? Math.max(...candidateTimestamps)
+    : Date.now();
+
+  return new Date(latestTimestamp).toISOString();
+}
+
+async function collectTrackedChanges(
+  workspacePath: string,
+  tasks: OverlayTaskSource[],
+): Promise<OverlayTrackedChange[]> {
+  const changesRoot = path.join(workspacePath, '.superplan', 'changes');
+  let changeEntries: Array<{ isDirectory(): boolean; name: string }> = [];
+
+  try {
+    changeEntries = await fs.readdir(changesRoot, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const taskMap = new Map(tasks.map(task => [task.task_id, task]));
+  const trackedChanges: OverlayTrackedChange[] = [];
+
+  for (const entry of changeEntries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const changeDir = path.join(changesRoot, entry.name);
+    const [graphResult, taskIds] = await Promise.all([
+      loadChangeGraph(changeDir),
+      getTrackedChangeTaskIds(changeDir),
+    ]);
+    const matchedTasks = taskIds
+      .map(taskId => taskMap.get(taskId))
+      .filter((task): task is OverlayTaskSource => task !== undefined);
+    const taskTotal = taskIds.length;
+    const taskDone = matchedTasks.filter(task => task.status === 'done').length;
+    const title = graphResult.graph?.title?.trim() || formatTitleFromSlug(entry.name);
+
+    trackedChanges.push({
+      change_id: entry.name,
+      title,
+      status: getTrackedChangeStatus(taskTotal, matchedTasks),
+      task_total: taskTotal,
+      task_done: taskDone,
+      updated_at: await getTrackedChangeUpdatedAt({
+        changeDir,
+        taskIds,
+        matchedTasks,
+      }),
+    });
+  }
+
+  trackedChanges.sort((left, right) => {
+    const leftIncomplete = left.status !== 'done';
+    const rightIncomplete = right.status !== 'done';
+    if (leftIncomplete !== rightIncomplete) {
+      return leftIncomplete ? -1 : 1;
+    }
+
+    const timestampDifference = Date.parse(right.updated_at) - Date.parse(left.updated_at);
+    if (timestampDifference !== 0) {
+      return timestampDifference;
+    }
+
+    return left.change_id.localeCompare(right.change_id);
+  });
+
+  return trackedChanges;
+}
+
+function toFocusedChange(change: OverlayTrackedChange | undefined): OverlayFocusedChange | null {
+  if (!change) {
+    return null;
+  }
+
+  return {
+    change_id: change.change_id,
+    title: change.title,
+    status: change.status,
+    task_total: change.task_total,
+    task_done: change.task_done,
+    updated_at: change.updated_at,
+  };
+}
+
 export async function refreshOverlaySnapshot(
   tasks: OverlayTaskSource[],
   options: RefreshOverlaySnapshotOptions = {},
@@ -174,7 +357,10 @@ export async function refreshOverlaySnapshot(
   const timestamp = new Date().toISOString();
   const previousSnapshot = await readOverlaySnapshot(paths);
   const sortedTasks = [...tasks].sort(sortTasks);
-  const attentionState = getAttentionState(sortedTasks);
+  const trackedChanges = await collectTrackedChanges(workspacePath, sortedTasks);
+  const focusedChange = toFocusedChange(trackedChanges[0]);
+  const attentionState = getAttentionState(sortedTasks, trackedChanges);
+  const alertKinds = (options.alertKinds ?? []).filter(kind => kind !== 'all_tasks_done' || attentionState === 'all_tasks_done');
 
   const board = {
     in_progress: sortedTasks.filter(task => task.status === 'in_progress').map(toOverlayTaskSummary),
@@ -188,10 +374,11 @@ export async function refreshOverlaySnapshot(
     workspace_path: workspacePath,
     session_id: `workspace:${workspacePath}`,
     updated_at: timestamp,
+    focused_change: focusedChange,
     active_task: board.in_progress[0] ?? null,
     board,
     attention_state: attentionState,
-    events: createAlertEvents(previousSnapshot?.events ?? [], options.alertKinds ?? [], timestamp),
+    events: createAlertEvents(previousSnapshot?.events ?? [], alertKinds, timestamp),
   });
 
   await fs.mkdir(paths.runtime_dir, { recursive: true });

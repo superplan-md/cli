@@ -8,6 +8,7 @@ const {
   parseCliJson,
   pathExists,
   runCli,
+  writeChangeGraph,
 } = require('./helpers.cjs');
 
 test('change new creates a canonical change skeleton', async () => {
@@ -39,11 +40,12 @@ test('change new creates a canonical change skeleton', async () => {
   assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks')), true);
 
   const tasksIndexContent = await fs.readFile(tasksIndexPath, 'utf-8');
-  assert.match(tasksIndexContent, /# Improve Planning/);
+  assert.match(tasksIndexContent, /# Task Graph/);
+  assert.match(tasksIndexContent, /## Graph Metadata/);
+  assert.match(tasksIndexContent, /## Graph Layout/);
+  assert.match(tasksIndexContent, /## Notes/);
   assert.match(tasksIndexContent, /- Change ID: `improve-planning`/);
-  assert.match(tasksIndexContent, /## Tasks/);
-  assert.match(tasksIndexContent, /Do not hand-create `tasks\/T-xxx\.md`\./);
-  assert.match(tasksIndexContent, /Shape the graph and dependencies here first, then mint executable tasks with `superplan task new` or `superplan task batch`\./);
+  assert.match(tasksIndexContent, /Author the graph here before scaffolding task contracts with the CLI\./);
 });
 
 test('change new from a nested repo directory uses the repo-root superplan workspace', async () => {
@@ -78,7 +80,7 @@ test('change new from a nested repo directory uses the repo-root superplan works
   assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
 });
 
-test('task new creates globally unique task contracts and updates each change index', async () => {
+test('task new scaffolds a contract for a graph-declared task id without mutating tasks.md', async () => {
   const sandbox = await makeSandbox('superplan-task-new-');
   await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
 
@@ -87,12 +89,26 @@ test('task new creates globally unique task contracts and updates each change in
     env: sandbox.env,
   }));
 
+  await writeChangeGraph(sandbox.cwd, 'improve-planning', {
+    title: 'Improve Planning',
+    entries: [
+      {
+        task_id: 'T-001',
+        title: 'Add scaffolding command',
+      },
+      {
+        task_id: 'T-002',
+        title: 'Add help coverage',
+      },
+    ],
+  });
+
   const firstTaskPayload = parseCliJson(await runCli([
     'task',
     'new',
     'improve-planning',
-    '--title',
-    'Add scaffolding command',
+    '--task-id',
+    'T-001',
     '--priority',
     'high',
     '--json',
@@ -136,8 +152,8 @@ test('task new creates globally unique task contracts and updates each change in
     'task',
     'new',
     'improve-planning',
-    '--title',
-    'Add help coverage',
+    '--task-id',
+    'T-002',
     '--json',
   ], {
     cwd: sandbox.cwd,
@@ -151,12 +167,22 @@ test('task new creates globally unique task contracts and updates each change in
     env: sandbox.env,
   }));
 
+  await writeChangeGraph(sandbox.cwd, 'release-polish', {
+    title: 'Release Polish',
+    entries: [
+      {
+        task_id: 'T-003',
+        title: 'Add release notes',
+      },
+    ],
+  });
+
   const thirdTaskPayload = parseCliJson(await runCli([
     'task',
     'new',
     'release-polish',
-    '--title',
-    'Add release notes',
+    '--task-id',
+    'T-003',
     '--json',
   ], {
     cwd: sandbox.cwd,
@@ -200,6 +226,8 @@ test('task new creates globally unique task contracts and updates each change in
   assert.match(firstTaskContent, /priority: high/);
   assert.match(firstTaskContent, /## Description\nAdd scaffolding command/);
   assert.match(firstTaskContent, /## Acceptance Criteria\n- \[ \] Define the first acceptance criterion\./);
+  assert.doesNotMatch(firstTaskContent, /depends_on_all:/);
+  assert.doesNotMatch(firstTaskContent, /depends_on_any:/);
 
   const tasksIndexContent = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks.md'), 'utf-8');
   assert.match(tasksIndexContent, /- `T-001` Add scaffolding command/);
@@ -213,7 +241,7 @@ test('task new creates globally unique task contracts and updates each change in
   assert.equal(diagnosticCodes.has('DUPLICATE_TASK_ID'), false);
 });
 
-test('task batch creates multiple task contracts from one JSON spec and resolves batch refs', async () => {
+test('task batch scaffolds graph-declared task ids and parse derives dependencies from tasks.md', async () => {
   const sandbox = await makeSandbox('superplan-task-batch-');
   await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
 
@@ -222,11 +250,25 @@ test('task batch creates multiple task contracts from one JSON spec and resolves
     env: sandbox.env,
   }));
 
+  await writeChangeGraph(sandbox.cwd, 'improve-planning', {
+    title: 'Improve Planning',
+    entries: [
+      {
+        task_id: 'T-001',
+        title: 'Add scaffolding command',
+      },
+      {
+        task_id: 'T-002',
+        title: 'Add help coverage',
+        depends_on_all: ['T-001'],
+      },
+    ],
+  });
+
   const batchPayloadInput = JSON.stringify({
     tasks: [
       {
-        ref: 'scaffold',
-        title: 'Add scaffolding command',
+        task_id: 'T-001',
         priority: 'high',
         description: 'Create the batch task scaffolding flow.',
         acceptance_criteria: [
@@ -235,9 +277,7 @@ test('task batch creates multiple task contracts from one JSON spec and resolves
         ],
       },
       {
-        ref: 'tests',
-        title: 'Add help coverage',
-        depends_on_all_refs: ['scaffold'],
+        task_id: 'T-002',
         acceptance_criteria: [
           'Task help documents the batch subcommand.',
         ],
@@ -263,13 +303,13 @@ test('task batch creates multiple task contracts from one JSON spec and resolves
   assert.deepEqual(batchPayload.data.created, [
     {
       task_id: 'T-001',
-      ref: 'scaffold',
+      ref: null,
       title: 'Add scaffolding command',
       path: '.superplan/changes/improve-planning/tasks/T-001.md',
     },
     {
       task_id: 'T-002',
-      ref: 'tests',
+      ref: null,
       title: 'Add help coverage',
       path: '.superplan/changes/improve-planning/tasks/T-002.md',
     },
@@ -293,8 +333,8 @@ test('task batch creates multiple task contracts from one JSON spec and resolves
     path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks', 'T-002.md'),
     'utf-8',
   );
-  assert.match(secondTaskContent, /depends_on_all: \["T-001"\]/);
   assert.match(secondTaskContent, /## Description\nAdd help coverage/);
+  assert.doesNotMatch(secondTaskContent, /depends_on_all:/);
 
   const tasksIndexContent = await fs.readFile(
     path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks.md'),
@@ -308,7 +348,7 @@ test('task batch creates multiple task contracts from one JSON spec and resolves
   assert.deepEqual(parsedBatchTask.depends_on_all, ['T-001']);
 });
 
-test('task batch fails before writing when a dependency ref is unknown', async () => {
+test('task batch fails before writing when a task id is not declared in the graph', async () => {
   const sandbox = await makeSandbox('superplan-task-batch-invalid-');
   await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
 
@@ -316,6 +356,16 @@ test('task batch fails before writing when a dependency ref is unknown', async (
     cwd: sandbox.cwd,
     env: sandbox.env,
   }));
+
+  await writeChangeGraph(sandbox.cwd, 'improve-planning', {
+    title: 'Improve Planning',
+    entries: [
+      {
+        task_id: 'T-001',
+        title: 'Add scaffolding command',
+      },
+    ],
+  });
 
   const result = await runCli([
     'task',
@@ -328,8 +378,7 @@ test('task batch fails before writing when a dependency ref is unknown', async (
     env: sandbox.env,
     input: JSON.stringify([
       {
-        title: 'Add scaffolding command',
-        depends_on_all_refs: ['missing-ref'],
+        task_id: 'T-999',
       },
     ]),
   });
@@ -337,7 +386,7 @@ test('task batch fails before writing when a dependency ref is unknown', async (
 
   assert.equal(result.code, 1);
   assert.equal(payload.ok, false);
-  assert.equal(payload.error.code, 'TASK_BATCH_UNKNOWN_REF');
+  assert.equal(payload.error.code, 'TASK_NOT_IN_GRAPH');
 
   const taskEntries = await fs.readdir(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks'));
   assert.deepEqual(taskEntries, []);
@@ -346,8 +395,7 @@ test('task batch fails before writing when a dependency ref is unknown', async (
     path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks.md'),
     'utf-8',
   );
-  assert.match(tasksIndexContent, /Do not hand-create `tasks\/T-xxx\.md`\./);
-  assert.match(tasksIndexContent, /Shape the graph and dependencies here first, then mint executable tasks with `superplan task new` or `superplan task batch`\./);
+  assert.match(tasksIndexContent, /- `T-001` Add scaffolding command/);
 });
 
 test('task batch using stdin fails clearly when the payload is empty', async () => {

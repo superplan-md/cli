@@ -12,8 +12,6 @@ export interface ChangePaths {
   tasksIndexPath: string;
 }
 
-const CHANGE_TASKS_INDEX_PLACEHOLDER_LINE = '- Do not hand-create `tasks/T-xxx.md`. Shape the graph and dependencies here first, then mint executable tasks with `superplan task new` or `superplan task batch`.';
-
 export async function pathExists(targetPath: string): Promise<boolean> {
   try {
     await fs.access(targetPath);
@@ -51,26 +49,27 @@ export function formatTitleFromSlug(slug: string): string {
 
 export function buildChangeTasksIndex(changeSlug: string, title: string): string {
   return [
-    `# ${title}`,
+    '# Task Graph',
     '',
+    '## Graph Metadata',
     `- Change ID: \`${changeSlug}\``,
-    '- Goal: Describe the goal for this change.',
+    `- Title: ${title}`,
     '',
-    '## Tasks',
+    '## Graph Layout',
     '',
-    CHANGE_TASKS_INDEX_PLACEHOLDER_LINE,
+    '## Notes',
+    '- Author the graph here before scaffolding task contracts with the CLI.',
     '',
   ].join('\n');
 }
 
 export function buildTaskContract(options: {
   taskId: string;
+  changeId: string;
   title?: string;
   priority: ScaffoldPriority;
   description?: string;
   acceptanceCriteria?: string[];
-  dependsOnAll?: string[];
-  dependsOnAny?: string[];
 }): string {
   const description = options.description?.trim() || options.title?.trim() || 'Describe the task.';
   const acceptanceCriteria = (options.acceptanceCriteria ?? [])
@@ -83,16 +82,14 @@ export function buildTaskContract(options: {
   const normalizedAcceptanceCriteria = acceptanceCriteria.length > 0
     ? acceptanceCriteria
     : ['Define the first acceptance criterion.'];
-  const dependsOnAll = options.dependsOnAll ?? [];
-  const dependsOnAny = options.dependsOnAny ?? [];
 
   return [
     '---',
     `task_id: ${options.taskId}`,
+    `change_id: ${options.changeId}`,
+    `title: ${options.title?.trim() || description}`,
     'status: pending',
     `priority: ${options.priority}`,
-    `depends_on_all: ${JSON.stringify(dependsOnAll)}`,
-    `depends_on_any: ${JSON.stringify(dependsOnAny)}`,
     '---',
     '',
     '## Description',
@@ -169,9 +166,17 @@ export async function appendTaskEntryToIndex(
     return;
   }
 
-  const nextContent = currentContent.includes(CHANGE_TASKS_INDEX_PLACEHOLDER_LINE)
-    ? currentContent.replace(CHANGE_TASKS_INDEX_PLACEHOLDER_LINE, taskLine)
-    : `${currentContent.trimEnd()}\n${taskLine}\n`;
+  const sectionMarker = '## Graph Layout';
+  const sectionIndex = currentContent.indexOf(sectionMarker);
+  if (sectionIndex === -1) {
+    await fs.writeFile(tasksIndexPath, `${currentContent.trimEnd()}\n${taskLine}\n`, 'utf-8');
+    return;
+  }
 
-  await fs.writeFile(tasksIndexPath, nextContent, 'utf-8');
+  const insertionPoint = currentContent.indexOf('## Notes', sectionIndex);
+  const graphLayoutBlock = insertionPoint === -1
+    ? `${currentContent.trimEnd()}\n${taskLine}\n`
+    : `${currentContent.slice(0, insertionPoint).trimEnd()}\n${taskLine}\n\n${currentContent.slice(insertionPoint)}`;
+
+  await fs.writeFile(tasksIndexPath, graphLayoutBlock, 'utf-8');
 }

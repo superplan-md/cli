@@ -6,12 +6,21 @@ const {
   makeSandbox,
   parseCliJson,
   runCli,
+  writeChangeGraph,
   writeFile,
   writeJson,
 } = require('./helpers.cjs');
 
 test('sync reparses tasks, repairs safe runtime drift, and returns a refreshed status summary', async () => {
   const sandbox = await makeSandbox('superplan-sync-');
+
+  await writeChangeGraph(sandbox.cwd, 'demo', {
+    title: 'Demo',
+    entries: [
+      { task_id: 'T-001', title: 'First task' },
+      { task_id: 'T-002', title: 'Second task', depends_on_all: ['T-001'] },
+    ],
+  });
 
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), `---
 task_id: T-001
@@ -29,7 +38,6 @@ First task
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-002.md'), `---
 task_id: T-002
 status: pending
-depends_on_all: [T-001]
 ---
 
 ## Description

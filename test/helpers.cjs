@@ -34,6 +34,58 @@ async function writeJson(targetPath, value) {
   await writeFile(targetPath, JSON.stringify(value, null, 2));
 }
 
+async function writeChangeGraph(rootDir, changeSlug, options = {}) {
+  const title = options.title ?? changeSlug;
+  const entries = options.entries ?? [];
+  const notes = options.notes ?? [
+    'Author the graph here before scaffolding task contracts with the CLI.',
+  ];
+  const workstreams = options.workstreams ?? [];
+  const graphLines = [
+    '# Task Graph',
+    '',
+    '## Graph Metadata',
+    `- Change ID: \`${changeSlug}\``,
+    `- Title: ${title}`,
+    '',
+    '## Graph Layout',
+    ...entries.flatMap(entry => {
+      const lines = [
+        `- \`${entry.task_id}\` ${entry.title}`,
+        `  - depends_on_all: [${(entry.depends_on_all ?? []).map(value => `\`${value}\``).join(', ')}]`,
+        `  - depends_on_any: [${(entry.depends_on_any ?? []).map(value => `\`${value}\``).join(', ')}]`,
+      ];
+
+      if (entry.workstream) {
+        lines.push(`  - workstream: \`${entry.workstream}\``);
+      }
+
+      if (entry.exclusive_group) {
+        lines.push(`  - exclusive_group: \`${entry.exclusive_group}\``);
+      }
+
+      return lines;
+    }),
+    '',
+  ];
+
+  if (workstreams.length > 0) {
+    graphLines.push('## Workstreams');
+    graphLines.push(...workstreams.map(workstream => `- \`${workstream.id}\` ${workstream.title}`));
+    graphLines.push('');
+  }
+
+  graphLines.push('## Notes');
+  graphLines.push(...notes.map(note => `- ${note}`));
+  graphLines.push('');
+
+  await fs.mkdir(path.join(rootDir, '.superplan', 'changes', changeSlug, 'tasks'), { recursive: true });
+  await writeFile(
+    path.join(rootDir, '.superplan', 'changes', changeSlug, 'tasks.md'),
+    graphLines.join('\n'),
+  );
+}
+
 async function readJson(targetPath) {
   const content = await fs.readFile(targetPath, 'utf-8');
   return JSON.parse(content);
@@ -171,5 +223,6 @@ module.exports = {
   runCli,
   withSandboxEnv,
   writeFile,
+  writeChangeGraph,
   writeJson,
 };

@@ -7,6 +7,14 @@ export type OverlayTaskStatus =
   | 'blocked'
   | 'needs_feedback';
 
+export type OverlayChangeStatus =
+  | 'tracking'
+  | 'backlog'
+  | 'in_progress'
+  | 'blocked'
+  | 'needs_feedback'
+  | 'done';
+
 export type OverlayAttentionState = 'normal' | 'needs_feedback' | 'all_tasks_done';
 
 export type OverlayEventKind = 'needs_feedback' | 'all_tasks_done';
@@ -36,6 +44,15 @@ export interface OverlayBoard {
   needs_feedback: OverlayTaskSummary[];
 }
 
+export interface OverlayFocusedChange {
+  change_id: string;
+  title: string;
+  status: OverlayChangeStatus;
+  task_total: number;
+  task_done: number;
+  updated_at: string;
+}
+
 export interface OverlayEvent {
   id: string;
   kind: OverlayEventKind;
@@ -46,6 +63,7 @@ export interface OverlaySnapshot {
   workspace_path: string;
   session_id: string;
   updated_at: string;
+  focused_change: OverlayFocusedChange | null;
   active_task: OverlayTaskSummary | null;
   board: OverlayBoard;
   attention_state: OverlayAttentionState;
@@ -62,6 +80,7 @@ export interface CreateOverlaySnapshotInput {
   workspace_path: string;
   session_id: string;
   updated_at: string;
+  focused_change?: OverlayFocusedChange | null;
   active_task?: OverlayTaskSummary | null;
   board?: Partial<OverlayBoard>;
   attention_state?: OverlayAttentionState;
@@ -101,6 +120,10 @@ function cloneEvents(events: OverlayEvent[] | undefined): OverlayEvent[] {
   return (events ?? []).map(event => ({ ...event }));
 }
 
+function cloneFocusedChange(focusedChange: OverlayFocusedChange | null | undefined): OverlayFocusedChange | null {
+  return focusedChange ? { ...focusedChange } : null;
+}
+
 export function createOverlaySnapshot(input: CreateOverlaySnapshotInput): OverlaySnapshot {
   const board = input.board ?? {};
 
@@ -108,6 +131,7 @@ export function createOverlaySnapshot(input: CreateOverlaySnapshotInput): Overla
     workspace_path: input.workspace_path,
     session_id: input.session_id,
     updated_at: input.updated_at,
+    focused_change: cloneFocusedChange(input.focused_change),
     active_task: input.active_task ? { ...input.active_task } : null,
     board: {
       in_progress: cloneTasks(board.in_progress),

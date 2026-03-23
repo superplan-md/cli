@@ -8,6 +8,7 @@ const {
   parseCliJson,
   readJson,
   runCli,
+  writeChangeGraph,
   writeFile,
 } = require('./helpers.cjs');
 
@@ -21,6 +22,13 @@ function parseEvents(content) {
 
 test('visibility report summarizes an active run, enriches events, and writes repo-local reports', async () => {
   const sandbox = await makeSandbox('superplan-visibility-active-run-');
+
+  await writeChangeGraph(sandbox.cwd, 'demo', {
+    title: 'Demo',
+    entries: [
+      { task_id: 'T-400', title: 'Track an active visibility run' },
+    ],
+  });
 
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-400.md'), `---
 task_id: T-400
@@ -62,7 +70,7 @@ Track an active visibility run
   assert.equal(reportPayload.data.report.layers.overlay.status, 'disabled');
 
   const events = parseEvents(await fs.readFile(path.join(sandbox.cwd, '.superplan', 'runtime', 'events.ndjson'), 'utf-8'));
-  assert.equal(events.length, 3);
+  assert.equal(events.length, 4);
   assert.equal(events[0].run_id, reportPayload.data.report.run_id);
   assert.equal(events[0].command, 'run');
   assert.equal(events[0].workflow_phase, 'execution');
@@ -75,6 +83,10 @@ Track an active visibility run
   assert.equal(events[2].command, 'task block');
   assert.equal(events[2].workflow_phase, 'feedback');
   assert.equal(events[2].reason_code, 'Waiting on review');
+  assert.equal(events[3].run_id, reportPayload.data.report.run_id);
+  assert.equal(events[3].command, 'task block');
+  assert.equal(events[3].type, 'overlay.ensure');
+  assert.equal(events[3].workflow_phase, 'overlay');
 
   const latestReport = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'reports', 'latest.json'));
   assert.equal(latestReport.run_id, reportPayload.data.report.run_id);
@@ -92,6 +104,12 @@ test('visibility report closes completed runs and includes overlay and doctor he
 enabled = true
 `);
   await writeFile(path.join(sandbox.home, '.config', 'superplan', 'skills', 'using-superplan', 'SKILL.md'), '# using-superplan\n');
+  await writeChangeGraph(sandbox.cwd, 'demo', {
+    title: 'Demo',
+    entries: [
+      { task_id: 'T-401', title: 'Finish a complete visibility run' },
+    ],
+  });
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-401.md'), `---
 task_id: T-401
 status: pending

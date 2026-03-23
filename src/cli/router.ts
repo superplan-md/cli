@@ -10,6 +10,7 @@ import { sync } from "./commands/sync";
 import { status } from "./commands/status";
 import { overlay } from "./commands/overlay";
 import { update } from "./commands/update";
+import { validate } from "./commands/validate";
 import { visibility } from "./commands/visibility";
 
 type CommandOptions = {
@@ -69,6 +70,7 @@ export const router: Record<string, CommandHandler> = {
   remove: async (args, options) => removeCli(args, options),
   doctor: async (args) => doctor(args),
   parse: async (args, options) => parse(args, options),
+  validate: async (args) => validate(args),
   run: async (args) => run(args),
   sync: async () => sync(),
   status: async () => status(),

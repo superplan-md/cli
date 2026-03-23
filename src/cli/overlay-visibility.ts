@@ -26,9 +26,13 @@ export interface OverlayRuntimeNotice {
   companion: OverlayCompanionLaunchResult;
 }
 
-type OverlaySnapshotLike = Pick<OverlaySnapshot, 'workspace_path' | 'active_task' | 'attention_state' | 'board' | 'events'>;
+type OverlaySnapshotLike = Pick<OverlaySnapshot, 'workspace_path' | 'focused_change' | 'active_task' | 'attention_state' | 'board' | 'events'>;
 
 export function hasRenderableSnapshotContent(snapshot: OverlaySnapshotLike): boolean {
+  if (snapshot.focused_change && snapshot.focused_change.status !== 'done') {
+    return true;
+  }
+
   if (snapshot.active_task) {
     return true;
   }

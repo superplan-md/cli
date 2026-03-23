@@ -46,6 +46,8 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.match(installedUsingSuperplanSkill, /superplan task batch <change-slug> --stdin --json/);
   assert.match(installedUsingSuperplanSkill, /manual creation of individual `tasks\/T-xxx\.md` files is off limits/i);
   assert.match(installedUsingSuperplanSkill, /do not use shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > \.\.\.`, `printf > \.\.\.`, or here-docs/i);
+  assert.match(installedUsingSuperplanSkill, /author the root `\.superplan\/changes\/<change-slug>\/tasks\.md` manually as graph truth/i);
+  assert.match(installedUsingSuperplanSkill, /large, ambiguous, or multi-workstream, do not jump straight from the raw request into task scaffolding/i);
   assert.match(installedUsingSuperplanSkill, /stdin transport into `superplan task batch --stdin --json`/i);
   assert.match(installedUsingSuperplanSkill, /Entry routing is not permission to explore the CLI surface\./);
   assert.match(installedUsingSuperplanSkill, /do not call `--help`, neighboring subcommands, or diagnostic commands/i);
@@ -65,7 +67,10 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.match(installedShapeSkill, /superplan task batch <change-slug> --stdin --json/);
   assert.match(installedShapeSkill, /tasks\.md/);
   assert.match(installedShapeSkill, /Manual creation of individual `tasks\/T-xxx\.md` files is off limits\./);
+  assert.match(installedShapeSkill, /Authoring the root `tasks\.md` manually is expected\./);
   assert.match(installedShapeSkill, /Do not use shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > \.\.\.`, `printf > \.\.\.`, or here-docs/i);
+  assert.match(installedShapeSkill, /superplan validate <change-slug> --json/);
+  assert.match(installedShapeSkill, /dense, ambiguous requirement dump into task scaffolding/i);
   assert.match(installedShapeSkill, /stdin transport into `superplan task batch --stdin --json`/i);
   assert.match(installedShapeSkill, /use one `superplan task batch <change-slug> --stdin --json` call over repeated `superplan task new` calls\./);
   assert.match(installedShapeSkill, /Shaping is not permission to explore the CLI surface\./);
@@ -92,7 +97,9 @@ test('setup quiet installs bundled global assets into the configured home direct
     'utf-8',
   );
   assert.match(installedRouteSkill, /Routing is not permission to explore the CLI surface\./);
-  assert.match(installedRouteSkill, /CLI-minted `tasks\/T-\*\.md`/);
+  assert.match(installedRouteSkill, /CLI-scaffolded `tasks\/T-\*\.md`/);
+  assert.match(installedRouteSkill, /dense requirement dump, JTBD list, or multi-constraint brief/i);
+  assert.match(installedRouteSkill, /under-shaping large ambiguous work just to preserve the appearance of low ceremony/i);
 });
 
 test('interactive setup prints the current ascii wordmark once', async () => {
@@ -160,14 +167,14 @@ test('interactive setup installs only the selected agent integrations', async ()
   assert.equal(result.data.scope, 'both');
   assert.equal(confirmAnswers.length, 0);
   assert.deepEqual(result.data.agents.map(agent => agent.name).sort(), ['claude', 'codex']);
-  assert.deepEqual(seenCheckboxChoices[0], [
-    { name: 'Claude Code', value: 'claude', checked: false },
-  ]);
-  assert.match(seenCheckboxChoices[0].map(choice => choice.name).join(', '), /Claude Code/);
-  assert.deepEqual(seenCheckboxChoices[1], [
-    { name: 'Codex', value: 'codex', checked: false },
-  ]);
   assert.equal(seenCheckboxChoices.length, 2);
+  assert.equal(seenCheckboxChoices[0].some(choice => choice.value === 'claude'), true);
+  assert.equal(seenCheckboxChoices[0].some(choice => choice.value === '__all_agents__'), true);
+  assert.equal(seenCheckboxChoices[0].every(choice => choice.checked === false), true);
+  assert.match(seenCheckboxChoices[0].map(choice => choice.name).join(', '), /Claude Code/);
+  assert.equal(seenCheckboxChoices[1].some(choice => choice.value === 'codex'), true);
+  assert.equal(seenCheckboxChoices[1].some(choice => choice.value === '__all_agents__'), true);
+  assert.equal(seenCheckboxChoices[1].every(choice => choice.checked === false), true);
   assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-entry', 'SKILL.md')));
   assert.equal(await pathExists(path.join(sandbox.home, '.gemini', 'commands', 'superplan.toml')), false);
   assert.ok(await pathExists(path.join(sandbox.cwd, '.codex', 'skills', 'superplan-entry', 'SKILL.md')));
@@ -234,7 +241,7 @@ test('interactive setup select-all option installs every supported machine-level
       assert.equal(options.message, 'Select machine-level AI agents');
       assert.equal(
         options.instructions,
-        '\n! Found: Claude Code, Codex, Gemini, Cursor, OpenCode\n! Space = select, Enter = continue',
+        '\n! Found: Claude Code, Codex, Gemini, Cursor, OpenCode, Amazon Q, Antigravity\n! Space = select, Enter = continue',
       );
       assert.deepEqual(options.theme, {
         icon: {
@@ -248,6 +255,8 @@ test('interactive setup select-all option installs every supported machine-level
         'Gemini',
         'Cursor',
         'OpenCode',
+        'Amazon Q',
+        'Antigravity',
         'Select all found AI agents',
       ]);
       return ['__all_agents__'];
@@ -260,6 +269,8 @@ test('interactive setup select-all option installs every supported machine-level
   assert.equal(result.data.scope, 'global');
   assert.equal(confirmAnswers.length, 0);
   assert.deepEqual(result.data.agents.map(agent => agent.name).sort(), [
+    'amazonq',
+    'antigravity',
     'claude',
     'codex',
     'cursor',
@@ -271,6 +282,8 @@ test('interactive setup select-all option installs every supported machine-level
   assert.ok(await pathExists(path.join(sandbox.home, '.cursor', 'skills', 'superplan-entry', 'SKILL.md')));
   assert.ok(await pathExists(path.join(sandbox.home, '.codex', 'skills', 'superplan-entry', 'SKILL.md')));
   assert.ok(await pathExists(path.join(sandbox.home, '.config', 'opencode', 'skills', 'superplan-entry', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.amazonq', 'rules', 'superplan-entry', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.antigravity', 'workflows', 'superplan-entry', 'SKILL.md')));
 
   const geminiCommand = await fs.readFile(path.join(sandbox.home, '.gemini', 'commands', 'superplan.toml'), 'utf-8');
   assert.match(geminiCommand, /Never create or edit `\.superplan\/changes\/<change-slug>\/tasks\/T-xxx\.md` task contracts with shell loops or direct file-edit rewrites/i);
@@ -294,7 +307,8 @@ test('doctor reports valid after quiet global setup in a clean repo', async () =
   assert.equal(payload.data.valid, true);
   assert.deepEqual(payload.data.issues, []);
   assert.equal(payload.error, null);
-  assert.equal(await pathExists(fakeClaudeDir), false);
+  assert.equal(await pathExists(fakeClaudeDir), true);
+  assert.equal(await pathExists(path.join(fakeClaudeDir, 'skills', 'superplan-entry', 'SKILL.md')), true);
 });
 
 test('doctor reports missing home agent installs when a supported global agent directory exists', async () => {

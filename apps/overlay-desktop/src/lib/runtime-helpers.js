@@ -7,6 +7,7 @@ export function getEmptyRuntimeSnapshot(workspacePath = '') {
     workspace_path: workspacePath,
     session_id: workspacePath ? `workspace:${workspacePath}` : 'workspace:unknown',
     updated_at: new Date(0).toISOString(),
+    focused_change: null,
     active_task: null,
     board: {
       in_progress: [],
@@ -25,6 +26,7 @@ export function getBrowserFallbackSnapshot(workspacePath = '/Users/puneetbhatt/c
     workspace_path: workspacePath,
     session_id: `workspace:${workspacePath}`,
     updated_at: '2026-03-19T22:10:00.000Z',
+    focused_change: null,
     active_task: {
       task_id: 'T-412',
       title: 'Refine the compact in-progress overlay UX',
@@ -180,6 +182,10 @@ function getLatestAlertEvent(snapshot) {
 export function hasRenderableSnapshotContent(snapshot, nowMs = Date.now()) {
   if (!snapshot) {
     return false;
+  }
+
+  if (snapshot.focused_change && snapshot.focused_change.status !== 'done') {
+    return true;
   }
 
   if (snapshot.active_task) {

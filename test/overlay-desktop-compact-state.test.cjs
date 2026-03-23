@@ -236,3 +236,40 @@ test('attention cards keep the hide affordance in compact detail mode', async ()
   assert.equal(donePresentation.presentation, 'detail');
   assert.equal(donePresentation.showHideAction, true);
 });
+
+test('tracked changes without tasks render as a compact notification card', async () => {
+  const { createCompactPresentationModel, shouldShowCompactDetail } = await loadCompactStateModule();
+
+  const snapshot = createSnapshot({
+    active_task: null,
+    focused_change: {
+      change_id: 'shape-spec',
+      title: 'Shape Spec',
+      status: 'tracking',
+      task_total: 0,
+      task_done: 0,
+      updated_at: '2026-03-21T08:10:00.000Z',
+    },
+    board: {
+      in_progress: [],
+      backlog: [],
+      done: [],
+      blocked: [],
+      needs_feedback: [],
+    },
+  });
+
+  assert.equal(shouldShowCompactDetail(snapshot, false), true);
+
+  const presentation = createCompactPresentationModel(snapshot, {
+    detailExpanded: false,
+  });
+
+  assert.equal(presentation.presentation, 'detail');
+  assert.equal(presentation.primaryTask, null);
+  assert.equal(presentation.focusKind, 'change');
+  assert.equal(presentation.focusedChange?.change_id, 'shape-spec');
+  assert.equal(presentation.showHideAction, true);
+  assert.equal(presentation.showCollapseAction, false);
+  assert.equal(presentation.showBoardAction, false);
+});

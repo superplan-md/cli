@@ -11,6 +11,7 @@ const {
   readJson,
   runCli,
   withSandboxEnv,
+  writeChangeGraph,
   writeFile,
   writeJson,
 } = require('./helpers.cjs');
@@ -18,6 +19,15 @@ const {
 test('task selector returns the selected task contract and status reflects priority-aware ready selection', async () => {
   const sandbox = await makeSandbox('superplan-task-priority-');
   const { selectNextTask } = loadDistModule('cli/commands/task.js');
+
+  await writeChangeGraph(sandbox.cwd, 'demo', {
+    title: 'Demo',
+    entries: [
+      { task_id: 'T-001', title: 'Low priority task' },
+      { task_id: 'T-002', title: 'High priority task' },
+      { task_id: 'T-003', title: 'Default priority task' },
+    ],
+  });
 
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), `---
 task_id: T-001
@@ -82,6 +92,13 @@ Default priority task
 test('run starts the next task and then continues it on the next invocation', async () => {
   const sandbox = await makeSandbox('superplan-run-loop-');
 
+  await writeChangeGraph(sandbox.cwd, 'demo', {
+    title: 'Demo',
+    entries: [
+      { task_id: 'T-100', title: 'Run me' },
+    ],
+  });
+
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-100.md'), `---
 task_id: T-100
 status: pending
@@ -127,6 +144,12 @@ test('run with an explicit task id writes runtime state at the repo root workspa
 
   await fs.mkdir(path.join(sandbox.cwd, '.git'), { recursive: true });
   await fs.mkdir(nestedCwd, { recursive: true });
+  await writeChangeGraph(sandbox.cwd, 'demo', {
+    title: 'Demo',
+    entries: [
+      { task_id: 'T-150', title: 'Start from nested cwd' },
+    ],
+  });
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-150.md'), `---
 task_id: T-150
 status: pending
@@ -153,6 +176,13 @@ Start from nested cwd
 
 test('task lifecycle supports block, explicit run resume, request-feedback, and reset while appending runtime events', async () => {
   const sandbox = await makeSandbox('superplan-task-lifecycle-');
+
+  await writeChangeGraph(sandbox.cwd, 'demo', {
+    title: 'Demo',
+    entries: [
+      { task_id: 'T-200', title: 'Lifecycle task' },
+    ],
+  });
 
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-200.md'), `---
 task_id: T-200
@@ -223,15 +253,25 @@ Lifecycle task
     'task.started',
     'overlay.ensure',
     'task.blocked',
+    'overlay.ensure',
     'task.resumed',
     'overlay.ensure',
     'task.feedback_requested',
+    'overlay.ensure',
     'task.reset',
+    'overlay.ensure',
   ]);
 });
 
 test('task complete hands work to review, approve finalizes it, and reopen returns it to implementation', async () => {
   const sandbox = await makeSandbox('superplan-task-complete-');
+
+  await writeChangeGraph(sandbox.cwd, 'demo', {
+    title: 'Demo',
+    entries: [
+      { task_id: 'T-300', title: 'Complete me' },
+    ],
+  });
 
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-300.md'), `---
 task_id: T-300
@@ -307,6 +347,20 @@ Complete me
   });
 
   const eventsFile = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'runtime', 'events.ndjson'), 'utf-8');
+  const allEventTypes = eventsFile
+    .trim()
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map(line => JSON.parse(line).type);
+  assert.deepEqual(allEventTypes, [
+    'task.review_requested',
+    'overlay.ensure',
+    'task.approved',
+    'overlay.ensure',
+    'task.reopened',
+    'overlay.ensure',
+  ]);
+
   const eventTypes = eventsFile
     .trim()
     .split(/\r?\n/)
@@ -323,6 +377,13 @@ Complete me
 
 test('approve and reopen reject invalid review lifecycle transitions', async () => {
   const sandbox = await makeSandbox('superplan-task-review-errors-');
+
+  await writeChangeGraph(sandbox.cwd, 'demo', {
+    title: 'Demo',
+    entries: [
+      { task_id: 'T-301', title: 'Review me later' },
+    ],
+  });
 
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-301.md'), `---
 task_id: T-301
@@ -360,6 +421,15 @@ Review me later
 test('task fix repairs runtime conflicts and doctor deep reports the remaining structural issues', async () => {
   const sandbox = await makeSandbox('superplan-task-fix-');
 
+  await writeChangeGraph(sandbox.cwd, 'demo', {
+    title: 'Demo',
+    entries: [
+      { task_id: 'T-401', title: 'Valid task' },
+      { task_id: 'T-402', title: 'Broken dependency task', depends_on_all: ['T-999'] },
+      { task_id: 'T-999', title: 'Upstream blocker' },
+    ],
+  });
+
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-401.md'), `---
 task_id: T-401
 status: pending
@@ -375,7 +445,6 @@ Valid task
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-402.md'), `---
 task_id: T-402
 status: pending
-depends_on_all: [T-999]
 ---
 
 ## Description

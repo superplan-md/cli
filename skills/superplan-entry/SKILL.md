@@ -114,7 +114,8 @@ When Superplan is active in a repo, prefer the CLI as the execution control plan
 Common commands:
 
 - `superplan change new <change-slug> --json` to create one tracked change root
-- `superplan task new <change-slug> --title "<title>" --json` to create exactly one new task contract
+- `superplan validate <change-slug> --json` to validate `tasks.md` graph structure and task-contract consistency
+- `superplan task new <change-slug> --task-id <task_id> --json` to scaffold exactly one graph-declared task contract
 - `superplan task batch <change-slug> --stdin --json` to create two or more new task contracts in one pass
 - `superplan status --json` to see active, ready, blocked, and needs-feedback tasks
 - `superplan run --json` to claim the next ready task or continue the active task, with the chosen task contract and selection reason in the payload
@@ -127,7 +128,7 @@ Common commands:
 - `superplan doctor --json` to verify setup and overlay launchability on a fresh machine or after install/update
 - `superplan overlay ensure --json` to explicitly reveal or resync the overlay when overlay support is enabled
 - `superplan overlay hide --json` to close the overlay when the workspace is idle or empty
-- when shaping tracked work, let the main graph breakdown live in `.superplan/changes/<slug>/tasks.md` first, then use `superplan task new` for one contract or `superplan task batch` for multiple contracts instead of hand-creating `tasks/T-xxx.md`
+- when shaping tracked work, author `.superplan/changes/<slug>/tasks.md` first, validate it, then use `superplan task new` or `superplan task batch` by graph-declared `task_id` instead of hand-creating `tasks/T-xxx.md`
 
 Execution default:
 
@@ -142,13 +143,16 @@ Execution default:
 Authoring default:
 
 1. create the tracked change once with `superplan change new <change-slug> --json`
-2. manual creation of individual `tasks/T-xxx.md` files is off limits; agents should shape the graph and dependencies first, then use the CLI to mint task contracts
-3. do not use shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > ...`, `printf > ...`, or here-docs to write task contracts or task graph files directly; shell is only acceptable as stdin transport into `superplan task batch --stdin --json`
-4. use `superplan task new <change-slug> --title "<title>" --json` only when exactly one task should be created now
-5. use `superplan task batch <change-slug> --stdin --json` when two or more tasks are clear enough to create in one pass
-6. when multiple tasks are ready together, prefer one batch call so the graph edges and batch-local dependencies are captured in one authoring step
-7. prefer stdin over temporary files for batch task authoring in agent flows
-8. use the returned task payloads directly after authoring instead of immediately calling `superplan task show`
+2. manual creation of individual `tasks/T-xxx.md` files is off limits; agents should shape the graph and dependencies first, validate them, then use the CLI to mint task contracts
+3. author the root `.superplan/changes/<change-slug>/tasks.md` manually as graph truth; the shell-loop prohibition applies to task-contract generation and bulk graph rewrites, not to normal manual graph authoring
+4. do not use shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > ...`, `printf > ...`, or here-docs to mass-write task contracts or bulk-rewrite graph artifacts; shell is only acceptable as stdin transport into `superplan task batch --stdin --json`
+5. when the request is large, ambiguous, or multi-workstream, do not jump straight from the raw request into task scaffolding; route through clarification, spec, or plan work first, then finalize the graph
+6. author `.superplan/changes/<change-slug>/tasks.md` manually as graph truth, then run `superplan validate <change-slug> --json`
+7. use `superplan task new <change-slug> --task-id <task_id> --json` only when exactly one graph-declared task should be scaffolded now
+8. use `superplan task batch <change-slug> --stdin --json` when two or more graph-declared tasks are clear enough to scaffold in one pass
+9. when multiple tasks are ready together, prefer one batch call so the graph edges and batch-local dependencies are captured in one authoring step
+10. prefer stdin over temporary files for batch task authoring in agent flows
+11. use the returned task payloads directly after authoring instead of immediately calling `superplan task show`
 
 Canonical command rule:
 
@@ -286,7 +290,8 @@ Likely handoffs:
 - `superplan setup`
 - `superplan init --json`
 - `superplan change new <change-slug> --json`
-- `superplan task new <change-slug> --title "<title>" --json`
+- `superplan validate <change-slug> --json`
+- `superplan task new <change-slug> --task-id <task_id> --json`
 - `superplan task batch <change-slug> --stdin --json`
 - `superplan status --json`
 - `superplan run --json`

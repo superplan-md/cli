@@ -44,6 +44,7 @@ Commands:
 
   Recovery and diagnostics:
     parse      Parse task contracts and return diagnostics
+    validate   Validate tasks.md graph and task-contract consistency
     sync       Reconcile repo state after task-file edits or runtime drift
     overlay    Overlay companion operations
     visibility Inspect run visibility and health evidence

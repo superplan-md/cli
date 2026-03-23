@@ -16,38 +16,38 @@ March 17 defines the target artifact model as:
 
 That remains the product direction.
 
-But the current CLI does **not** parse or validate `tasks.md` yet.
-
-Today, the executable surface is narrower:
+Today, the executable surface is:
 
 - `superplan init --json` creates `.superplan/`, `.superplan/context/`, `.superplan/runtime/`, and `.superplan/changes/`
 - `superplan change new <change-slug> --json` scaffolds a tracked change root
-- `superplan task new <change-slug> --title "<title>" --json` scaffolds one task contract and appends a task entry to `tasks.md`
-- `superplan task batch <change-slug> --stdin --json` scaffolds multiple task contracts from JSON stdin and appends task entries to `tasks.md`
-- `superplan parse [path] --json` parses task contract markdown files
+- `superplan validate <change-slug> --json` validates `tasks.md`, graph diagnostics, and graph/task-contract consistency
+- `superplan task new <change-slug> --task-id <task_id> --json` scaffolds one graph-declared task contract without mutating `tasks.md`
+- `superplan task batch <change-slug> --stdin --json` scaffolds multiple graph-declared task contracts from JSON stdin without mutating `tasks.md`
+- `superplan parse [path] --json` parses task contract markdown files and overlays dependency truth from the validated graph
 - `superplan status --json`, `superplan run --json`, `superplan task show <task_id> --json`, and `superplan task complete --json` operate on parsed task files plus runtime state
 - `superplan doctor --json` checks installation and setup, not shaped work
 
 So shape work like this:
 
-- author `tasks.md` only when graph visibility adds supervision value
+- author `tasks.md` as the canonical graph whenever tracked work exists
 - manual creation of individual `tasks/T-xxx.md` files is off limits
-- once the graph in `tasks.md` is ready, use `superplan task new` for one task or `superplan task batch` for multiple tasks to mint the `T-xxx.md` task contracts
+- once the graph in `tasks.md` is ready, run `superplan validate <slug> --json`
+- use `superplan task new` for one task or `superplan task batch` for multiple tasks to mint the `T-xxx.md` task contracts by explicit `task_id`
 - keep task contracts in `.superplan/changes/<slug>/tasks/T-xxx.md`
-- validate task contracts with `superplan parse`
+- use `superplan parse` for contract parsing and `superplan validate` for graph plus cross-artifact checks
 - inspect readiness with `superplan status --json`, `superplan run --json`, and `superplan task show <task_id> --json` as needed
-- do not claim the current CLI validates `tasks.md`
+- do not split dependency ownership back into task-file frontmatter
 
 ## Current Authoring Workflow
 
 1. Run `superplan init --json` if the repo is not initialized.
 2. Run `superplan change new <slug> --json` to create `.superplan/changes/<slug>/` and `.superplan/changes/<slug>/tasks/`.
-3. Create or refine `.superplan/changes/<slug>/tasks.md` as the human graph/index when graph visibility adds supervision value.
-4. Use `superplan task new <slug> --title "<title>" --json` when exactly one new task contract is ready.
-5. Use `superplan task batch <slug> --stdin --json` when two or more new task contracts are ready and can be scaffolded together.
-6. Use the returned payload from `task new` or `task batch` directly instead of immediately calling `task show`.
-7. Run `superplan parse --json .superplan/changes/<slug>`.
-8. Fix diagnostics until each executable task is valid.
+3. Create or refine `.superplan/changes/<slug>/tasks.md` as graph truth with explicit task ids and dependency edges.
+4. Run `superplan validate <slug> --json`.
+5. Use `superplan task new <slug> --task-id <task_id> --json` when exactly one graph-declared task contract is ready.
+6. Use `superplan task batch <slug> --stdin --json` when two or more graph-declared task contracts are ready and can be scaffolded together.
+7. Use the returned payload from `task new` or `task batch` directly instead of immediately calling `task show`.
+8. Run `superplan validate <slug> --json` again after scaffolding.
 9. Use `superplan status --json` to confirm the ready frontier and `superplan task show <task_id> --json` when one task needs deeper inspection.
 10. Hand off to execution with the exact validation commands already named.
 
@@ -62,35 +62,27 @@ For agent-first flows, prefer stdin over temporary files. `--file <path>` remain
 
 Useful fields per task object:
 
-- `ref`: optional local alias for other tasks in the same batch
-- `title`: required summary used for the change index
+- `task_id`: required graph-declared task id
 - `priority`: optional `high`, `medium`, or `low`
-- `description`: optional description body; defaults to the title when omitted
+- `description`: optional description body; defaults to the graph title when omitted
 - `acceptance_criteria`: optional array of checkbox text
-- `depends_on_all`: optional array of existing task ids
-- `depends_on_any`: optional array of existing task ids
-- `depends_on_all_refs`: optional array of same-batch refs
-- `depends_on_any_refs`: optional array of same-batch refs
 
 Example:
 
 ```json
 [
   {
-    "ref": "parser",
-    "title": "Add batch parser",
+    "task_id": "T-001",
     "priority": "high",
     "acceptance_criteria": [
-      "CLI accepts a JSON batch file.",
-      "Invalid batch payloads fail clearly."
+      "CLI accepts a validated graph before scaffolding.",
+      "Task contracts scaffold from graph-declared ids."
     ]
   },
   {
-    "ref": "tests",
-    "title": "Add scaffold coverage",
-    "depends_on_all_refs": ["parser"],
+    "task_id": "T-002",
     "acceptance_criteria": [
-      "Batch creation tests cover dependency ref resolution."
+      "Scaffold coverage proves graph and contract consistency."
     ]
   }
 ]
@@ -99,7 +91,7 @@ Example:
 Agent-first example:
 
 ```bash
-printf '%s' '[{"ref":"parser","title":"Add batch parser"},{"title":"Add scaffold coverage","depends_on_all_refs":["parser"]}]' | superplan task batch improve-planning --stdin --json
+printf '%s' '[{"task_id":"T-001","priority":"high"},{"task_id":"T-002"}]' | superplan task batch improve-planning --stdin --json
 ```
 
 ## Task Contract Shape The Current CLI Parses
@@ -107,12 +99,13 @@ printf '%s' '[{"ref":"parser","title":"Add batch parser"},{"title":"Add scaffold
 Current required frontmatter:
 
 - `task_id`
+- `change_id`
+- `title`
 - `status`
 
-Current optional frontmatter used by readiness logic:
+Current optional frontmatter commonly scaffolded:
 
-- `depends_on_all`
-- `depends_on_any`
+- `priority`
 
 Current required sections:
 
@@ -135,9 +128,10 @@ Example:
 ```md
 ---
 task_id: T-003
+change_id: improve-planning
+title: Implement the parser error summary output
 status: pending
-depends_on_all: [T-001, T-002]
-depends_on_any: []
+priority: high
 ---
 
 ## Description
@@ -153,6 +147,8 @@ Implement the parser error summary output for invalid task contracts.
 `superplan parse --json` currently returns task data including:
 
 - `task_id`
+- `change_id`
+- `title`
 - `status`
 - `depends_on_all`
 - `depends_on_any`
@@ -183,34 +179,31 @@ The current CLI computes readiness from:
 - task validity
 - status not already `done`
 - status not already `in_progress`
-- all `depends_on_all` tasks being done
-- at least one `depends_on_any` task being done, if any are listed
+- all graph-owned `depends_on_all` tasks being done
+- at least one graph-owned `depends_on_any` task being done, if any are listed
 
-That means task-file dependency fields are the current executable graph truth.
+That means `tasks.md` is the executable graph truth and parse/runtime project those edges onto task contracts.
 
 ## Fields The Product Docs Want But The Current CLI Ignores
 
 Safe to include for future-facing contracts, but not currently parsed:
 
-- `change_id`
 - `plan_id`
 - `spec_ids`
 - `assignee`
 - `date`
-- `title`
 - `## Context`
 
 These may still be useful for humans and for future CLI evolution.
 Do not rely on the current CLI to validate them.
 
-## Graph Features Planned But Not Yet CLI-Validated
+## Graph Features Planned But Not Yet Fully Runtime-Enforced
 
-Not implemented in the current CLI:
+Not fully implemented in the current CLI:
 
-- `tasks.md` graph/index parsing
 - workstream grouping
-- `exclusive_group`
-- graph-aware validation of the central index file
+- `exclusive_group` runtime semantics
+- graph sharding for very large graphs
 - CLI authoring commands such as `superplan change create` or `superplan task add`
 
 Keep these distinctions explicit in the skill.
@@ -219,7 +212,8 @@ Keep these distinctions explicit in the skill.
 
 Use:
 
-- `superplan task new <change-slug> --title "<title>" --json` for one task contract
+- `superplan validate <change-slug> --json` for graph and cross-artifact validation
+- `superplan task new <change-slug> --task-id <task_id> --json` for one task contract
 - `superplan task batch <change-slug> --stdin --json` for two or more task contracts
 - `superplan doctor --json` for install/setup readiness
 - `superplan parse --json` for task contract validity
@@ -230,4 +224,4 @@ Do not use:
 
 - `superplan doctor --json` as a task validator
 - future commands as if they already ship
-- `tasks.md` as the only executable truth today
+- task-file dependency frontmatter as the source of graph truth

@@ -59,6 +59,14 @@ function getPrimaryTask(snapshot) {
     ?? null;
 }
 
+function getFocusedChange(snapshot) {
+  if (!snapshot.focused_change || snapshot.focused_change.status === 'done') {
+    return null;
+  }
+
+  return snapshot.focused_change;
+}
+
 function createColumnCounts(board) {
   return {
     in_progress: board.in_progress.length,
@@ -81,7 +89,7 @@ function getAttentionLabel(attentionState) {
   return 'Working quietly';
 }
 
-function getSurfaceLabel(attentionState) {
+function getSurfaceLabel(attentionState, focusedChange) {
   if (attentionState === 'needs_feedback') {
     return 'Agent needs feedback';
   }
@@ -90,16 +98,32 @@ function getSurfaceLabel(attentionState) {
     return 'All tasks done';
   }
 
+  if (focusedChange) {
+    return 'Tracking change';
+  }
+
   return 'Tracking active session';
 }
 
-function getSecondaryLabel(snapshot, primaryTask) {
+function getSecondaryLabel(snapshot, primaryTask, focusedChange) {
   if (snapshot.attention_state === 'needs_feedback') {
     return 'Waiting on you';
   }
 
   if (snapshot.attention_state === 'all_tasks_done') {
     return 'Session complete';
+  }
+
+  if (!primaryTask && focusedChange) {
+    if (focusedChange.status === 'tracking') {
+      return 'Waiting for the first task';
+    }
+
+    if (focusedChange.status === 'done') {
+      return 'Change complete';
+    }
+
+    return 'Tracking change';
   }
 
   if (!primaryTask) {
@@ -168,15 +192,17 @@ export function getCompactAttentionPreset() {
 
 export function createPrototypeViewModel(snapshot, mode) {
   const primaryTask = getPrimaryTask(snapshot);
+  const focusedChange = getFocusedChange(snapshot);
 
   return {
     mode,
     attentionState: snapshot.attention_state,
     attentionLabel: getAttentionLabel(snapshot.attention_state),
-    surfaceLabel: getSurfaceLabel(snapshot.attention_state),
-    secondaryLabel: getSecondaryLabel(snapshot, primaryTask),
+    surfaceLabel: getSurfaceLabel(snapshot.attention_state, focusedChange),
+    secondaryLabel: getSecondaryLabel(snapshot, primaryTask, focusedChange),
     workspaceLabel: getWorkspaceLabel(snapshot.workspace_path),
     updatedLabel: formatUpdatedLabel(snapshot.updated_at),
+    focusedChange,
     primaryTask,
     columnCounts: createColumnCounts(snapshot.board),
     visibleColumns: createVisibleColumns(snapshot.board),

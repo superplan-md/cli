@@ -8,6 +8,14 @@ function getPrimaryTask(snapshot) {
     ?? null;
 }
 
+function getFocusedChange(snapshot) {
+  if (!snapshot?.focused_change || snapshot.focused_change.status === 'done') {
+    return null;
+  }
+
+  return snapshot.focused_change;
+}
+
 export function isTaskReadyForReview(task) {
   if (!task || task.status !== 'backlog') {
     return false;
@@ -28,7 +36,12 @@ export function shouldShowCompactDetail(snapshot, detailExpanded) {
     return true;
   }
 
-  return detailExpanded && Boolean(getPrimaryTask(snapshot));
+  const primaryTask = getPrimaryTask(snapshot);
+  if (primaryTask) {
+    return detailExpanded;
+  }
+
+  return Boolean(getFocusedChange(snapshot));
 }
 
 export function shouldAutoExpandCompactDetail(previousSnapshot, nextSnapshot, mode) {
@@ -67,16 +80,21 @@ export function shouldAutoExpandCompactDetail(previousSnapshot, nextSnapshot, mo
 export function createCompactPresentationModel(snapshot, options = {}) {
   const detailExpanded = options.detailExpanded ?? false;
   const primaryTask = getPrimaryTask(snapshot);
+  const focusedChange = getFocusedChange(snapshot);
   const presentation = shouldShowCompactDetail(snapshot, detailExpanded) ? 'detail' : 'chip';
+  const focusKind = primaryTask ? 'task' : focusedChange ? 'change' : null;
 
   return {
     primaryTask,
+    focusedChange,
+    focusKind,
     presentation,
     showHideAction: presentation === 'detail',
     showCollapseAction: presentation === 'detail'
       && snapshot.attention_state === 'normal'
+      && focusKind === 'task'
       && primaryTask !== null,
-    showBoardAction: presentation === 'detail',
-    isReviewReadyTask: isTaskReadyForReview(primaryTask),
+    showBoardAction: presentation === 'detail' && (focusKind !== 'change' || (focusedChange?.task_total ?? 0) > 0),
+    isReviewReadyTask: focusKind === 'task' ? isTaskReadyForReview(primaryTask) : false,
   };
 }
