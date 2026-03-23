@@ -6,6 +6,8 @@ import { getTaskCommandHelpMessage } from './commands/task';
 import { getOverlayCommandHelpMessage } from './commands/overlay';
 import { getVisibilityCommandHelpMessage } from './commands/visibility';
 import { getRemoveCommandHelpMessage } from './commands/remove';
+import { getInstallCommandHelpMessage } from './commands/install';
+import { getInitCommandHelpMessage } from './commands/init';
 import { stopNextAction, type NextAction } from './next-action';
 
 const { version } = require('../../package.json') as { version: string };
@@ -46,7 +48,8 @@ Usage:
 
 Commands:
   Setup:
-    init       Scaffold the repo-local or machine-level Superplan workspace
+    install    Install Superplan globally on this machine
+    init       Initialize the current repository for Superplan
     context    Create or inspect durable workspace context artifacts
 
   Authoring:
@@ -180,6 +183,38 @@ async function main() {
 
   if (command === 'remove' && (args.includes('--help') || args[1] === 'help')) {
     const helpText = getRemoveCommandHelpMessage();
+    if (json || quiet) {
+      printJsonResult({
+        ok: true,
+        data: {
+          help: helpText,
+        },
+        error: null,
+      });
+    } else {
+      console.log(helpText);
+    }
+    return;
+  }
+
+  if (command === 'install' && (args.includes('--help') || args[1] === 'help')) {
+    const helpText = getInstallCommandHelpMessage();
+    if (json || quiet) {
+      printJsonResult({
+        ok: true,
+        data: {
+          help: helpText,
+        },
+        error: null,
+      });
+    } else {
+      console.log(helpText);
+    }
+    return;
+  }
+
+  if (command === 'init' && (args.includes('--help') || args[1] === 'help')) {
+    const helpText = getInitCommandHelpMessage();
     if (json || quiet) {
       printJsonResult({
         ok: true,

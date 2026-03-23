@@ -1,0 +1,231 @@
+
+> superplan@0.1.0 test
+> npm run build && node --test test/*.test.cjs test/install.test.cjs -t install script installs superplan from a local source snapshot into a custom prefix
+
+
+> superplan@0.1.0 build
+> tsc && node ./scripts/copy-skills.js
+
+✔ cli returns NO_COMMAND in json mode (187.994917ms)
+✖ cli without a command shows the main Superplan command list (198.971958ms)
+✔ cli returns version in json mode (212.703875ms)
+✔ cli returns UNKNOWN_COMMAND for invalid command (221.880625ms)
+✔ server is no longer part of the surfaced command set (163.667708ms)
+✔ purge is no longer part of the surfaced command set (165.787667ms)
+✔ task command in quiet mode stays agent-safe json (189.908583ms)
+✔ task --help explains task subcommands explicitly (190.4985ms)
+✔ remove --help explains the explicit non-interactive agent-safe path (218.705ms)
+✔ change --help explains change scaffolding commands (197.29525ms)
+✔ task show includes readiness reasons without a separate why command (171.366667ms)
+✔ removed task diagnostic commands fail fast and point users to the leaner loop (1450.45ms)
+✔ overlay show was merged into ensure (156.374375ms)
+✔ init in human mode prints a concise success message instead of the full payload (537.354417ms)
+✔ doctor reports when overlay is enabled but no launchable companion is installed (118.910792ms)
+✔ doctor accepts the legacy entry skill directory during the skill namespace migration (9.059208ms)
+✔ doctor reports missing workspace artifacts and task-state drift (719.609542ms)
+✔ context bootstrap creates the durable workspace context entrypoints (690.120417ms)
+✖ install script installs superplan from a local source snapshot into a custom prefix (6225.360791ms)
+✔ install script records and installs a bundled overlay companion when one is provided (4252.360875ms)
+✔ install script defaults bundled overlay installs to enabled (0.425ms)
+✔ install script stops a running installed overlay before replacing it (12551.021542ms)
+✔ install quiet installs bundled global assets into the configured home directory (512.318334ms)
+✔ init installs local artifacts and auto-runs install if global config is missing (508.17975ms)
+✔ init --yes --json creates repository scaffolding without prompting (718.419292ms)
+✔ init from a nested repo directory creates scaffolding at the repo root (687.357833ms)
+✔ doctor reports valid after installation (871.652292ms)
+✔ macOS bundle launch plan reuses an already running matching workspace instance (66.448542ms)
+✔ macOS bundle launch plan hands off through the executable when another workspace instance is already running (0.463709ms)
+✔ macOS bundle launch plan opens the app bundle without forcing a new instance on cold start (0.372375ms)
+✔ overlay --help explains overlay lifecycle subcommands (221.59425ms)
+✔ overlay ensure keeps the companion hidden until overlay support is enabled (197.617875ms)
+✔ overlay enable turns on local overlay behavior and allows ensure to show the companion (376.671958ms)
+✔ task scaffold new auto-launches the overlay companion when overlay is enabled (793.386208ms)
+✔ task scaffold batch auto-launches the overlay companion when overlay is enabled (838.329625ms)
+✔ change new auto-launches the overlay and focuses the new change after prior work is done (551.781958ms)
+✔ run with an explicit task id honors the global overlay setting when local workspace config is missing (253.283458ms)
+✔ run ensures overlay visibility when it starts and continues work (861.386375ms)
+✔ overlay ensure launches the installed companion with the explicit workspace path (470.939416ms)
+✔ overlay ensure does not launch a second detached companion when one is already running (842.506417ms)
+✔ overlay hide terminates the detached companion process (625.899291ms)
+✔ task runtime request-feedback relaunches the companion after hide and restores overlay runtime state (695.86725ms)
+✔ overlay ensure keeps the companion visible when a tracked change remains after task contracts are removed (692.43725ms)
+✔ overlay status reports the last requested runtime visibility instead of recomputing it from content (456.271625ms)
+✔ overlay ensure launches the macOS app bundle through open with the explicit workspace path (269.132ms)
+✔ run with an explicit task id auto-launches the overlay companion when overlay is enabled (523.612125ms)
+✔ run with an explicit task id ensures overlay visibility for both start and resume (597.647667ms)
+✔ overlay snapshot includes active-task checklist progress counts (236.200375ms)
+✔ sync refreshes overlay snapshot after task checklist edits (396.593333ms)
+✔ task lifecycle updates overlay snapshot and emits high-signal alerts only (468.630834ms)
+✔ overlay snapshot factory supplies stable defaults (88.465125ms)
+✔ overlay snapshot factory preserves explicit event and board payloads (0.394542ms)
+✔ overlay runtime paths live under the repo runtime directory (0.22975ms)
+✔ overlay event kind guard only accepts high-signal alert kinds (0.210667ms)
+✔ overlay control factory records visibility requests for the desktop companion (0.191167ms)
+✔ compact detail stays expanded for non-active primary-task states (4.213792ms)
+✔ compact transitions auto-expand when task focus changes in compact mode (0.191125ms)
+✔ compact transitions auto-expand when an active task hands off into a review-ready summary (0.135167ms)
+✔ compact transitions ignore progress-only updates on the same active task (0.43825ms)
+✔ attention cards keep the hide affordance in compact detail mode (0.408ms)
+✔ tracked changes without tasks render as a compact notification card (0.299125ms)
+✔ prototype view model derives compact overlay content from the active task (40.233667ms)
+✔ prototype view model builds board columns in UX order and only shows Needs You when populated (0.372334ms)
+✔ prototype view model marks fully complete backlog tasks as ready for review (0.234ms)
+✔ prototype mode toggles between compact and expanded and exposes refined window presets (0.142042ms)
+✔ browser fallback snapshot includes live and completed task timing cues (6.418042ms)
+✔ snapshot task progress prefers active-task checklist progress over board completion counts (0.642834ms)
+✔ snapshot task progress falls back to board completion counts when task checklist counts are absent (0.317167ms)
+✔ renderable snapshot helper hides stale all-tasks-done acknowledgement snapshots (0.217375ms)
+✔ renderable snapshot helper still shows actionable backlog and needs-feedback states (0.12625ms)
+✔ renderable snapshot helper shows a focused tracked change before any tasks exist (0.106833ms)
+✔ attention sound helper returns fresh needs-feedback events once (0.199459ms)
+✔ attention sound helper ignores stale all-tasks-done events (0.118292ms)
+✔ tauri window availability guard returns false when the runtime getter throws (0.226583ms)
+✔ readOverlayPreferences falls back to the global setting when the local .superplan folder is missing (77.58225ms)
+✔ readOverlayPreferences falls back to the global setting when local .superplan exists without config.toml (4.957416ms)
+✔ readOverlayPreferences ignores a partial local overlay section and keeps the global setting (5.857875ms)
+✔ readOverlayPreferences ignores an invalid local overlay value and keeps the global setting (3.778959ms)
+✔ readOverlayPreferences prefers an explicit local overlay setting over the global one (3.893917ms)
+✔ overlay release target resolves stable artifact names for supported platforms (2.291083ms)
+✔ overlay release packaging creates a stable macOS tarball from the Tauri app bundle (62.532625ms)
+✔ overlay release packaging creates a stable Linux AppImage artifact (2.592958ms)
+✔ parse defaults to .superplan/changes and reports missing directory gracefully (174.343125ms)
+✔ parse from a nested repo directory resolves the repo-root superplan workspace (183.8045ms)
+✔ parse extracts task fields, dependencies, priority, and acceptance criteria from a task file (167.352125ms)
+✔ parse accepts multi-line yaml-style dependency lists in frontmatter (216.687333ms)
+✔ parse reports duplicate ids and invalid task diagnostics across a change set (192.224833ms)
+✔ remove deletes local superplan state including .superplan changes (137.360458ms)
+✔ remove also cleans up legacy pre-prefix skill directories (30.510125ms)
+✔ remove deletes local superplan state even when only .superplan exists (24.050958ms)
+✔ remove deletes the recorded global overlay install when removing machine-level state (89.905166ms)
+✔ remove deletes the recorded global CLI install when removing machine-level state (133.31ms)
+✔ remove infers and deletes the running global CLI install when metadata is missing (120.709541ms)
+✔ remove deletes a symlinked dev-style global install by inferring from the invoked superplan bin path (108.261167ms)
+✔ remove from a nested subdirectory deletes the nearest parent local superplan root (38.764708ms)
+✔ remove supports explicit non-interactive local cleanup for agents (254.844041ms)
+✔ remove rejects non-interactive agent mode without explicit scope and confirmation (270.960042ms)
+✔ change new creates a canonical change skeleton (186.880459ms)
+✔ change new from a nested repo directory uses the repo-root superplan workspace (271.946125ms)
+✔ task scaffold new scaffolds a contract for a graph-declared task id without mutating tasks.md (1202.616459ms)
+✔ task scaffold batch scaffolds graph-declared task ids and parse derives dependencies from tasks.md (653.817459ms)
+✔ task scaffold batch fails before writing when a task id is not declared in the graph (331.368958ms)
+✔ task scaffold batch using stdin fails clearly when the payload is empty (327.525208ms)
+✔ sync reparses tasks, repairs safe runtime drift, and returns a refreshed status summary (355.566875ms)
+✔ task selector returns the selected task contract and status reflects priority-aware ready selection (406.752792ms)
+✔ run starts the next task and then continues it on the next invocation (440.621292ms)
+✔ run with an explicit task id writes runtime state at the repo root workspace (200.284791ms)
+✔ task lifecycle supports block, explicit run resume, request-feedback, and reset while appending runtime events (1362.612959ms)
+✔ task complete hands work to review, approve finalizes it, and reopen returns it to implementation (1101.393292ms)
+✔ approve and reopen reject invalid review lifecycle transitions (272.010791ms)
+✔ task fix repairs runtime conflicts and doctor deep reports the remaining structural issues (411.811375ms)
+✔ update reruns the bundled installer with recorded install metadata (128.11075ms)
+✔ update resolves and installs the latest published release before refreshing skills (3.910417ms)
+✔ update fails cleanly when latest release resolution fails (5.080666ms)
+✔ update refreshes installed skills for existing global and local setups (1560.011541ms)
+✔ update refuses to mutate local source installs automatically (10.42125ms)
+✔ validate accepts a graph-only change before task contracts are scaffolded (233.164833ms)
+✔ validate reports graph dependency errors deterministically (201.984333ms)
+✔ validate reports task contracts that are not declared in the graph (175.360541ms)
+✔ visibility examples harness writes paired scenario markdown and json artifacts (14.7615ms)
+✔ visibility report summarizes an active run, enriches events, and writes repo-local reports (499.599792ms)
+✔ visibility report closes completed runs and includes overlay and doctor health signals (416.269125ms)
+✔ visibility report stays backward-compatible with legacy event lines that lack run metadata (128.735875ms)
+ℹ tests 123
+ℹ suites 0
+ℹ pass 121
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 23131.059625
+
+✖ failing tests:
+
+test at test/cli.test.cjs:19:1
+✖ cli without a command shows the main Superplan command list (198.971958ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /init\s+Scaffold the repo-local or machine-level Superplan workspace/. Input:
+  
+  'Superplan CLI\n' +
+    '\n' +
+    'Usage:\n' +
+    '  superplan <command>\n' +
+    '\n' +
+    'Commands:\n' +
+    '  Setup:\n' +
+    '    install    Install Superplan globally on this machine\n' +
+    '    init       Initialize the current repository for Superplan\n' +
+    '    context    Create or inspect durable workspace context artifacts\n' +
+    '\n' +
+    '  Authoring:\n' +
+    '    change     Create tracked change scaffolding\n' +
+    '\n' +
+    '  Execution:\n' +
+    '    status     Show active, ready, review, blocked, and feedback-needed queues\n' +
+    '    run        Start, resume, or continue tracked work\n' +
+    '    task       Inspect or transition one tracked task\n' +
+    '\n' +
+    '  Diagnostics:\n' +
+    '    parse      Parse task contracts and return diagnostics\n' +
+    '    validate   Validate tasks.md graph and task-contract consistency\n' +
+    '    sync       Reconcile repo state after task-file edits or runtime drift\n' +
+    '    doctor     Validate install and overlay health\n' +
+    '    visibility Inspect run visibility and health evidence\n' +
+    '    overlay    Overlay companion operations\n' +
+    '\n' +
+    '  Admin:\n' +
+    '    update     Update an installed Superplan CLI and refresh skills\n' +
+    '    remove     Remove Superplan installation or state\n' +
+    '\n' +
+    'Options:\n' +
+    '  -v, --version  Show CLI version\n' +
+    '  --quiet     Suppress prompts and human-friendly logs\n' +
+    '  --json      Output JSON for agents\n'
+  
+      at TestContext.<anonymous> (/Users/ishashank/Documents/superplan-cli/test/cli.test.cjs:28:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'Superplan CLI\n\nUsage:\n  superplan <command>\n\nCommands:\n  Setup:\n    install    Install Superplan globally on this machine\n    init       Initialize the current repository for Superplan\n    context    Create or inspect durable workspace context artifacts\n\n  Authoring:\n    change     Create tracked change scaffolding\n\n  Execution:\n    status     Show active, ready, review, blocked, and feedback-needed queues\n    run        Start, resume, or continue tracked work\n    task       Inspect or transition one tracked task\n\n  Diagnostics:\n    parse      Parse task contracts and return diagnostics\n    validate   Validate tasks.md graph and task-contract consistency\n    sync       Reconcile repo state after task-file edits or runtime drift\n    doctor     Validate install and overlay health\n    visibility Inspect run visibility and health evidence\n    overlay    Overlay companion operations\n\n  Admin:\n    update     Update an installed Superplan CLI and refresh skills\n    remove     Remove Superplan installation or state\n\nOptions:\n  -v, --version  Show CLI version\n  --quiet     Suppress prompts and human-friendly logs\n  --json      Output JSON for agents\n',
+    expected: /init\s+Scaffold the repo-local or machine-level Superplan workspace/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at test/install.test.cjs:61:1
+✖ install script installs superplan from a local source snapshot into a custom prefix (6225.360791ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /Installed Superplan to/. Input:
+  
+  'Copying Superplan source from /Users/ishashank/Documents/superplan-cli\n' +
+    'No packaged overlay artifact found in local source snapshot; continuing without the desktop companion\n' +
+    'WARNING: Could not find or download the Superplan overlay companion for darwin/arm64.\n' +
+    'The CLI will be installed without the desktop overlay. You can install it manually later.\n' +
+    'Installing dependencies\n' +
+    'Building Superplan\n' +
+    'Packing Superplan from local source snapshot\n' +
+    'Installing Superplan globally with npm\n' +
+    'Configuring Superplan on this machine\n' +
+    '{\n' +
+    '  "ok": true,\n' +
+    '  "data": {\n' +
+    '    "config_path": "/var/folders/8h/15z5hhm56vj1rkj1vwyylt580000gn/T/superplan-install-script-SSLxnz/home/.config/superplan/config.toml",\n' +
+    '    "skills_path": "/var/folders/8h/15z5hhm56vj1rkj1vwyylt580000gn/T/superplan-install-script-SSLxnz/home/.config/superplan/skills",\n' +
+    '    "agents": [],\n' +
+    '    "verified": true,\n' +
+    '    "message": "Global installation successful."\n' +
+    '  },\n' +
+    '  "error": null\n' +
+    '}\n' +
+    'Overlay not installed; skipping overlay preference setup\n'
+  
+      at TestContext.<anonymous> (/Users/ishashank/Documents/superplan-cli/test/install.test.cjs:79:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'Copying Superplan source from /Users/ishashank/Documents/superplan-cli\nNo packaged overlay artifact found in local source snapshot; continuing without the desktop companion\nWARNING: Could not find or download the Superplan overlay companion for darwin/arm64.\nThe CLI will be installed without the desktop overlay. You can install it manually later.\nInstalling dependencies\nBuilding Superplan\nPacking Superplan from local source snapshot\nInstalling Superplan globally with npm\nConfiguring Superplan on this machine\n{\n  "ok": true,\n  "data": {\n    "config_path": "/var/folders/8h/15z5hhm56vj1rkj1vwyylt580000gn/T/superplan-install-script-SSLxnz/home/.config/superplan/config.toml",\n    "skills_path": "/var/folders/8h/15z5hhm56vj1rkj1vwyylt580000gn/T/superplan-install-script-SSLxnz/home/.config/superplan/skills",\n    "agents": [],\n    "verified": true,\n    "message": "Global installation successful."\n  },\n  "error": null\n}\nOverlay not installed; skipping overlay preference setup\n',
+    expected: /Installed Superplan to/,
+    operator: 'match',
+    diff: 'simple'
+  }

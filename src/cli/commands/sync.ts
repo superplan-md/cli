@@ -36,6 +36,7 @@ export type SyncResult =
         in_review: string[];
         blocked: string[];
         needs_feedback: string[];
+        message: string;
         next_action: NextAction;
       };
     }
@@ -108,6 +109,7 @@ export async function sync(deps: Partial<SyncDeps> = {}): Promise<SyncResult> {
       in_review: statusResult.data.in_review,
       blocked: statusResult.data.blocked,
       needs_feedback: statusResult.data.needs_feedback,
+      message: `Sync completed: ${parseResult.data.tasks.length} tasks parsed, ${actions.length} runtime fixes applied.`,
       next_action: getQueueNextAction({
         active: statusResult.data.active,
         ready: statusResult.data.ready,

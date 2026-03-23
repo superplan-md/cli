@@ -75,7 +75,7 @@ test('install script installs superplan from a local source snapshot into a cust
     },
   });
 
-  assert.equal(installResult.code, 0, installResult.stderr || installResult.stdout);
+  assert.equal(installResult.code, 0, `install.sh failed with code ${installResult.code}\nSTDOUT: ${installResult.stdout}\nSTDERR: ${installResult.stderr}`);
   assert.match(installResult.stdout, /Installed Superplan to/);
 
   const installMetadata = JSON.parse(await fs.readFile(

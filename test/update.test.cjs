@@ -70,6 +70,11 @@ test('update reruns the bundled installer with recorded install metadata', async
         skills_refreshed: false,
         skills_scope: 'skip',
         stopped_processes: 0,
+        next_action: {
+          type: 'command',
+          command: 'superplan doctor --json',
+          reason: 'The CLI and skills were updated, so the next control-plane step is checking that the install is healthy.',
+        },
       },
     });
 
@@ -153,6 +158,11 @@ test('update resolves and installs the latest published release before refreshin
         skills_refreshed: true,
         skills_scope: 'both',
         stopped_processes: 2,
+        next_action: {
+          type: 'command',
+          command: 'superplan doctor --json',
+          reason: 'The CLI and skills were updated, so the next control-plane step is checking that the install is healthy.',
+        },
       },
     });
 
@@ -228,6 +238,7 @@ test('update refreshes installed skills for existing global and local setups', a
   await withSandboxEnv(sandbox, async () => {
     const fs = require('node:fs/promises');
     await fs.mkdir(path.join(sandbox.home, '.claude'), { recursive: true });
+    await fs.mkdir(path.join(sandbox.home, '.gemini'), { recursive: true });
     await fs.mkdir(path.join(sandbox.cwd, '.codex'), { recursive: true });
 
     const { update } = loadDistModule('cli/commands/update.js');
@@ -258,11 +269,17 @@ test('update refreshes installed skills for existing global and local setups', a
         skills_refreshed: true,
         skills_scope: 'both',
         stopped_processes: 0,
+        next_action: {
+          type: 'command',
+          command: 'superplan doctor --json',
+          reason: 'The CLI and skills were updated, so the next control-plane step is checking that the install is healthy.',
+        },
       },
     });
 
     assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-release', 'SKILL.md')), true);
     assert.equal(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-release', 'SKILL.md')), true);
+    assert.equal(await pathExists(path.join(sandbox.home, '.gemini', 'commands', 'superplan.toml')), true);
     assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'skills', 'superplan-release', 'SKILL.md')), true);
     assert.equal(await pathExists(path.join(sandbox.cwd, '.codex', 'skills', 'superplan-release', 'SKILL.md')), true);
   });

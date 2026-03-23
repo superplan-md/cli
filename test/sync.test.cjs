@@ -87,6 +87,11 @@ Second task
       in_review: [],
       blocked: ['T-002'],
       needs_feedback: [],
+      next_action: {
+        type: 'command',
+        command: 'superplan run --json',
+        reason: 'There is no active task and at least one task is ready to start.',
+      },
     },
     error: null,
   });

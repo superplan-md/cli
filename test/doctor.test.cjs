@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const fs = require('node:fs/promises');
 
 const {
   loadDistModule,
@@ -46,7 +47,16 @@ test('doctor accepts the legacy entry skill directory during the skill namespace
 test('doctor reports missing workspace artifacts and task-state drift', async () => {
   const sandbox = await makeSandbox('superplan-doctor-workspace-health-');
 
-  await runCli(['init', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+  await runCli(['init', '--yes', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+  
+  // Explicitly remove artifacts that init now creates by default,
+  // so that we can test that doctor correctly identifies them as missing.
+  await fs.rm(path.join(sandbox.cwd, '.superplan', 'plan.md'), { force: true });
+  await fs.rm(path.join(sandbox.cwd, '.superplan', 'context', 'README.md'), { force: true });
+  await fs.rm(path.join(sandbox.cwd, '.superplan', 'context', 'INDEX.md'), { force: true });
+  await fs.rm(path.join(sandbox.cwd, '.superplan', 'decisions.md'), { force: true });
+  await fs.rm(path.join(sandbox.cwd, '.superplan', 'gotchas.md'), { force: true });
+
   await writeFile(path.join(sandbox.cwd, '.superplan', 'config.toml'), 'version = "0.1"\n');
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'workflow-gap', 'tasks.md'), `# Task Graph
 
@@ -86,7 +96,7 @@ Close the workflow gap.
 
 test('context bootstrap creates the durable workspace context entrypoints', async () => {
   const sandbox = await makeSandbox('superplan-context-bootstrap-');
-  await runCli(['init', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+  await runCli(['init', '--yes', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
 
   const payload = parseCliJson(await runCli(['context', 'bootstrap', '--json'], {
     cwd: sandbox.cwd,

@@ -25,7 +25,7 @@ test('cli without a command shows the main Superplan command list', async () => 
   assert.match(result.stdout, /Authoring:/);
   assert.match(result.stdout, /Execution:/);
   assert.match(result.stdout, /change\s+Create tracked change scaffolding/);
-  assert.match(result.stdout, /init\s+Scaffold the repo-local or machine-level Superplan workspace/);
+  assert.match(result.stdout, /init\s+Initialize the current repository for Superplan/);
   assert.match(result.stdout, /status\s+Show active, ready, review, blocked, and feedback-needed queues/);
   assert.match(result.stdout, /Diagnostics:/);
   assert.match(result.stdout, /sync\s+Reconcile repo state after task-file edits or runtime drift/);
@@ -237,7 +237,7 @@ test('init in human mode prints a concise success message instead of the full pa
   const sandbox = await makeSandbox('superplan-init-human-output-');
   const { routeCommand } = loadDistModule('cli/router.js', {
     select: async () => 'global',
-    confirm: async () => false,
+    confirm: async () => true,
     checkbox: async options => {
       if (!Array.isArray(options?.choices) || options.choices.length === 0) {
         return [];
@@ -266,7 +266,40 @@ test('init in human mode prints a concise success message instead of the full pa
   }
 
   const combinedOutput = output.join('\n');
-  assert.match(combinedOutput, /Superplan init completed successfully\./);
+  assert.match(combinedOutput, /Project initialized successfully/);
   assert.doesNotMatch(combinedOutput, /"config_path"/);
   assert.equal(errors.length, 0);
+});
+
+test('init asks for global install and respects the denial', async () => {
+  const sandbox = await makeSandbox('superplan-init-global-denial-');
+  const { routeCommand } = loadDistModule('cli/router.js', {
+    confirm: async ({ message }) => {
+      if (message && typeof message === 'string' && message.includes('global configuration not found')) {
+        return false;
+      }
+      return true;
+    },
+  });
+
+  const output = [];
+  const errors = [];
+  const originalConsoleLog = console.log;
+  const originalConsoleError = console.error;
+  console.log = (...args) => output.push(args.join(' '));
+  console.error = (...args) => errors.push(args.join(' '));
+
+  try {
+    await withSandboxEnv(sandbox, async () => routeCommand(['init']));
+    const errorOutput = errors.join('\n');
+    const payload = JSON.parse(errorOutput);
+    assert.equal(payload.ok, false);
+    assert.equal(payload.error.code, 'INSTALL_REQUIRED');
+    assert.equal(payload.error.message, 'Superplan global installation is required to initialize a project.');
+    assert.equal(process.exitCode, 1);
+  } finally {
+    console.log = originalConsoleLog;
+    console.error = originalConsoleError;
+    process.exitCode = 0;
+  }
 });

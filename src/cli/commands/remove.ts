@@ -46,6 +46,7 @@ export type RemoveResult =
         mode: 'remove';
         removed_paths: string[];
         agents: AgentEnvironment[];
+        message: string;
         next_action: NextAction;
       };
     }
@@ -531,6 +532,7 @@ async function removeCommand(
           mode: 'remove',
           removed_paths: [],
           agents: [],
+          message: 'Removal skipped.',
           next_action: stopNextAction(
             'Removal was skipped; no further Superplan action is required from this command.',
             'The command was explicitly told to skip removal.',
@@ -607,6 +609,7 @@ async function removeCommand(
         mode: 'remove',
         removed_paths: removedPaths,
         agents: [...globalAgents, ...localAgents],
+        message: `Superplan removed from ${scope} scope. ${removedPaths.length} paths cleaned up.`,
         next_action: stopNextAction(
           'Reinstall Superplan with `superplan init` only if you want to use it again in this environment.',
           'Superplan state has been removed, so there is no follow-up workflow command to run now.',

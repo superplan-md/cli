@@ -12,433 +12,78 @@ const {
   withSandboxEnv,
 } = require('./helpers.cjs');
 
-test('init quiet installs bundled global assets into the configured home directory', async () => {
-  const sandbox = await makeSandbox('superplan-init-quiet-');
+test('install quiet installs bundled global assets into the configured home directory', async () => {
+  const sandbox = await makeSandbox('superplan-install-quiet-');
   await fs.mkdir(path.join(sandbox.home, '.claude'), { recursive: true });
-  const setupResult = await runCli(['init', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+  const setupResult = await runCli(['install', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const payload = parseCliJson(setupResult);
 
   assert.equal(setupResult.code, 0);
   assert.equal(payload.ok, true);
-  assert.equal(payload.data.scope, 'global');
   assert.equal(payload.data.verified, true);
   assert.equal(payload.error, null);
   assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'config.toml')));
   assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-entry', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-release', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-guard', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-postmortem', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-handoff', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-docs', 'SKILL.md')));
   assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-entry', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-shape', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-release', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-docs', 'SKILL.md')));
-
-  const installedUsingSuperplanSkill = await fs.readFile(
-    path.join(sandbox.home, '.claude', 'skills', 'superplan-entry', 'SKILL.md'),
-    'utf-8',
-  );
-  assert.match(installedUsingSuperplanSkill, /superplan run --json/);
-  assert.match(installedUsingSuperplanSkill, /superplan run <task_id> --json/);
-  assert.match(installedUsingSuperplanSkill, /superplan status --json/);
-  assert.match(installedUsingSuperplanSkill, /superplan context bootstrap --json/);
-  assert.match(installedUsingSuperplanSkill, /superplan task inspect show <task_id> --json/);
-  assert.match(installedUsingSuperplanSkill, /superplan task scaffold batch <change-slug> --stdin --json/);
-  assert.match(installedUsingSuperplanSkill, /manual creation of individual `tasks\/T-xxx\.md` files is off limits/i);
-  assert.match(installedUsingSuperplanSkill, /do not use shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > \.\.\.`, `printf > \.\.\.`, or here-docs/i);
-  assert.match(installedUsingSuperplanSkill, /author the root `\.superplan\/changes\/<change-slug>\/tasks\.md` manually as graph truth/i);
-  assert.match(installedUsingSuperplanSkill, /large, ambiguous, or multi-workstream, do not jump straight from the raw request into task scaffolding/i);
-  assert.match(installedUsingSuperplanSkill, /stdin transport into `superplan task scaffold batch --stdin --json`/i);
-  assert.match(installedUsingSuperplanSkill, /Entry routing is not permission to explore the CLI surface\./);
-  assert.match(installedUsingSuperplanSkill, /do not call `--help`, neighboring subcommands, or diagnostic commands/i);
-  assert.match(installedUsingSuperplanSkill, /launchable companion is installed/i);
-  assert.match(installedUsingSuperplanSkill, /surface `overlay\.companion\.reason` instead of assuming the overlay appeared/i);
-  assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task next --json/);
-  assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task why-next --json/);
-  assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task start <task_id> --json/);
-  assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task resume <task_id> --json/);
-  assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task scaffold batch <change-slug> --file <path> --json/);
-
-  const installedShapeSkill = await fs.readFile(
-    path.join(sandbox.home, '.claude', 'skills', 'superplan-shape', 'SKILL.md'),
-    'utf-8',
-  );
-  assert.match(installedShapeSkill, /superplan task scaffold new <change-slug>/);
-  assert.match(installedShapeSkill, /superplan task scaffold batch <change-slug> --stdin --json/);
-  assert.match(installedShapeSkill, /tasks\.md/);
-  assert.match(installedShapeSkill, /Manual creation of individual `tasks\/T-xxx\.md` files is off limits\./);
-  assert.match(installedShapeSkill, /Authoring the root `tasks\.md` manually is expected\./);
-  assert.match(installedShapeSkill, /Do not use shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > \.\.\.`, `printf > \.\.\.`, or here-docs/i);
-  assert.match(installedShapeSkill, /superplan validate <change-slug> --json/);
-  assert.match(installedShapeSkill, /dense, ambiguous requirement dump into task scaffolding/i);
-  assert.match(installedShapeSkill, /stdin transport into `superplan task scaffold batch --stdin --json`/i);
-  assert.match(installedShapeSkill, /use one `superplan task scaffold batch <change-slug> --stdin --json` call over repeated `superplan task scaffold new` calls\./);
-  assert.match(installedShapeSkill, /Shaping is not permission to explore the CLI surface\./);
-  assert.match(installedShapeSkill, /use the current CLI contract already listed in this skill instead of probing adjacent commands/i);
-  assert.doesNotMatch(installedShapeSkill, /superplan task scaffold batch <change-slug> --file <path> --json/);
-
-  const installedExecuteTaskGraphSkill = await fs.readFile(
-    path.join(sandbox.home, '.claude', 'skills', 'superplan-execute', 'SKILL.md'),
-    'utf-8',
-  );
-  assert.match(installedExecuteTaskGraphSkill, /superplan run --json/);
-  assert.match(installedExecuteTaskGraphSkill, /superplan run <task_id> --json/);
-  assert.match(installedExecuteTaskGraphSkill, /superplan task inspect show <task_id> --json/);
-  assert.match(installedExecuteTaskGraphSkill, /Execution is not permission to wander across CLI commands\./);
-  assert.match(installedExecuteTaskGraphSkill, /launchable companion is installed/i);
-  assert.match(installedExecuteTaskGraphSkill, /surface `overlay\.companion\.reason` instead of assuming the overlay appeared/i);
-  assert.match(installedExecuteTaskGraphSkill, /repeatedly polling `status` or `task inspect show` without a concrete state, blocker, or handoff reason/i);
-  assert.match(installedExecuteTaskGraphSkill, /do not end an execution turn after successful implementation proof while the task lifecycle still says `pending` or `in_progress`/i);
-  assert.match(installedExecuteTaskGraphSkill, /passing tests or successful verification do not count as enough closure by themselves; runtime truth must be updated/i);
-  assert.doesNotMatch(installedExecuteTaskGraphSkill, /superplan task why <task_id> --json/);
-  assert.doesNotMatch(installedExecuteTaskGraphSkill, /superplan task start <task_id>/);
-  assert.doesNotMatch(installedExecuteTaskGraphSkill, /superplan task resume <task_id>/);
-
-  const installedRouteSkill = await fs.readFile(
-    path.join(sandbox.home, '.claude', 'skills', 'superplan-route', 'SKILL.md'),
-    'utf-8',
-  );
-  assert.match(installedRouteSkill, /Routing is not permission to explore the CLI surface\./);
-  assert.match(installedRouteSkill, /CLI-scaffolded `tasks\/T-\*\.md`/);
-  assert.match(installedRouteSkill, /dense requirement dump, JTBD list, or multi-constraint brief/i);
-  assert.match(installedRouteSkill, /under-shaping large ambiguous work just to preserve the appearance of low ceremony/i);
 });
 
-test('interactive init prints the current ascii wordmark once', async () => {
-  const sandbox = await makeSandbox('superplan-init-banner-');
-  const { init } = loadDistModule('cli/commands/init.js', {
-    select: async () => 'skip',
-  });
-
-  const originalConsoleLog = console.log;
-  const output = [];
-  console.log = (...args) => {
-    output.push(args.join(' '));
-  };
-
-  try {
-    const result = await withSandboxEnv(sandbox, async () => init({ json: false, quiet: false }));
-    assert.equal(result.ok, true);
-    assert.equal(result.data.scope, 'skip');
-  } finally {
-    console.log = originalConsoleLog;
-  }
-
-  const bannerOutput = output.join('\n');
-  assert.match(bannerOutput, /____  _   _ ____  _____ ____  ____  _/);
-  assert.equal((bannerOutput.match(/____  _   _ ____/g) ?? []).length, 1);
-});
-
-test('interactive init auto-installs global agents and prompts for local agents', async () => {
-  const sandbox = await makeSandbox('superplan-init-selector-');
-  const confirmAnswers = [false, false];
-  const checkboxAnswers = [
-    ['codex'],
-  ];
-  const seenCheckboxChoices = [];
-
-  await fs.mkdir(path.join(sandbox.home, '.claude'), { recursive: true });
-  await fs.mkdir(path.join(sandbox.cwd, '.codex'), { recursive: true });
-
-  const { init } = loadDistModule('cli/commands/init.js', {
-    select: async () => 'both',
-    confirm: async () => confirmAnswers.shift() ?? false,
-    checkbox: async options => {
-      seenCheckboxChoices.push(options.choices.map(choice => ({
-        name: choice.name,
-        value: choice.value,
-        checked: choice.checked,
-      })));
-      assert.equal(options.required, true);
-      assert.equal(options.instructions.includes('! Space = select, Enter = continue'), true);
-      assert.deepEqual(options.theme, {
-        icon: {
-          checked: '[x]',
-          unchecked: '[ ]',
-        },
-      });
-      assert.equal(options.validate([]), 'Select at least one agent integration to continue.');
-      return checkboxAnswers.shift() ?? [];
-    },
-  });
-
-  const result = await withSandboxEnv(sandbox, async () => init({ json: false, quiet: false }));
-
-  assert.equal(result.ok, true);
-  assert.equal(result.data.scope, 'both');
-  assert.equal(confirmAnswers.length, 0);
-  assert.deepEqual(result.data.agents.map(agent => agent.name).sort(), ['claude', 'codex']);
-  assert.equal(seenCheckboxChoices.length, 1);
-  assert.equal(seenCheckboxChoices[0].some(choice => choice.value === 'codex'), true);
-  assert.equal(seenCheckboxChoices[0].some(choice => choice.value === '__all_agents__'), true);
+test('init installs local artifacts and auto-runs install if global config is missing', async () => {
+  const sandbox = await makeSandbox('superplan-init-auto-install-');
   
-  // Codex should be pre-checked because we created .codex in cwd
-  const codexChoice = seenCheckboxChoices[0].find(c => c.value === 'codex');
-  assert.equal(codexChoice.checked, true);
+  // No global config here initially
+  assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'config.toml')), false);
 
-  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-entry', 'SKILL.md')));
-  assert.equal(await pathExists(path.join(sandbox.home, '.gemini', 'commands', 'superplan.toml')), false);
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.codex', 'skills', 'superplan-entry', 'SKILL.md')));
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.gemini', 'commands', 'superplan.toml')), false);
+  const initResult = await runCli(['init', '--yes', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+  const payload = parseCliJson(initResult);
 
-  const workspaceAgents = await fs.readFile(path.join(sandbox.cwd, 'AGENTS.md'), 'utf-8');
-  assert.match(workspaceAgents, /# Superplan Operating Contract/);
-  assert.match(workspaceAgents, /Before doing any of that work, load and follow `superplan-entry` from the first available path:/);
-  assert.match(workspaceAgents, /\.codex\/skills\/superplan-entry\/SKILL\.md/);
-  assert.match(workspaceAgents, /\.superplan\/skills\/superplan-entry\/SKILL\.md/);
-  assert.match(workspaceAgents, /Keep workflow control internal: do not narrate skill names, routing, or command logs to the user\./);
-  assert.match(workspaceAgents, /Run `superplan status --json`/);
-  assert.match(workspaceAgents, /never hand-edit `\.superplan\/runtime\/`/i);
+  assert.equal(initResult.code, 0);
+  assert.equal(payload.ok, true);
+  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'config.toml')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')));
 });
 
-test('interactive local setup from a nested repo directory installs into the repo root workspace', async () => {
-  const sandbox = await makeSandbox('superplan-init-nested-root-');
+test('init --yes --json creates repository scaffolding without prompting', async () => {
+  const sandbox = await makeSandbox('superplan-init-json-');
+  
+  // Pre-install globally so we don't mix auto-install logs or logic
+  await runCli(['install', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+
+  const initResult = await runCli(['init', '--yes', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+  const payload = parseCliJson(initResult);
+
+  assert.equal(initResult.code, 0);
+  assert.equal(payload.ok, true);
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')));
+});
+
+test('init from a nested repo directory creates scaffolding at the repo root', async () => {
+  const sandbox = await makeSandbox('superplan-init-nested-');
   const nestedCwd = path.join(sandbox.cwd, 'apps', 'overlay-desktop');
-  const expectedWorkspaceRoot = await fs.realpath(sandbox.cwd);
-  const previousCwd = process.cwd();
-  const previousHome = process.env.HOME;
-  const confirmAnswers = [false];
 
   await fs.mkdir(path.join(sandbox.cwd, '.git'), { recursive: true });
-  await fs.mkdir(path.join(sandbox.cwd, '.codex'), { recursive: true });
   await fs.mkdir(nestedCwd, { recursive: true });
+  
+  await runCli(['install', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
 
-  const { init } = loadDistModule('cli/commands/init.js', {
-    select: async () => 'local',
-    confirm: async () => confirmAnswers.shift() ?? false,
-    checkbox: async () => ['codex'],
-  });
+  const initResult = await runCli(['init', '--yes', '--json'], { cwd: nestedCwd, env: sandbox.env });
+  const payload = parseCliJson(initResult);
 
-  process.chdir(nestedCwd);
-  process.env.HOME = sandbox.home;
-
-  try {
-    const result = await init({ json: false, quiet: false });
-
-    assert.equal(result.ok, true);
-    assert.equal(result.data.scope, 'local');
-    assert.equal(result.data.config_path, path.join(expectedWorkspaceRoot, '.superplan', 'config.toml'));
-    assert.deepEqual(result.data.agents.map(agent => agent.name), ['codex']);
-  } finally {
-    process.chdir(previousCwd);
-    if (previousHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = previousHome;
-    }
-  }
-
-  assert.equal(confirmAnswers.length, 0);
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'config.toml')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.codex', 'skills', 'superplan-entry', 'SKILL.md')));
+  assert.equal(initResult.code, 0);
+  assert.equal(payload.ok, true);
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')));
   assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
 });
 
-test('init --scope local --yes --json installs Amazon Q rules and appends managed memory-bank guidance', async () => {
-  const sandbox = await makeSandbox('superplan-init-amazonq-');
-
-  await fs.mkdir(path.join(sandbox.cwd, '.amazonq'), { recursive: true });
-  await fs.mkdir(path.join(sandbox.cwd, '.amazonq', 'rules', 'memory-bank'), { recursive: true });
-  await fs.writeFile(
-    path.join(sandbox.cwd, '.amazonq', 'rules', 'memory-bank', 'guidelines.md'),
-    '# Existing Guidelines\n\nKeep user content.\n',
-    'utf-8',
-  );
-
-  const result = await runCli(['init', '--scope', 'local', '--yes', '--json'], {
-    cwd: sandbox.cwd,
-    env: sandbox.env,
-  });
-  const payload = parseCliJson(result);
-  const entryRule = await fs.readFile(path.join(sandbox.cwd, '.amazonq', 'rules', 'superplan-entry.md'), 'utf-8');
-  const guidelines = await fs.readFile(path.join(sandbox.cwd, '.amazonq', 'rules', 'memory-bank', 'guidelines.md'), 'utf-8');
-
-  assert.equal(result.code, 0);
-  assert.equal(payload.ok, true);
-  assert.equal(payload.data.scope, 'local');
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.amazonq', 'rules', 'superplan-route.md')), true);
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.amazonq', 'rules', 'superplan-execute.md')), true);
-  assert.match(entryRule, /superplan-entry/);
-  assert.match(guidelines, /# Existing Guidelines/);
-  assert.match(guidelines, /Always always pay attention to the Superplan rules/i);
-  assert.match(guidelines, /No development is allowed before loading and following `superplan-entry`/i);
-  assert.match(guidelines, /Embedded `superplan-entry` rule for reinforcement/i);
-});
-
-test('interactive init select-all option installs every supported machine-level agent integration', async () => {
-  const sandbox = await makeSandbox('superplan-init-select-all-');
-  const confirmAnswers = [false];
-
-  await fs.mkdir(path.join(sandbox.home, '.claude'), { recursive: true });
-  await fs.mkdir(path.join(sandbox.home, '.gemini'), { recursive: true });
-  await fs.mkdir(path.join(sandbox.home, '.cursor'), { recursive: true });
-  await fs.mkdir(path.join(sandbox.home, '.codex'), { recursive: true });
-  await fs.mkdir(path.join(sandbox.home, '.config', 'opencode'), { recursive: true });
-  await fs.mkdir(path.join(sandbox.home, '.antigravity'), { recursive: true });
-
-  const { init } = loadDistModule('cli/commands/init.js', {
-    select: async () => 'global',
-    confirm: async () => confirmAnswers.shift() ?? false,
-    checkbox: async () => {
-      assert.fail('Global scope should not show a checkbox prompt for agents');
-    },
-  });
-
-  const result = await withSandboxEnv(sandbox, async () => init({ json: false, quiet: false }));
-
-  assert.equal(result.ok, true);
-  assert.equal(result.data.scope, 'global');
-  assert.equal(confirmAnswers.length, 0);
-  assert.deepEqual(result.data.agents.map(agent => agent.name).sort(), [
-    'antigravity',
-    'claude',
-    'codex',
-    'cursor',
-    'gemini',
-    'opencode',
-  ]);
-  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-entry', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.gemini', 'commands', 'superplan.toml')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.cursor', 'skills', 'superplan-entry', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.codex', 'skills', 'superplan-entry', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'opencode', 'skills', 'superplan-entry', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.gemini', 'GEMINI.md')));
-
-  const geminiCommand = await fs.readFile(path.join(sandbox.home, '.gemini', 'commands', 'superplan.toml'), 'utf-8');
-  assert.match(geminiCommand, /Never create or edit `\.superplan\/changes\/<change-slug>\/tasks\/T-xxx\.md` task contracts with shell loops or direct file-edit rewrites/i);
-  assert.match(geminiCommand, /stdin transport into `superplan task scaffold batch --stdin --json`/i);
-  assert.match(geminiCommand, /launchable companion is installed/i);
-  assert.match(geminiCommand, /surface `overlay\.companion\.reason` instead of assuming the overlay appeared/i);
-  assert.match(geminiCommand, /Keep workflow control and command-by-command orchestration internal/i);
-  assert.match(geminiCommand, /Do not narrate meta progress such as which Superplan skill is active/i);
-  assert.match(geminiCommand, /Prefer project thoughts over process thoughts/i);
-
-  const codexAgents = await fs.readFile(path.join(sandbox.home, '.codex', 'AGENTS.md'), 'utf-8');
-  assert.match(codexAgents, /# Superplan Operating Contract/);
-  assert.match(codexAgents, /\.config\/superplan\/skills\/superplan-entry\/SKILL\.md/);
-  assert.match(codexAgents, /If `\.superplan\/` exists, treat the Superplan CLI as the execution control plane\./);
-  assert.match(codexAgents, /Continue through the owning Superplan phase instead of improvising a parallel workflow\./);
-});
-
-test('doctor reports valid after quiet global setup in a clean repo', async () => {
+test('doctor reports valid after installation', async () => {
   const sandbox = await makeSandbox('superplan-doctor-valid-');
-  const fakeClaudeDir = path.join(sandbox.home, '.claude');
-  await fs.mkdir(fakeClaudeDir, { recursive: true });
-
-  await runCli(['init', '--quiet', '--json'], {
-    cwd: sandbox.cwd,
-    env: sandbox.env,
-  });
+  
+  await runCli(['install', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+  await runCli(['init', '--yes', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
 
   const doctorResult = await runCli(['doctor', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const payload = parseCliJson(doctorResult);
 
   assert.equal(payload.ok, true);
   assert.equal(payload.data.valid, true);
-  assert.deepEqual(payload.data.issues, []);
-  assert.equal(payload.error, null);
-  assert.equal(await pathExists(fakeClaudeDir), true);
-  assert.equal(await pathExists(path.join(fakeClaudeDir, 'skills', 'superplan-entry', 'SKILL.md')), true);
-});
-
-test('doctor reports missing home agent installs when a supported global agent directory exists', async () => {
-  const sandbox = await makeSandbox('superplan-doctor-home-agent-');
-
-  await fs.mkdir(path.join(sandbox.home, '.claude'), { recursive: true });
-  await fs.mkdir(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-entry'), { recursive: true });
-  await fs.writeFile(path.join(sandbox.home, '.config', 'superplan', 'config.toml'), 'version = "0.1"\n', 'utf-8');
-  await fs.writeFile(
-    path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-entry', 'SKILL.md'),
-    '# superplan-entry\n',
-    'utf-8',
-  );
-
-  const doctorResult = await runCli(['doctor', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
-  const payload = parseCliJson(doctorResult);
-  const issueCodes = payload.data.issues.map(issue => issue.code);
-
-  assert.equal(payload.ok, true);
-  assert.equal(payload.data.valid, false);
-  assert(issueCodes.includes('AGENT_SKILLS_MISSING'));
-  assert.equal(payload.error, null);
-});
-
-test('init --scope local --yes --json creates repository scaffolding without prompting', async () => {
-  const sandbox = await makeSandbox('superplan-init-required-');
-  const result = await runCli(['init', '--scope', 'local', '--yes', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
-  const payload = parseCliJson(result);
-
-  assert.equal(result.code, 0);
-  assert.equal(payload.ok, true);
-  assert.equal(payload.data.scope, 'local');
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'config.toml')), true);
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'context', 'README.md')), true);
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')), true);
-});
-
-test('init --json without a scope still requires interactive mode', async () => {
-  const sandbox = await makeSandbox('superplan-init-json-required-');
-  const result = await runCli(['init', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
-  const payload = parseCliJson(result);
-
-  assert.equal(result.code, 1);
-  assert.equal(payload.ok, false);
-  assert.equal(payload.error.code, 'INTERACTIVE_REQUIRED');
-  assert.equal(payload.error.message, 'init must be run interactively');
-  assert.equal(payload.error.retryable, false);
-  assert.equal(payload.error.next_action.type, 'stop');
-});
-
-test('init quiet creates global scaffolding with the default machine-level scope', async () => {
-  const sandbox = await makeSandbox('superplan-init-quiet-');
-
-  const initResult = await runCli(['init', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
-  const payload = parseCliJson(initResult);
-
-  assert.equal(initResult.code, 0);
-  assert.equal(payload.ok, true);
-  assert.equal(payload.data.scope, 'global');
-  assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'config.toml')), true);
-  assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-entry', 'SKILL.md')), true);
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan')), false);
-});
-
-test('init --scope local --yes --json creates repository scaffolding without prompting', async () => {
-  const sandbox = await makeSandbox('superplan-init-json-');
-
-  const initResult = await runCli(['init', '--scope', 'local', '--yes', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
-  const payload = parseCliJson(initResult);
-
-  assert.equal(initResult.code, 0);
-  assert.equal(payload.ok, true);
-  assert.equal(payload.data.scope, 'local');
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'config.toml')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context', 'README.md')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context', 'INDEX.md')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'runtime')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'decisions.md')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'gotchas.md')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')));
-});
-
-test('init --scope local --yes --json from a nested repo directory creates scaffolding at the repo root', async () => {
-  const sandbox = await makeSandbox('superplan-init-nested-');
-  const nestedCwd = path.join(sandbox.cwd, 'apps', 'overlay-desktop');
-
-  await fs.mkdir(path.join(sandbox.cwd, '.git'), { recursive: true });
-  await fs.mkdir(nestedCwd, { recursive: true });
-
-  const initResult = await runCli(['init', '--scope', 'local', '--yes', '--json'], { cwd: nestedCwd, env: sandbox.env });
-  const payload = parseCliJson(initResult);
-
-  assert.equal(initResult.code, 0);
-  assert.equal(payload.ok, true);
-  assert.equal(payload.data.scope, 'local');
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'config.toml')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context', 'README.md')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')));
-  assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
 });

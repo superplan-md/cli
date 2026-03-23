@@ -33,6 +33,7 @@ SUPERPLAN_RUN_SETUP_AFTER_INSTALL="${SUPERPLAN_RUN_SETUP_AFTER_INSTALL:-1}"
 OVERLAY_INSTALL_METHOD=""
 OVERLAY_INSTALL_PATH=""
 OVERLAY_EXECUTABLE_PATH=""
+OVERLAY_EXECUTABLE_RELATIVE_PATH=""
 OVERLAY_DOWNLOAD_URL=""
 OVERLAY_ARTIFACT_NAME=""
 OVERLAY_ARTIFACT_KIND=""
@@ -338,8 +339,8 @@ run_machine_setup() {
   fi
 
   say "Configuring Superplan on this machine"
-  "$INSTALL_BIN_DIR/superplan" init --scope global --quiet --json >/dev/null \
-    || fail "machine init failed after install"
+  "$INSTALL_BIN_DIR/superplan" install --quiet --json > /dev/null \
+    || fail "machine install failed after binary installation"
 
   # Bug H1 fix: only enable the overlay preference when the overlay was actually
   # installed. Previously this ran unconditionally, which wrote
@@ -501,4 +502,4 @@ if [ -n "$OVERLAY_INSTALL_PATH" ]; then
   say "Installed Superplan overlay to $OVERLAY_INSTALL_PATH"
 fi
 say "Run: superplan --version"
-say "Then run: superplan init --quiet --json inside a repository to start using Superplan"
+say "Then run: superplan init inside a repository to start using Superplan"

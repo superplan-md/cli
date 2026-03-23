@@ -3,6 +3,7 @@ import { context } from "./commands/context";
 import { doctor } from "./commands/doctor";
 import { parse } from "./commands/parse";
 import { init } from "./commands/init";
+import { install } from "./commands/install";
 import { task } from "./commands/task";
 import { removeCli } from "./commands/remove";
 import { run } from "./commands/run";
@@ -37,8 +38,19 @@ type CommandHandler = (
 ) => Promise<CommandResult>;
 
 function printHumanSuccess(command: string, result: CommandResult): boolean {
+  const data = result.data as any;
+  if (data && typeof data.message === "string") {
+    console.log(data.message);
+    return true;
+  }
+
   if (command === "init") {
     console.log("Superplan init completed successfully.");
+    return true;
+  }
+
+  if (command === "install") {
+    console.log("Superplan global installation successful.");
     return true;
   }
 
@@ -137,8 +149,15 @@ function inferErrorNextAction(command: string | undefined, error: { code: string
 
   if (error.code === 'INIT_REQUIRED') {
     return commandNextAction(
-      'superplan init --scope local --yes --json',
+      'superplan init --yes --json',
       'The requested command depends on repo-local Superplan state that does not exist yet.',
+    );
+  }
+
+  if (error.code === 'INSTALL_REQUIRED') {
+    return commandNextAction(
+      'superplan install --quiet --json',
+      'The requested command depends on machine-level Superplan state that does not exist yet.',
     );
   }
 
@@ -225,9 +244,10 @@ export const router: Record<string, CommandHandler> = {
     json: options.json,
     quiet: options.quiet,
     yes: options.yes,
-    scope: options.scope === 'local' || options.scope === 'global' || options.scope === 'both' || options.scope === 'skip'
-      ? options.scope
-      : undefined,
+  }),
+  install: async (_args, options) => install({
+    json: options.json,
+    quiet: options.quiet,
   }),
   remove: async (args, options) => removeCli(args, {
     json: options.json,
