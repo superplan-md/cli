@@ -89,6 +89,8 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.match(installedExecuteTaskGraphSkill, /launchable companion is installed/i);
   assert.match(installedExecuteTaskGraphSkill, /surface `overlay\.companion\.reason` instead of assuming the overlay appeared/i);
   assert.match(installedExecuteTaskGraphSkill, /repeatedly polling `status` or `task show` without a concrete state, blocker, or handoff reason/i);
+  assert.match(installedExecuteTaskGraphSkill, /do not end an execution turn after successful implementation proof while the task lifecycle still says `pending` or `in_progress`/i);
+  assert.match(installedExecuteTaskGraphSkill, /passing tests or successful verification do not count as enough closure by themselves; runtime truth must be updated/i);
   assert.doesNotMatch(installedExecuteTaskGraphSkill, /superplan task why <task_id> --json/);
   assert.doesNotMatch(installedExecuteTaskGraphSkill, /superplan task start <task_id>/);
   assert.doesNotMatch(installedExecuteTaskGraphSkill, /superplan task resume <task_id>/);

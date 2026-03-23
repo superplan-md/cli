@@ -379,6 +379,7 @@ export function getTaskCommandHelpMessage(options: {
     'Task lifecycle:',
     '  run -> complete -> approve',
     '  complete moves finished implementation into review; approve is final signoff that marks the task done.',
+    '  after verification passes, do not leave the task sitting in pending or in_progress without an explicit blocker.',
     '',
     'Available task commands:',
     'Task commands:',
