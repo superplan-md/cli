@@ -255,10 +255,13 @@ p {
 .compact-indicator__mark {
   width: 21px;
   height: auto;
+  display: block;
   object-fit: contain;
+  object-position: center;
   pointer-events: none;
   -webkit-user-drag: none;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.16));
+  transform: translateX(1px);
 }
 
 .compact-indicator:not(.compact-indicator--needs_feedback):not(.compact-indicator--all_tasks_done) .compact-indicator__mark {
@@ -658,6 +661,31 @@ p {
 
 .compact-indicator--working_detail .compact-indicator__eyebrow--quiet::before {
   display: none;
+}
+
+.compact-indicator__live-loader {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+}
+
+.compact-indicator__live-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(83, 218, 231, 0.92);
+  opacity: 0.3;
+  transform: translateY(0);
+  animation: compact-live-dots 1.85s ease-in-out infinite;
+}
+
+.compact-indicator__live-dot:nth-child(2) {
+  animation-delay: 0.24s;
+}
+
+.compact-indicator__live-dot:nth-child(3) {
+  animation-delay: 0.48s;
 }
 
 .compact-indicator--working_detail .compact-indicator__title {
@@ -1125,8 +1153,11 @@ p {
 .board-heading__mark-image {
   width: 18px;
   height: auto;
+  display: block;
   object-fit: contain;
+  object-position: center;
   filter: none;
+  transform: translateX(1px);
 }
 
 .board-heading__copy {
@@ -2044,6 +2075,19 @@ p {
   100% {
     opacity: 0.1;
     transform: skewX(-18deg) translateX(430%);
+  }
+}
+
+@keyframes compact-live-dots {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: translateY(0);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateY(-1px);
   }
 }
 

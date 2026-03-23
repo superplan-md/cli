@@ -50,6 +50,22 @@ Right:
 - decide which workflow phase owns the moment
 - let that workflow phase invoke the discipline it needs
 
+## Communication Rule
+
+Keep that workflow choice internal unless the user explicitly asks for it.
+
+User updates should describe:
+
+- the concrete repo change underway
+- the risk or uncertainty being checked
+- the user-visible consequence of the next step
+
+User updates should not describe:
+
+- which Superplan skill is active
+- that routing or shaping is happening
+- raw explored-file or command logs unless the user asked for them
+
 ## Red Flags
 
 These thoughts usually mean the entry layer is being skipped or weakened:

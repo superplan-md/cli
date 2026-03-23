@@ -169,6 +169,8 @@ prompt = """
 Use the Superplan CLI in this repository as the source of truth for task state.
 
 Common commands:
+- \`superplan context bootstrap --json\`
+- \`superplan context status --json\`
 - \`superplan change new <change-slug> --json\`
 - \`superplan validate <change-slug> --json\`
 - \`superplan task new <change-slug> --task-id <task_id> --json\`
@@ -190,13 +192,16 @@ Execution loop:
 2. Claim work with \`superplan run --json\`
 3. Use the task returned by \`superplan run --json\` before editing code; use \`superplan run <task_id> --json\` when one known ready or paused task should become active; reach for \`superplan task show <task_id> --json\` only when you need one task's full details and readiness reasons
 4. Update runtime state with block, feedback, complete, or fix commands instead of editing markdown state by hand
-5. When shaping tracked work, author the graph in \`.superplan/changes/<change-slug>/tasks.md\` first, run \`superplan validate <change-slug> --json\`, then scaffold contracts by graph-declared task id instead of hand-creating \`tasks/T-xxx.md\`
-6. When the request is large, ambiguous, or multi-workstream, do not jump straight from the raw request into task scaffolding; clarify expectations, capture spec or plan truth when needed, then finalize the graph
-7. If overlay support is enabled for this workspace and a launchable companion is installed, \`superplan task new\`, \`superplan task batch\`, \`superplan run\`, \`superplan run <task_id>\`, and \`superplan task reopen\` can auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with \`superplan doctor --json\` and \`superplan overlay ensure --json\` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use \`superplan overlay hide --json\` when it becomes idle or empty
-8. After overlay-triggering commands, inspect the returned \`overlay\` payload; if \`overlay.companion.launched\` is false, surface \`overlay.companion.reason\` instead of assuming the overlay appeared
+5. Use \`superplan context bootstrap --json\` when durable workspace context entrypoints are missing, then keep \`.superplan/context/\`, \`.superplan/decisions.md\`, \`.superplan/gotchas.md\`, and \`.superplan/plan.md\` honest instead of inventing ad hoc files
+6. When shaping tracked work, author the graph in \`.superplan/changes/<change-slug>/tasks.md\` first, run \`superplan validate <change-slug> --json\`, then scaffold contracts by graph-declared task id instead of hand-creating \`tasks/T-xxx.md\`
+7. When the request is large, ambiguous, or multi-workstream, do not jump straight from the raw request into task scaffolding; clarify expectations, capture spec or plan truth when needed, then finalize the graph
+8. If overlay support is enabled for this workspace and a launchable companion is installed, \`superplan task new\`, \`superplan task batch\`, \`superplan run\`, \`superplan run <task_id>\`, and \`superplan task reopen\` can auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with \`superplan doctor --json\` and \`superplan overlay ensure --json\` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use \`superplan overlay hide --json\` when it becomes idle or empty
+9. After overlay-triggering commands, inspect the returned \`overlay\` payload; if \`overlay.companion.launched\` is false, surface \`overlay.companion.reason\` instead of assuming the overlay appeared
 
 Authoring rule:
+- Use \`superplan context bootstrap --json\` to create missing workspace context entrypoints instead of hand-writing them from scratch
 - Use \`superplan change new <change-slug> --json\` once per tracked change
+- Let \`superplan change new\` scaffold the tracked change root, including spec surfaces, before filling in graph truth
 - Author the root \`.superplan/changes/<change-slug>/tasks.md\` manually as graph truth; the shell-loop prohibition applies to task-contract generation and bulk graph rewrites, not to normal manual graph authoring
 - Never create or edit \`.superplan/changes/<change-slug>/tasks/T-xxx.md\` task contracts with shell loops or direct file-edit rewrites such as \`for\`, \`sed\`, \`cat > ...\`, \`printf > ...\`, here-docs, or ad hoc batch rewrites; shell is only acceptable here as stdin transport into \`superplan task batch --stdin --json\`
 - When the request is large, ambiguous, or multi-workstream, do not jump straight from the raw request into task scaffolding; capture clarification, spec, or plan truth first, then finalize the graph
@@ -209,6 +214,12 @@ Authoring rule:
 Canonical selection rule:
 - Prefer the one canonical command for the intent instead of choosing among overlapping alternatives
 - Prefer commands that already return the needed task payload instead of making extra follow-up calls
+
+User communication rule:
+- Keep workflow control and command-by-command orchestration internal unless the user explicitly asks for it
+- Do not narrate meta progress such as which Superplan skill is active, that routing or shaping is happening, or lists of explored files and commands
+- Progress updates should focus on user value: what is changing, what risk is being checked, what decision matters, or what blocker needs attention
+- Prefer project thoughts over process thoughts
 
 Never write \`.superplan/runtime/overlay.json\` by hand.
 """`;

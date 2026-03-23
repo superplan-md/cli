@@ -376,6 +376,10 @@ export function getTaskCommandHelpMessage(options: {
   return [
     intro,
     '',
+    'Task lifecycle:',
+    '  run -> complete -> approve',
+    '  complete moves finished implementation into review; approve is final signoff that marks the task done.',
+    '',
     'Available task commands:',
     'Task commands:',
     '  show <task_id>               Show one task and its readiness details',

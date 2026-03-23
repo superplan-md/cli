@@ -299,9 +299,11 @@ Review handoff works like this:
 
 ```bash
 superplan task complete <task_id> --json   # implementation done, send to review
-superplan task approve <task_id> --json    # final signoff, mark done
+superplan task approve <task_id> --json    # reviewer/owner accepts it, mark done
 superplan task reopen <task_id> --reason "Changes requested"
 ```
+
+`approve` is not a duplicate of `complete`. `complete` means "implementation is ready for review"; `approve` means "review accepted and the task is now done."
 
 > Do not hand-edit lifecycle state in markdown task files. Use runtime commands.
 

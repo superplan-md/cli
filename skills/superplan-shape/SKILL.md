@@ -98,15 +98,17 @@ Product target:
 
 Current CLI reality:
 
-- `superplan init --json` creates `.superplan/`, `.superplan/context/`, `.superplan/runtime/`, and `.superplan/changes/`
-- `superplan change new <change-slug> --json` scaffolds a tracked change root
+- `superplan init --json` creates `.superplan/`, `.superplan/context/`, `.superplan/runtime/`, `.superplan/changes/`, `.superplan/decisions.md`, `.superplan/gotchas.md`, and `.superplan/plan.md`
+- `superplan context bootstrap --json` creates missing durable workspace context entrypoints
+- `superplan context status --json` reports missing durable workspace context entrypoints
+- `superplan change new <change-slug> --json` scaffolds a tracked change root plus spec surfaces
 - `superplan validate <change-slug> --json` validates `tasks.md`, graph diagnostics, and graph/task-contract consistency
 - `superplan task new <change-slug> --task-id <task_id> --json` scaffolds one graph-declared task contract without mutating `tasks.md`
 - `superplan task batch <change-slug> --stdin --json` scaffolds multiple graph-declared task contracts from JSON stdin without mutating `tasks.md`
 - `superplan parse [path] --json` parses task contract files and overlays dependency truth from the graph
 - `superplan status --json` summarizes the ready frontier from task files plus runtime state
 - `superplan task show <task_id> --json` explains one task's current readiness in detail
-- `superplan doctor --json` checks setup and installation readiness, not shaped work correctness
+- `superplan doctor --json` checks setup, overlay, and workspace-shape health
 
 Therefore:
 
@@ -202,8 +204,17 @@ Shaping is not permission to explore the CLI surface.
 
 - use the current CLI contract already listed in this skill instead of probing adjacent commands
 - do not call `--help` or overlapping authoring or diagnostic commands when `change new`, `task new`, `task batch`, `parse`, `status`, `task show`, or `doctor` already cover the need
-- use `superplan parse` for task validity, `superplan status --json` for frontier checks, `superplan task show <task_id> --json` for one task detail, and `superplan doctor --json` only for install or setup readiness
+- use `superplan parse` for task validity, `superplan status --json` for frontier checks, `superplan task show <task_id> --json` for one task detail, and `superplan doctor --json` when install, workspace artifact, or task-state health is in doubt
 - once the needed authoring or validation command is known, run it instead of exploring alternatives
+
+## User Communication
+
+Keep shaping internals out of routine user updates.
+
+- do not narrate artifact choreography, skill usage, or command sequencing unless the user asked for that level of detail
+- do not send updates that mainly report internal motion such as "shaping the change", "minting task contracts", or lists of explored files and commands
+- communicate the user-relevant result instead: what structure is being added, what ambiguity is being reduced, what acceptance boundary is being defined, or what remains intentionally deferred
+- if a plan or task split matters, explain it in project terms rather than Superplan jargon
 
 ## Workspace Precedence Rule
 

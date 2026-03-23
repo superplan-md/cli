@@ -3,6 +3,7 @@ import * as path from 'path';
 import { loadChangeGraph, type ChangeGraph } from '../graph';
 import { parse, type ParseDiagnostic, type ParsedTask } from './parse';
 import { resolveWorkspaceRoot } from '../workspace-root';
+import { collectWorkspaceHealthIssues, workspaceIssuesToDiagnostics } from '../workspace-health';
 
 interface ValidateChangeResult {
   change_id: string;
@@ -111,6 +112,10 @@ export async function validate(args: string[] = []): Promise<ValidateResult> {
   const changeDirs = await resolveChangeDirs(resolvedTargetPath);
   const changes: ValidateChangeResult[] = [];
   const diagnostics: ParseDiagnostic[] = [];
+  const workspaceRoot = resolveWorkspaceRoot(cwd);
+  const workspaceHealthDiagnostics = dedupeDiagnostics(
+    workspaceIssuesToDiagnostics(await collectWorkspaceHealthIssues(workspaceRoot)),
+  );
 
   for (const changeDir of changeDirs) {
     const graphResult = await loadChangeGraph(changeDir);
@@ -139,9 +144,9 @@ export async function validate(args: string[] = []): Promise<ValidateResult> {
   return {
     ok: true,
     data: {
-      valid: dedupedDiagnostics.length === 0,
+      valid: dedupedDiagnostics.length === 0 && workspaceHealthDiagnostics.length === 0,
       changes,
-      diagnostics: dedupedDiagnostics,
+      diagnostics: dedupeDiagnostics([...dedupedDiagnostics, ...workspaceHealthDiagnostics]),
     },
   };
 }

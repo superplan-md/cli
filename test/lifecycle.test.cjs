@@ -42,6 +42,7 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.match(installedUsingSuperplanSkill, /superplan run --json/);
   assert.match(installedUsingSuperplanSkill, /superplan run <task_id> --json/);
   assert.match(installedUsingSuperplanSkill, /superplan status --json/);
+  assert.match(installedUsingSuperplanSkill, /superplan context bootstrap --json/);
   assert.match(installedUsingSuperplanSkill, /superplan task show <task_id> --json/);
   assert.match(installedUsingSuperplanSkill, /superplan task batch <change-slug> --stdin --json/);
   assert.match(installedUsingSuperplanSkill, /manual creation of individual `tasks\/T-xxx\.md` files is off limits/i);
@@ -290,6 +291,9 @@ test('interactive setup select-all option installs every supported machine-level
   assert.match(geminiCommand, /stdin transport into `superplan task batch --stdin --json`/i);
   assert.match(geminiCommand, /launchable companion is installed/i);
   assert.match(geminiCommand, /surface `overlay\.companion\.reason` instead of assuming the overlay appeared/i);
+  assert.match(geminiCommand, /Keep workflow control and command-by-command orchestration internal/i);
+  assert.match(geminiCommand, /Do not narrate meta progress such as which Superplan skill is active/i);
+  assert.match(geminiCommand, /Prefer project thoughts over process thoughts/i);
 });
 
 test('doctor reports valid after quiet global setup in a clean repo', async () => {
@@ -382,8 +386,13 @@ test('init quiet creates repository scaffolding after setup is complete', async 
   });
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'config.toml')));
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context', 'README.md')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context', 'INDEX.md')));
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'runtime')));
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'decisions.md')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'gotchas.md')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')));
 });
 
 test('init json creates repository scaffolding after setup is complete without prompting', async () => {
@@ -403,8 +412,13 @@ test('init json creates repository scaffolding after setup is complete without p
   });
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'config.toml')));
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context', 'README.md')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context', 'INDEX.md')));
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'runtime')));
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'decisions.md')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'gotchas.md')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')));
 });
 
 test('init quiet from a nested repo directory creates scaffolding at the repo root', async () => {
@@ -428,5 +442,7 @@ test('init quiet from a nested repo directory creates scaffolding at the repo ro
     error: null,
   });
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'config.toml')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context', 'README.md')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')));
   assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
 });

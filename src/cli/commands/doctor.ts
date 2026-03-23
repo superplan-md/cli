@@ -6,6 +6,7 @@ import { inspectOverlayCompanionInstall } from '../overlay-companion';
 import { readOverlayPreferences } from '../overlay-preferences';
 import { ALL_ENTRY_SKILL_NAMES } from '../skill-names';
 import { resolveWorkspaceRoot } from '../workspace-root';
+import { collectWorkspaceHealthIssues } from '../workspace-health';
 
 interface DoctorIssue {
   code: string;
@@ -326,6 +327,8 @@ export async function doctor(args: string[] = []) {
       fix: 'Reinstall Superplan to restore the overlay companion',
     });
   }
+
+  issues.push(...await collectWorkspaceHealthIssues(workspaceRoot));
 
   if (deep) {
     issues.push(...await collectDeepIssues(workspaceRoot));

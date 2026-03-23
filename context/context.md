@@ -160,7 +160,7 @@ Task markdown should not be hand-edited to reflect runtime lifecycle changes, an
 Review handoff now works in two steps:
 
 - `superplan task complete <task_id> --json` moves finished implementation into `in_review`
-- `superplan task approve <task_id> --json` marks an in-review task as `done`
+- `superplan task approve <task_id> --json` is the final review signoff and marks an in-review task as `done`
 - `superplan task reopen <task_id> --reason "..."` moves an in-review or done task back to `in_progress`
 
 ## Behavioral Notes

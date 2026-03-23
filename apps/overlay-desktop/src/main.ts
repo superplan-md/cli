@@ -759,6 +759,16 @@ function compactProgressMarkup(snapshot: OverlaySnapshot): string {
   `;
 }
 
+function compactLiveLoaderMarkup(): string {
+  return `
+    <span class="compact-indicator__live-loader" aria-hidden="true">
+      <span class="compact-indicator__live-dot"></span>
+      <span class="compact-indicator__live-dot"></span>
+      <span class="compact-indicator__live-dot"></span>
+    </span>
+  `;
+}
+
 function compactIndicatorMarkup(viewModel: PrototypeViewModel): string {
   const statusLabel = getCompactStatusLabel(viewModel);
   const boardLabel = getCompactBoardLabel(viewModel);
@@ -781,14 +791,16 @@ function compactIndicatorMarkup(viewModel: PrototypeViewModel): string {
           : 'Everything is complete.'
         : null
     );
-    const badgeModifier = isDone ? ' compact-indicator__corner-badge--done' : '';
+    const cornerBadgeMarkup = isDone
+      ? ''
+      : '<span class="compact-indicator__corner-badge" aria-hidden="true"></span>';
 
     return `
       <section
         class="compact-indicator compact-indicator--${viewModel.attentionState}"
         aria-label="${escapeHtml(statusLabel)}"
       >
-        <span class="compact-indicator__corner-badge${badgeModifier}" aria-hidden="true"></span>
+        ${cornerBadgeMarkup}
         <div
           class="compact-indicator__main"
           data-action="show-compact-message"
@@ -890,7 +902,7 @@ function compactIndicatorMarkup(viewModel: PrototypeViewModel): string {
         <div class="compact-indicator__main compact-indicator__main--working" data-overlay-drag>
           ${compactMarkMarkup(false)}
           <span class="compact-indicator__content compact-indicator__content--working">
-            <span class="${eyebrowClass}">${escapeHtml(eyebrow)}</span>
+            <span class="${eyebrowClass}">${escapeHtml(eyebrow)}${latestSnapshot.active_task ? compactLiveLoaderMarkup() : ''}</span>
             <span class="compact-indicator__title">${escapeHtml(detailTask.title)}</span>
             <span class="compact-indicator__description${latestSnapshot.active_task ? ' compact-indicator__description--live' : ''}">${descriptionMarkup}</span>
           </span>

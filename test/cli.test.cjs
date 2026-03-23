@@ -114,6 +114,9 @@ test('task --help explains task subcommands explicitly', async () => {
   const result = await runCli(['task', '--help']);
 
   assert.equal(result.code, 0);
+  assert.match(result.stdout, /Task lifecycle:/);
+  assert.match(result.stdout, /run -> complete -> approve/);
+  assert.match(result.stdout, /complete moves finished implementation into review; approve is final signoff that marks the task done\./);
   assert.match(result.stdout, /Task commands:/);
   assert.match(result.stdout, /new <change-slug>\s+Scaffold one graph-declared task contract/);
   assert.match(result.stdout, /batch <change-slug> --stdin\s+Scaffold multiple graph-declared task contracts from JSON stdin/);

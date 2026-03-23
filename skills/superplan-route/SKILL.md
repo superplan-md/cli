@@ -77,6 +77,14 @@ Routing is not permission to explore the CLI surface.
 - do not call `--help` or neighboring commands just to orient yourself when the route is already clear
 - once the depth decision is clear, stop probing the CLI and hand off
 
+## User Communication
+
+Do not expose routing mechanics as progress narration.
+
+- do not tell the user you are routing, choosing a depth mode, or handing off to another skill
+- summarize the practical outcome instead: whether the work is staying lightweight, needs a small plan, needs deeper structuring, or needs context first
+- avoid internal labels like `stay_out`, `direct`, `task`, `slice`, or `program` unless the user explicitly asks how Superplan classified the work
+
 ## Depth Modes
 
 - `stay_out`: direct answer, no durable artifact

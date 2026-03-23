@@ -113,6 +113,14 @@ Execution is not permission to wander across CLI commands.
 - use `superplan doctor --json` only for setup or install issues, not normal execution
 - once you know the next command, edit, or blocker transition, stop probing the CLI and act
 
+## User Communication
+
+Execution updates should report progress, not orchestration meta.
+
+- do not narrate scheduler behavior, subagent dispatch, runtime transitions, or command history unless that detail changes a user-facing decision
+- avoid status lines that are mostly internal process commentary
+- tell the user what changed in the code or project state, what verification is running, what risk is being checked, or what blocker now needs their input
+
 ## Lifecycle Semantics And Recovery
 
 Use the CLI as the transition gate for runtime state.

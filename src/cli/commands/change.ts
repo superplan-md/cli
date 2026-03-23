@@ -14,6 +14,7 @@ import {
   isValidChangeSlug,
   pathExists,
 } from './scaffold';
+import { ensureChangeArtifacts } from '../workspace-artifacts';
 
 export type ChangeResult =
   | {
@@ -141,11 +142,13 @@ async function createChange(changeSlug: string, title?: string): Promise<ChangeR
   }
 
   await fs.mkdir(changePaths.tasksDir, { recursive: true });
+  const normalizedTitle = title?.trim() || formatTitleFromSlug(changeSlug);
   await fs.writeFile(
     changePaths.tasksIndexPath,
-    buildChangeTasksIndex(changeSlug, title?.trim() || formatTitleFromSlug(changeSlug)),
+    buildChangeTasksIndex(changeSlug, normalizedTitle),
     'utf-8',
   );
+  const extraFiles = await ensureChangeArtifacts(changePaths.changeRoot, changeSlug, normalizedTitle);
   const overlay = await refreshChangeOverlay();
 
   return {
@@ -156,6 +159,7 @@ async function createChange(changeSlug: string, title?: string): Promise<ChangeR
       files: [
         path.relative(process.cwd(), changePaths.tasksIndexPath) || changePaths.tasksIndexPath,
         path.relative(process.cwd(), changePaths.tasksDir) || changePaths.tasksDir,
+        ...extraFiles.map(filePath => path.relative(process.cwd(), filePath) || filePath),
       ],
       ...(overlay ? { overlay } : {}),
     },

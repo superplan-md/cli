@@ -41,6 +41,16 @@ Use Superplan to coordinate and supervise that setup, not to replace it.
 
 Do not modify or outrank a working user-owned workflow unless the user explicitly asks.
 
+## User Communication
+
+Keep workflow control language internal.
+
+- do not narrate skill selection, routing decisions, phase names, or command-by-command orchestration to the user
+- do not send meta progress updates such as "I'm using `superplan-entry`", "I'm shaping the change now", or activity logs like "Explored 5 files"
+- progress updates should focus on user-visible value: what is being changed, what risk is being checked, what decision matters, or what blocker affects the user
+- mention a command, artifact, or workflow phase only when it directly explains a user-facing decision, blocker, or requested detail
+- when in doubt, prefer project thoughts over process thoughts
+
 ## CLI Discipline
 
 Entry routing is not permission to explore the CLI surface.
@@ -113,6 +123,8 @@ When Superplan is active in a repo, prefer the CLI as the execution control plan
 
 Common commands:
 
+- `superplan context bootstrap --json` to create missing durable workspace context entrypoints
+- `superplan context status --json` to inspect missing durable workspace context entrypoints
 - `superplan change new <change-slug> --json` to create one tracked change root
 - `superplan validate <change-slug> --json` to validate `tasks.md` graph structure and task-contract consistency
 - `superplan task new <change-slug> --task-id <task_id> --json` to scaffold exactly one graph-declared task contract
@@ -125,7 +137,7 @@ Common commands:
 - `superplan task request-feedback <task_id> --message "<message>" --json` when the user must respond
 - `superplan task complete <task_id> --json` after the work and acceptance criteria are satisfied
 - `superplan task fix --json` when runtime state becomes inconsistent
-- `superplan doctor --json` to verify setup and overlay launchability on a fresh machine or after install/update
+- `superplan doctor --json` to verify setup, overlay launchability, and workspace health when readiness is unclear
 - `superplan overlay ensure --json` to explicitly reveal or resync the overlay when overlay support is enabled
 - `superplan overlay hide --json` to close the overlay when the workspace is idle or empty
 - when shaping tracked work, author `.superplan/changes/<slug>/tasks.md` first, validate it, then use `superplan task new` or `superplan task batch` by graph-declared `task_id` instead of hand-creating `tasks/T-xxx.md`

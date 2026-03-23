@@ -95,12 +95,12 @@ Likely handoffs:
 - `superplan-route`
 - `superplan-shape`
 
-## Future CLI Hooks
+## CLI Hooks
 
 - `superplan context bootstrap`
-- `superplan context sync`
 - `superplan context status`
-- `superplan context diff`
+
+Use the command surface that exists today instead of treating context bootstrap as a manual convention.
 
 ## Validation Cases
 

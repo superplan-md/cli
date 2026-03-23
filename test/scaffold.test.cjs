@@ -30,6 +30,7 @@ test('change new creates a canonical change skeleton', async () => {
       files: [
         '.superplan/changes/improve-planning/tasks.md',
         '.superplan/changes/improve-planning/tasks',
+        '.superplan/changes/improve-planning/specs/README.md',
       ],
     },
     error: null,
@@ -38,6 +39,7 @@ test('change new creates a canonical change skeleton', async () => {
   const tasksIndexPath = path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks.md');
   assert.equal(await pathExists(tasksIndexPath), true);
   assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks')), true);
+  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'specs', 'README.md')), true);
 
   const tasksIndexContent = await fs.readFile(tasksIndexPath, 'utf-8');
   assert.match(tasksIndexContent, /# Task Graph/);
@@ -72,11 +74,13 @@ test('change new from a nested repo directory uses the repo-root superplan works
       files: [
         path.relative(nestedCwd, path.join(changeRoot, 'tasks.md')) || path.join(changeRoot, 'tasks.md'),
         path.relative(nestedCwd, path.join(changeRoot, 'tasks')) || path.join(changeRoot, 'tasks'),
+        path.relative(nestedCwd, path.join(changeRoot, 'specs', 'README.md')) || path.join(changeRoot, 'specs', 'README.md'),
       ],
     },
     error: null,
   });
   assert.equal(await pathExists(path.join(changeRoot, 'tasks.md')), true);
+  assert.equal(await pathExists(path.join(changeRoot, 'specs', 'README.md')), true);
   assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
 });
 

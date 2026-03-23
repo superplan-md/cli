@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { routeCommand, router } from './router';
 import { getChangeCommandHelpMessage } from './commands/change';
+import { getContextCommandHelpMessage } from './commands/context';
 import { getTaskCommandHelpMessage } from './commands/task';
 import { getOverlayCommandHelpMessage } from './commands/overlay';
 import { getVisibilityCommandHelpMessage } from './commands/visibility';
@@ -40,6 +41,7 @@ Commands:
     run        Start, resume, or continue tracked work
     task       Inspect or transition one tracked task
     change     Create tracked change scaffolding
+    context    Create or inspect durable workspace context artifacts
     init       Scaffold the repo-local Superplan workspace
 
   Recovery and diagnostics:
@@ -118,6 +120,22 @@ async function main() {
 
   if (command === 'change' && (args.includes('--help') || args[1] === 'help')) {
     const helpText = getChangeCommandHelpMessage({});
+    if (json || quiet) {
+      printJsonResult({
+        ok: true,
+        data: {
+          help: helpText,
+        },
+        error: null,
+      });
+    } else {
+      console.log(helpText);
+    }
+    return;
+  }
+
+  if (command === 'context' && (args.includes('--help') || args[1] === 'help')) {
+    const helpText = getContextCommandHelpMessage({});
     if (json || quiet) {
       printJsonResult({
         ok: true,

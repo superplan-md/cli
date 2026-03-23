@@ -5,6 +5,7 @@ import { confirm } from '@inquirer/prompts';
 import { setup, type SetupResult } from './setup';
 import { writeOverlayPreference } from '../overlay-preferences';
 import { resolveWorkspaceRoot } from '../workspace-root';
+import { ensureWorkspaceArtifacts, getWorkspaceArtifactPaths } from '../workspace-artifacts';
 
 export type InitResult =
   | { ok: true; data: { root: string } }
@@ -30,10 +31,8 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
   const workspaceRoot = resolveWorkspaceRoot(cwd);
   const superplanRoot = path.join(workspaceRoot, '.superplan');
   const relativeSuperplanRoot = path.relative(cwd, superplanRoot) || '.superplan';
-  const configPath = path.join(superplanRoot, 'config.toml');
-  const contextDir = path.join(superplanRoot, 'context');
-  const runtimeDir = path.join(superplanRoot, 'runtime');
-  const changesDir = path.join(superplanRoot, 'changes');
+  const artifactPaths = getWorkspaceArtifactPaths(superplanRoot);
+  const configPath = artifactPaths.configPath;
   const globalConfigPath = path.join(os.homedir(), '.config', 'superplan', 'config.toml');
 
   try {
@@ -103,10 +102,8 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
     }
 
     await fs.mkdir(superplanRoot, { recursive: true });
-    await fs.mkdir(contextDir, { recursive: true });
-    await fs.mkdir(runtimeDir, { recursive: true });
-    await fs.mkdir(changesDir, { recursive: true });
     await fs.writeFile(configPath, 'version = "0.1"\n', 'utf-8');
+    await ensureWorkspaceArtifacts(superplanRoot);
 
     if (!nonInteractive) {
       const enableOverlay = await confirm({ message: 'Enable desktop overlay in this repository?' });
