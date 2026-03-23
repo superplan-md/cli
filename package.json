@@ -2,6 +2,7 @@
   "name": "superplan",
   "version": "0.1.0",
   "description": "Superplan CLI",
+  "license": "Apache-2.0",
   "files": [
     "dist",
     ".claude-plugin",

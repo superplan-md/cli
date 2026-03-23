@@ -498,4 +498,4 @@ Parts of Superplan were inspired by Superpowers and its approach to structured l
 
 ## License
 
-No license file is currently present in this repository.
+This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
