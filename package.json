@@ -4,6 +4,12 @@
   "description": "Superplan CLI",
   "files": [
     "dist",
+    ".claude-plugin",
+    ".cursor-plugin",
+    ".opencode",
+    "hooks",
+    "GEMINI.md",
+    "gemini-extension.json",
     "scripts/install.sh",
     "README.md",
     "package.json"

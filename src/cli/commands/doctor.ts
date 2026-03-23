@@ -1,10 +1,14 @@
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import {
+  AgentEnvironment,
+  getSkillsFileCandidates,
+  getSkillsNamespaceCandidates,
+} from '../agent-integrations';
 import { parse } from './parse';
 import { inspectOverlayCompanionInstall } from '../overlay-companion';
 import { readOverlayPreferences } from '../overlay-preferences';
-import { ALL_ENTRY_SKILL_NAMES } from '../skill-names';
 import { resolveWorkspaceRoot } from '../workspace-root';
 import { collectWorkspaceHealthIssues } from '../workspace-health';
 
@@ -76,70 +80,108 @@ async function readRuntimeState(runtimeFilePath: string): Promise<RuntimeState> 
   }
 }
 
-function getSkillsNamespaceCandidates(baseDir: string, ...segments: string[]): string[] {
-  return ALL_ENTRY_SKILL_NAMES.map(skillName => path.join(baseDir, ...segments, skillName));
-}
-
-function getSkillsFileCandidates(baseDir: string, ...segments: string[]): string[] {
-  return ALL_ENTRY_SKILL_NAMES.map(skillName => path.join(baseDir, ...segments, skillName, 'SKILL.md'));
-}
-
-function getProjectAgents(baseDir: string): { name: string; path: string; skillsPaths: string[] }[] {
+function getProjectAgents(baseDir: string): (AgentEnvironment & { skillsPaths: string[] })[] {
   return [
     {
       name: 'claude',
       path: path.join(baseDir, '.claude'),
       skillsPaths: getSkillsNamespaceCandidates(baseDir, '.claude', 'skills'),
+      install_path: path.join(baseDir, '.claude', 'skills'),
+      install_kind: 'skills_namespace',
+      bootstrap_strength: 'skills_only',
     },
     {
       name: 'gemini',
       path: path.join(baseDir, '.gemini'),
       skillsPaths: [path.join(baseDir, '.gemini', 'commands', 'superplan.toml')],
+      install_path: path.join(baseDir, '.gemini', 'commands', 'superplan.toml'),
+      install_kind: 'toml_command',
+      bootstrap_strength: 'context_bootstrap',
     },
     {
       name: 'cursor',
       path: path.join(baseDir, '.cursor'),
       skillsPaths: getSkillsNamespaceCandidates(baseDir, '.cursor', 'skills'),
+      install_path: path.join(baseDir, '.cursor', 'skills'),
+      install_kind: 'skills_namespace',
+      bootstrap_strength: 'skills_only',
     },
     {
       name: 'codex',
       path: path.join(baseDir, '.codex'),
       skillsPaths: getSkillsNamespaceCandidates(baseDir, '.codex', 'skills'),
+      install_path: path.join(baseDir, '.codex', 'skills'),
+      install_kind: 'skills_namespace',
+      bootstrap_strength: 'skills_only',
     },
     {
       name: 'opencode',
       path: path.join(baseDir, '.opencode'),
       skillsPaths: getSkillsNamespaceCandidates(baseDir, '.opencode', 'skills'),
+      install_path: path.join(baseDir, '.opencode', 'skills'),
+      install_kind: 'skills_namespace',
+      bootstrap_strength: 'skills_only',
+    },
+    {
+      name: 'antigravity',
+      path: path.join(baseDir, '.agents'),
+      skillsPaths: [path.join(baseDir, '.agents', 'rules', 'superplan-entry.md')],
+      install_path: path.join(baseDir, '.agents', 'rules', 'superplan-entry.md'),
+      install_kind: 'markdown_rule',
+      bootstrap_strength: 'rule_bootstrap',
     },
   ];
 }
 
-function getGlobalAgents(baseDir: string): { name: string; path: string; skillsPaths: string[] }[] {
+function getGlobalAgents(baseDir: string): (AgentEnvironment & { skillsPaths: string[] })[] {
   return [
     {
       name: 'claude',
       path: path.join(baseDir, '.claude'),
       skillsPaths: getSkillsFileCandidates(baseDir, '.claude', 'skills'),
+      install_path: path.join(baseDir, '.claude', 'skills'),
+      install_kind: 'skills_namespace',
+      bootstrap_strength: 'skills_only',
     },
     {
       name: 'gemini',
       path: path.join(baseDir, '.gemini'),
       skillsPaths: [path.join(baseDir, '.gemini', 'commands', 'superplan.toml')],
+      install_path: path.join(baseDir, '.gemini', 'commands', 'superplan.toml'),
+      install_kind: 'toml_command',
+      bootstrap_strength: 'context_bootstrap',
     },
     {
       name: 'cursor',
       path: path.join(baseDir, '.cursor'),
       skillsPaths: getSkillsFileCandidates(baseDir, '.cursor', 'skills'),
+      install_path: path.join(baseDir, '.cursor', 'skills'),
+      install_kind: 'skills_namespace',
+      bootstrap_strength: 'skills_only',
     },
     {
       name: 'codex',
       path: path.join(baseDir, '.codex'),
       skillsPaths: getSkillsFileCandidates(baseDir, '.codex', 'skills'),
+      install_path: path.join(baseDir, '.codex', 'skills'),
+      install_kind: 'skills_namespace',
+      bootstrap_strength: 'skills_only',
     },
     {
       name: 'opencode',
       path: path.join(baseDir, '.config', 'opencode'),
       skillsPaths: getSkillsFileCandidates(baseDir, '.config', 'opencode', 'skills'),
+      install_path: path.join(baseDir, '.config', 'opencode', 'skills'),
+      install_kind: 'skills_namespace',
+      bootstrap_strength: 'skills_only',
+    },
+    {
+      name: 'antigravity',
+      path: path.join(baseDir, '.gemini'),
+      skillsPaths: [path.join(baseDir, '.gemini', 'GEMINI.md')],
+      install_path: path.join(baseDir, '.gemini', 'GEMINI.md'),
+      install_kind: 'managed_global_rule',
+      bootstrap_strength: 'rule_bootstrap',
     },
   ];
 }
@@ -286,7 +328,7 @@ export async function doctor(args: string[] = []) {
     issues.push({
       code: 'CONFIG_MISSING',
       message: 'Global config not found',
-      fix: 'Run superplan setup',
+      fix: 'Run superplan init --scope global --quiet --json',
     });
   }
 
@@ -295,7 +337,7 @@ export async function doctor(args: string[] = []) {
     issues.push({
       code: 'SKILLS_MISSING',
       message: 'Global skills not installed',
-      fix: 'Run superplan setup',
+      fix: 'Run superplan init --scope global --quiet --json',
     });
   }
 
@@ -309,9 +351,11 @@ export async function doctor(args: string[] = []) {
       issues.push({
         code: 'AGENT_SKILLS_MISSING',
         message: `Superplan skills not installed for ${agent.name} agent`,
-        fix: 'Run superplan setup in this repo',
+        fix: 'Run superplan init --scope both --quiet --json',
       });
+      continue;
     }
+
   }
 
   if (overlayPreferences.effective_enabled && !overlayCompanion.launchable) {

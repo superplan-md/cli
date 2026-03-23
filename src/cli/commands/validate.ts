@@ -113,9 +113,10 @@ export async function validate(args: string[] = []): Promise<ValidateResult> {
   const changes: ValidateChangeResult[] = [];
   const diagnostics: ParseDiagnostic[] = [];
   const workspaceRoot = resolveWorkspaceRoot(cwd);
-  const workspaceHealthDiagnostics = dedupeDiagnostics(
-    workspaceIssuesToDiagnostics(await collectWorkspaceHealthIssues(workspaceRoot)),
-  );
+  const includeWorkspaceHealth = !input;
+  const workspaceHealthDiagnostics = includeWorkspaceHealth
+    ? dedupeDiagnostics(workspaceIssuesToDiagnostics(await collectWorkspaceHealthIssues(workspaceRoot)))
+    : [];
 
   for (const changeDir of changeDirs) {
     const graphResult = await loadChangeGraph(changeDir);

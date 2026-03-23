@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { confirm, select, checkbox } from '@inquirer/prompts';
+import { getBootstrapStrengthSummary } from '../agent-integrations';
 import { readInstallMetadata, getInstallMetadataPath, type InstallMetadata } from '../install-metadata';
 import { writeOverlayPreference } from '../overlay-preferences';
 import { CURRENT_ENTRY_SKILL_NAME, LEGACY_SUPERPLAN_SKILL_NAMES } from '../skill-names';
@@ -12,7 +13,8 @@ interface AgentEnvironment {
   name: string;
   path: string;
   install_path: string;
-  install_kind: 'toml_command' | 'skills_namespace' | 'pointer_rule';
+  install_kind: 'toml_command' | 'skills_namespace' | 'pointer_rule' | 'markdown_rule' | 'managed_global_rule';
+  bootstrap_strength?: 'context_bootstrap' | 'rule_bootstrap' | 'skills_only';
   cleanup_paths?: string[];
   global_skills_dir?: string;
   detected?: boolean;
@@ -37,6 +39,8 @@ const SELECT_ALL_AGENTS_VALUE = '__all_agents__';
 export interface InitOptions {
   json?: boolean;
   quiet?: boolean;
+  yes?: boolean;
+  scope?: InstallScope;
 }
 
 export interface RefreshInstalledSkillsOptions {
@@ -84,6 +88,10 @@ const SETUP_BANNER = `
 |____/ \\___/|_|   |_____|_| \\_\\_|   |_____/_/   \\_\\_| \\_|
 
 `;
+const MANAGED_ANTIGRAVITY_BLOCK_START = '<!-- superplan-antigravity:start -->';
+const MANAGED_ANTIGRAVITY_BLOCK_END = '<!-- superplan-antigravity:end -->';
+const MANAGED_ENTRY_INSTRUCTIONS_BLOCK_START = '<!-- superplan-entry-instructions:start -->';
+const MANAGED_ENTRY_INSTRUCTIONS_BLOCK_END = '<!-- superplan-entry-instructions:end -->';
 
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
@@ -216,6 +224,78 @@ ${skillList}
 `;
 }
 
+function getAntigravityWorkspaceRuleContent(skillPath: string): string {
+  return `# Superplan Entry Rule
+
+Always treat this rule as active for repo work.
+
+Before implementation, broad repo exploration, or clarifying questions for repo-work requests, load and follow:
+
+@${skillPath}
+`;
+}
+
+function getAntigravityGlobalRuleBlock(skillPath: string): string {
+  return `${MANAGED_ANTIGRAVITY_BLOCK_START}
+# Superplan Entry Rule
+
+Always treat this rule as active for repo work.
+
+Before implementation, broad repo exploration, or clarifying questions for repo-work requests, load and follow:
+
+@${skillPath}
+${MANAGED_ANTIGRAVITY_BLOCK_END}`;
+}
+
+function upsertManagedBlock(existingContent: string, block: string, startMarker: string, endMarker: string): string {
+  const blockPattern = new RegExp(`${startMarker}[\\s\\S]*?${endMarker}`, 'm');
+  if (blockPattern.test(existingContent)) {
+    return existingContent.replace(blockPattern, block);
+  }
+
+  const trimmed = existingContent.trimEnd();
+  if (!trimmed) {
+    return `${block}\n`;
+  }
+
+  return `${trimmed}\n\n${block}\n`;
+}
+
+function getManagedEntryInstructionsBlock(): string {
+  return `${MANAGED_ENTRY_INSTRUCTIONS_BLOCK_START}
+When working in this repository, before implementation, broad repo exploration, or clarifying questions for repo work, you must load and follow the \`superplan-entry\` skill to begin your work.
+${MANAGED_ENTRY_INSTRUCTIONS_BLOCK_END}`;
+}
+
+async function installManagedInstructionsFile(targetPath: string): Promise<void> {
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  const existingContent = await fs.readFile(targetPath, 'utf-8').catch(() => '');
+  const nextContent = upsertManagedBlock(
+    existingContent,
+    getManagedEntryInstructionsBlock(),
+    MANAGED_ENTRY_INSTRUCTIONS_BLOCK_START,
+    MANAGED_ENTRY_INSTRUCTIONS_BLOCK_END,
+  );
+  await fs.writeFile(targetPath, nextContent, 'utf-8');
+}
+
+async function installAntigravityWorkspaceRule(targetPath: string, skillPath: string): Promise<void> {
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  await fs.writeFile(targetPath, getAntigravityWorkspaceRuleContent(skillPath), 'utf-8');
+}
+
+async function installAntigravityGlobalRule(targetPath: string, skillPath: string): Promise<void> {
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  const existingContent = await fs.readFile(targetPath, 'utf-8').catch(() => '');
+  const nextContent = upsertManagedBlock(
+    existingContent,
+    getAntigravityGlobalRuleBlock(skillPath),
+    MANAGED_ANTIGRAVITY_BLOCK_START,
+    MANAGED_ANTIGRAVITY_BLOCK_END,
+  );
+  await fs.writeFile(targetPath, nextContent, 'utf-8');
+}
+
 
 async function installSkillsNamespace(sourceDir: string, targetDir: string): Promise<void> {
   await fs.mkdir(targetDir, { recursive: true });
@@ -341,6 +421,7 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
         path: path.join(baseDir, '.claude'),
         install_path: path.join(baseDir, '.claude', 'skills'),
         install_kind: 'skills_namespace',
+        bootstrap_strength: 'skills_only',
         cleanup_paths: [path.join(baseDir, '.claude', 'commands', 'superplan.md')],
       },
       {
@@ -348,12 +429,14 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
         path: path.join(baseDir, '.gemini'),
         install_path: path.join(baseDir, '.gemini', 'commands', 'superplan.toml'),
         install_kind: 'toml_command',
+        bootstrap_strength: 'context_bootstrap',
       },
       {
         name: 'cursor',
         path: path.join(baseDir, '.cursor'),
         install_path: path.join(baseDir, '.cursor', 'skills'),
         install_kind: 'skills_namespace',
+        bootstrap_strength: 'skills_only',
         cleanup_paths: [path.join(baseDir, '.cursor', 'commands', 'superplan.md')],
       },
       {
@@ -361,6 +444,7 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
         path: path.join(baseDir, '.codex'),
         install_path: path.join(baseDir, '.codex', 'skills'),
         install_kind: 'skills_namespace',
+        bootstrap_strength: 'skills_only',
         cleanup_paths: [path.join(baseDir, '.codex', 'skills', 'superplan')],
       },
       {
@@ -368,6 +452,7 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
         path: path.join(baseDir, '.opencode'),
         install_path: path.join(baseDir, '.opencode', 'skills'),
         install_kind: 'skills_namespace',
+        bootstrap_strength: 'skills_only',
         cleanup_paths: [path.join(baseDir, '.opencode', 'commands', 'superplan.md')],
       },
       {
@@ -375,6 +460,7 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
         path: path.join(baseDir, '.amazonq'),
         install_path: path.join(baseDir, '.amazonq', 'rules', 'superplan.md'),
         install_kind: 'pointer_rule',
+        bootstrap_strength: 'skills_only',
         cleanup_paths: [
           path.join(baseDir, '.amazonq', 'rules', 'superplan'),
           path.join(baseDir, '.amazonq', 'rules', 'superplan-entry'),
@@ -384,9 +470,9 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
       {
         name: 'antigravity',
         path: path.join(baseDir, '.agents'),
-        install_path: path.join(baseDir, '.agents', 'workflows'),
-        install_kind: 'skills_namespace',
-        cleanup_paths: [path.join(baseDir, '.agents', 'workflows', 'superplan')],
+        install_path: path.join(baseDir, '.agents', 'rules', 'superplan-entry.md'),
+        install_kind: 'markdown_rule',
+        bootstrap_strength: 'rule_bootstrap',
       },
     ];
   }
@@ -397,6 +483,7 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
       path: path.join(baseDir, '.claude'),
       install_path: path.join(baseDir, '.claude', 'skills'),
       install_kind: 'skills_namespace',
+      bootstrap_strength: 'skills_only',
       cleanup_paths: [path.join(baseDir, '.claude', 'commands', 'superplan.md')],
     },
     {
@@ -404,12 +491,14 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
       path: path.join(baseDir, '.gemini'),
       install_path: path.join(baseDir, '.gemini', 'commands', 'superplan.toml'),
       install_kind: 'toml_command',
+      bootstrap_strength: 'context_bootstrap',
     },
     {
       name: 'cursor',
       path: path.join(baseDir, '.cursor'),
       install_path: path.join(baseDir, '.cursor', 'skills'),
       install_kind: 'skills_namespace',
+      bootstrap_strength: 'skills_only',
       cleanup_paths: [path.join(baseDir, '.cursor', 'commands', 'superplan.md')],
     },
     {
@@ -417,6 +506,7 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
       path: path.join(baseDir, '.codex'),
       install_path: path.join(baseDir, '.codex', 'skills'),
       install_kind: 'skills_namespace',
+      bootstrap_strength: 'skills_only',
       cleanup_paths: [path.join(baseDir, '.codex', 'skills', 'superplan')],
     },
     {
@@ -424,15 +514,16 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
       path: path.join(baseDir, '.config', 'opencode'),
       install_path: path.join(baseDir, '.config', 'opencode', 'skills'),
       install_kind: 'skills_namespace',
+      bootstrap_strength: 'skills_only',
       cleanup_paths: [path.join(baseDir, '.config', 'opencode', 'commands', 'superplan.md')],
     },
 
     {
       name: 'antigravity',
-      path: path.join(baseDir, '.antigravity'),
-      install_path: path.join(baseDir, '.antigravity', 'workflows'),
-      install_kind: 'skills_namespace',
-      cleanup_paths: [path.join(baseDir, '.antigravity', 'workflows', 'superplan')],
+      path: path.join(baseDir, '.gemini'),
+      install_path: path.join(baseDir, '.gemini', 'GEMINI.md'),
+      install_kind: 'managed_global_rule',
+      bootstrap_strength: 'rule_bootstrap',
     },
   ];
 }
@@ -569,6 +660,18 @@ async function installAgentSkills(skillsDir: string, agents: AgentEnvironment[])
       continue;
     }
 
+    if (agent.install_kind === 'markdown_rule') {
+      const antigravitySkillPath = path.join(skillsDir, CURRENT_ENTRY_SKILL_NAME, 'SKILL.md');
+      await installAntigravityWorkspaceRule(agent.install_path, antigravitySkillPath);
+      continue;
+    }
+
+    if (agent.install_kind === 'managed_global_rule') {
+      const antigravitySkillPath = path.join(skillsDir, CURRENT_ENTRY_SKILL_NAME, 'SKILL.md');
+      await installAntigravityGlobalRule(agent.install_path, antigravitySkillPath);
+      continue;
+    }
+
     await fs.mkdir(path.dirname(agent.install_path), { recursive: true });
     await fs.writeFile(agent.install_path, getGeminiCommandContent(), 'utf-8');
   }
@@ -646,7 +749,13 @@ async function ensureSkillsSource(
   return null;
 }
 
-async function ensureGlobalSetup(configDir: string, configPath: string, skillsDir: string, sourceSkillsDir: string): Promise<void> {
+async function ensureGlobalSetup(
+  configDir: string,
+  configPath: string,
+  skillsDir: string,
+  sourceSkillsDir: string,
+  homeDir: string,
+): Promise<void> {
   await fs.mkdir(configDir, { recursive: true });
 
   if (!await pathExists(configPath)) {
@@ -654,9 +763,23 @@ async function ensureGlobalSetup(configDir: string, configPath: string, skillsDi
   }
 
   await installSkills(sourceSkillsDir, skillsDir);
+  if (await pathExists(path.join(homeDir, '.codex'))) {
+    await installManagedInstructionsFile(path.join(homeDir, '.codex', 'AGENTS.md'));
+  }
+
+  if (await pathExists(path.join(homeDir, '.claude'))) {
+    await installManagedInstructionsFile(path.join(homeDir, '.claude', 'CLAUDE.md'));
+  }
 }
 
-async function ensureLocalSetup(superplanDir: string, configPath: string, skillsDir: string, changesDir: string, sourceSkillsDir: string): Promise<void> {
+async function ensureLocalSetup(
+  superplanDir: string,
+  configPath: string,
+  skillsDir: string,
+  changesDir: string,
+  sourceSkillsDir: string,
+  workspaceRoot: string,
+): Promise<void> {
   await fs.mkdir(superplanDir, { recursive: true });
   await fs.mkdir(changesDir, { recursive: true });
 
@@ -665,6 +788,8 @@ async function ensureLocalSetup(superplanDir: string, configPath: string, skills
   }
 
   await installSkills(sourceSkillsDir, skillsDir);
+  await installManagedInstructionsFile(path.join(workspaceRoot, 'AGENTS.md'));
+  await installManagedInstructionsFile(path.join(workspaceRoot, 'CLAUDE.md'));
 }
 
 function getScopePaths(scope: InstallScope, globalConfigPath: string, globalSkillsPath: string, localConfigPath: string, localSkillsPath: string) {
@@ -788,6 +913,10 @@ function getNoAgentsMessage(scope: InstallScope, agentCount: number): string | u
   return 'No agent environments found in this repo or your home directory.';
 }
 
+function isInstallScope(value: string | undefined): value is InstallScope {
+  return value === 'global' || value === 'local' || value === 'both' || value === 'skip';
+}
+
 function printSetupBanner(): void {
   console.log(SETUP_BANNER);
 }
@@ -849,7 +978,7 @@ export async function refreshInstalledSkills(
       : [];
 
     // Always ensure global config and skills exist regardless of scope.
-    await ensureGlobalSetup(globalConfigDir, globalConfigPath, globalSkillsDir, sourceSkillsDir);
+    await ensureGlobalSetup(globalConfigDir, globalConfigPath, globalSkillsDir, sourceSkillsDir, homeDir);
 
     if (scope === 'global' || scope === 'both') {
       if (homeAgents.length > 0) {
@@ -858,7 +987,7 @@ export async function refreshInstalledSkills(
     }
 
     if (scope === 'local' || scope === 'both') {
-      await ensureLocalSetup(localSuperplanDir, localConfigPath, localSkillsDir, localChangesDir, sourceSkillsDir);
+      await ensureLocalSetup(localSuperplanDir, localConfigPath, localSkillsDir, localChangesDir, sourceSkillsDir, workspaceRoot);
       if (repoAgents.length > 0) {
         await installAgentSkills(localSkillsDir, repoAgents);
       }
@@ -908,18 +1037,32 @@ export async function refreshInstalledSkills(
 
 export async function init(options: InitOptions = {}): Promise<InitResult> {
   try {
-    if (options.json && !options.quiet) {
+    if (options.scope && !isInstallScope(options.scope)) {
       return {
         ok: false,
         error: {
-          code: 'INTERACTIVE_REQUIRED',
-          message: 'setup must be run interactively',
+          code: 'INVALID_INIT_COMMAND',
+          message: getInitCommandHelpMessage(options.scope),
           retryable: false,
         },
       };
     }
 
-    if (!options.quiet) {
+    const explicitNonInteractive = Boolean(options.scope || options.yes);
+    const nonInteractive = Boolean(options.quiet || explicitNonInteractive);
+
+    if (options.json && !nonInteractive) {
+      return {
+        ok: false,
+        error: {
+          code: 'INTERACTIVE_REQUIRED',
+          message: 'init must be run interactively',
+          retryable: false,
+        },
+      };
+    }
+
+    if (!options.quiet && !options.json) {
       printSetupBanner();
     }
 
@@ -938,7 +1081,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
     const localChangesDir = path.join(localSuperplanDir, 'changes');
 
     const alreadySetup = await pathExists(globalConfigPath) || await pathExists(localSuperplanDir);
-    if (alreadySetup && !options.quiet) {
+    if (alreadySetup && !nonInteractive) {
       const reinstall = await confirm({ message: 'Superplan is already set up. Reinstall?' });
       if (!reinstall) {
         return {
@@ -952,17 +1095,18 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
       }
     }
 
-    const scope = options.quiet
-      ? 'global'
-      : await select<InstallScope>({
-          message: 'Where do you want to install Superplan?',
-          choices: [
-            { name: 'Global (machine-level)', value: 'global' },
-            { name: 'Local (current repository)', value: 'local' },
-            { name: 'Both', value: 'both' },
-            { name: 'Skip', value: 'skip' },
-          ],
-        });
+    const scope = options.scope
+      ?? (options.quiet
+        ? 'global'
+        : await select<InstallScope>({
+            message: 'Where do you want to install Superplan?',
+            choices: [
+              { name: 'Global (machine-level)', value: 'global' },
+              { name: 'Local (current repository)', value: 'local' },
+              { name: 'Both', value: 'both' },
+              { name: 'Skip', value: 'skip' },
+            ],
+          }));
 
     if (scope === 'skip') {
       return {
@@ -975,12 +1119,12 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
       };
     }
 
-    const enableGlobalOverlay = options.quiet
+    const enableGlobalOverlay = nonInteractive
       ? false
       : ((scope === 'global' || scope === 'both')
         ? await confirm({ message: 'Enable desktop overlay by default on this machine?' })
         : false);
-    const enableLocalOverlay = options.quiet
+    const enableLocalOverlay = nonInteractive
       ? false
       : ((scope === 'local' || scope === 'both')
         ? await confirm({ message: 'Enable desktop overlay in this repository?' })
@@ -1003,7 +1147,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
       : [];
 
     const repoAgents = scope === 'local' || scope === 'both'
-      ? (options.quiet
+      ? (nonInteractive
         ? detectedRepoAgents
         : await promptForAgentSelection(
           scope === 'both'
@@ -1015,7 +1159,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
 
     // Always ensure global config and skills exist regardless of scope,
     // since pointer-rule agents (e.g. Amazon Q) reference the global skills dir.
-    await ensureGlobalSetup(globalConfigDir, globalConfigPath, globalSkillsDir, sourceSkillsDir);
+    await ensureGlobalSetup(globalConfigDir, globalConfigPath, globalSkillsDir, sourceSkillsDir, homeDir);
 
     if (scope === 'global' || scope === 'both') {
       await installOverlayCompanion(globalConfigDir);
@@ -1032,7 +1176,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
     }
 
     if (scope === 'local' || scope === 'both') {
-      await ensureLocalSetup(localSuperplanDir, localConfigPath, localSkillsDir, localChangesDir, sourceSkillsDir);
+      await ensureLocalSetup(localSuperplanDir, localConfigPath, localSkillsDir, localChangesDir, sourceSkillsDir, workspaceRoot);
       await ensureWorkspaceArtifacts(localSuperplanDir);
       await writeOverlayPreference(enableLocalOverlay, { scope: 'local', cwd: workspaceRoot });
       if (repoAgents.length > 0) {
@@ -1061,13 +1205,19 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
     }
 
     const installedAgents = [...homeAgents, ...repoAgents];
+    const bootstrapLimitedAgents = installedAgents
+      .filter(agent => (agent.bootstrap_strength ?? 'skills_only') === 'skills_only')
+      .map(agent => `${getAgentDisplayName(agent)} (${getBootstrapStrengthSummary(agent.bootstrap_strength ?? 'skills_only')})`);
     const noAgentsMessage = installedAgents.length === 0
       ? (options.quiet ? getNoAgentsMessage(scope, installedAgents.length) : 'No agent integrations selected.')
       : undefined;
     const quietMessage = options.quiet ? ' Quiet mode used default scope: global.' : '';
+    const capabilityMessage = bootstrapLimitedAgents.length > 0
+      ? ` Entry routing remains best-effort for ${bootstrapLimitedAgents.join(', ')} until a host bootstrap surface exists.`
+      : '';
     const message = noAgentsMessage
-      ? `${noAgentsMessage} Init verification passed.${quietMessage}`
-      : `Init verification passed.${quietMessage}`;
+      ? `${noAgentsMessage} Init verification passed.${capabilityMessage}${quietMessage}`
+      : `Init verification passed.${capabilityMessage}${quietMessage}`;
 
     return {
       ok: true,

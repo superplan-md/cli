@@ -263,7 +263,7 @@ test('interactive init select-all option installs every supported machine-level 
   assert.ok(await pathExists(path.join(sandbox.home, '.cursor', 'skills', 'superplan-entry', 'SKILL.md')));
   assert.ok(await pathExists(path.join(sandbox.home, '.codex', 'skills', 'superplan-entry', 'SKILL.md')));
   assert.ok(await pathExists(path.join(sandbox.home, '.config', 'opencode', 'skills', 'superplan-entry', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.antigravity', 'workflows', 'superplan-entry', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.gemini', 'GEMINI.md')));
 
   const geminiCommand = await fs.readFile(path.join(sandbox.home, '.gemini', 'commands', 'superplan.toml'), 'utf-8');
   assert.match(geminiCommand, /Never create or edit `\.superplan\/changes\/<change-slug>\/tasks\/T-xxx\.md` task contracts with shell loops or direct file-edit rewrites/i);
@@ -318,23 +318,20 @@ test('doctor reports missing home agent installs when a supported global agent d
   assert.equal(payload.error, null);
 });
 
-test('init quiet requires global setup before repo initialization', async () => {
+test('init --scope local --yes --json creates repository scaffolding without prompting', async () => {
   const sandbox = await makeSandbox('superplan-init-required-');
-  const result = await runCli(['init', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+  const result = await runCli(['init', '--scope', 'local', '--yes', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const payload = parseCliJson(result);
 
-  assert.equal(result.code, 1);
-  assert.deepEqual(payload, {
-    ok: false,
-    error: {
-      code: 'INIT_REQUIRED',
-      message: 'Global setup is required before init',
-      retryable: true,
-    },
-  });
+  assert.equal(result.code, 0);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.data.scope, 'local');
+  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'config.toml')), true);
+  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'context', 'README.md')), true);
+  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')), true);
 });
 
-test('init json requires global setup before repo initialization without prompting', async () => {
+test('init --json without a scope still requires interactive mode', async () => {
   const sandbox = await makeSandbox('superplan-init-json-required-');
   const result = await runCli(['init', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const payload = parseCliJson(result);
@@ -343,54 +340,36 @@ test('init json requires global setup before repo initialization without prompti
   assert.deepEqual(payload, {
     ok: false,
     error: {
-      code: 'INIT_REQUIRED',
-      message: 'Global setup is required before init',
-      retryable: true,
+      code: 'INTERACTIVE_REQUIRED',
+      message: 'init must be run interactively',
+      retryable: false,
     },
   });
 });
 
-test('init quiet creates repository scaffolding after setup is complete', async () => {
+test('init quiet creates global scaffolding with the default machine-level scope', async () => {
   const sandbox = await makeSandbox('superplan-init-quiet-');
 
-  await runCli(['init', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const initResult = await runCli(['init', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const payload = parseCliJson(initResult);
 
   assert.equal(initResult.code, 0);
-  assert.deepEqual(payload, {
-    ok: true,
-    data: {
-      root: '.superplan',
-    },
-    error: null,
-  });
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'config.toml')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context', 'README.md')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context', 'INDEX.md')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'runtime')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'decisions.md')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'gotchas.md')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')));
+  assert.equal(payload.ok, true);
+  assert.equal(payload.data.scope, 'global');
+  assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'config.toml')), true);
+  assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-entry', 'SKILL.md')), true);
+  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan')), false);
 });
 
-test('init json creates repository scaffolding after setup is complete without prompting', async () => {
+test('init --scope local --yes --json creates repository scaffolding without prompting', async () => {
   const sandbox = await makeSandbox('superplan-init-json-');
 
-  await runCli(['init', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
-  const initResult = await runCli(['init', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+  const initResult = await runCli(['init', '--scope', 'local', '--yes', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const payload = parseCliJson(initResult);
 
   assert.equal(initResult.code, 0);
-  assert.deepEqual(payload, {
-    ok: true,
-    data: {
-      root: '.superplan',
-    },
-    error: null,
-  });
+  assert.equal(payload.ok, true);
+  assert.equal(payload.data.scope, 'local');
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'config.toml')));
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context')));
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context', 'README.md')));
@@ -402,26 +381,19 @@ test('init json creates repository scaffolding after setup is complete without p
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')));
 });
 
-test('init quiet from a nested repo directory creates scaffolding at the repo root', async () => {
+test('init --scope local --yes --json from a nested repo directory creates scaffolding at the repo root', async () => {
   const sandbox = await makeSandbox('superplan-init-nested-');
   const nestedCwd = path.join(sandbox.cwd, 'apps', 'overlay-desktop');
 
   await fs.mkdir(path.join(sandbox.cwd, '.git'), { recursive: true });
   await fs.mkdir(nestedCwd, { recursive: true });
 
-  await runCli(['init', '--quiet', '--json'], { cwd: nestedCwd, env: sandbox.env });
-  const initResult = await runCli(['init', '--quiet', '--json'], { cwd: nestedCwd, env: sandbox.env });
+  const initResult = await runCli(['init', '--scope', 'local', '--yes', '--json'], { cwd: nestedCwd, env: sandbox.env });
   const payload = parseCliJson(initResult);
-  const relativeRoot = path.relative(nestedCwd, path.join(sandbox.cwd, '.superplan')) || '.superplan';
 
   assert.equal(initResult.code, 0);
-  assert.deepEqual(payload, {
-    ok: true,
-    data: {
-      root: relativeRoot,
-    },
-    error: null,
-  });
+  assert.equal(payload.ok, true);
+  assert.equal(payload.data.scope, 'local');
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'config.toml')));
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context', 'README.md')));
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')));

@@ -1,6 +1,6 @@
 ---
 name: superplan-entry
-description: Default entry skill when Superplan is active in the current host or repo and the system must decide whether the request should stay conversational or enter structured Superplan workflow.
+description: Use when starting any repo-work conversation in a Superplan-enabled host or repo, before clarifying questions or implementation, to decide whether to stay conversational or enter structured Superplan workflow.
 ---
 
 # Using Superplan
@@ -14,6 +14,8 @@ This skill replaces the entry discipline that `using-superpowers` used to provid
 
 Keep it small.
 Its job is to decide whether Superplan should meaningfully participate, whether readiness is missing, and which workflow phase owns the next responsibility.
+
+If there is a meaningful chance that the request is repo work needing durable structure, use this skill before implementation, broad repo exploration, or clarifying questions.
 
 ## Subagent Guard
 
@@ -30,6 +32,26 @@ Follow this order:
 3. generic default behavior
 
 If a repo instruction conflicts with a default Superplan habit, obey the user or repo instruction.
+
+## Mandatory Discipline
+
+Treat entry routing as mandatory first-contact discipline, not optional advice.
+
+- do not start implementing first and promise to structure later
+- do not start broad repo exploration first and claim routing can happen after
+- do not ask clarifying questions first when the real first question is whether Superplan should engage
+- do not rationalize that a dense request is "probably just one task" without checking
+
+Rationalizations that mean stop and use this skill:
+
+- "This is probably straightforward."
+- "I'll inspect a few files first."
+- "I'll just ask one clarifying question."
+- "I already know this repo."
+- "The user asked for code, not process."
+- "The skill description is broad, so I can skip it."
+
+When Superplan is active, entry discipline outranks generic default behavior unless the user or repo explicitly says otherwise.
 
 ## Workspace Precedence
 
@@ -73,6 +95,8 @@ Use when:
 
 In practice, this is the default entry layer in Superplan mode.
 
+For dense requirement dumps, packed queries, JTBD lists, or multi-constraint briefs, assume this skill applies unless there is a strong reason to stay out.
+
 ## Stay Out
 
 Stay conversational when:
@@ -101,6 +125,7 @@ Assumptions:
 
 - users should not need to think about which skill comes next
 - host environments may auto-trigger this skill
+- some hosts only provide skill discovery rather than true startup bootstrap, so this skill must be triggerable from natural repo-work requests
 - agents should not need to choose between multiple overlapping commands for the same intent
 - entry routing should usually resolve without CLI command-surface exploration
 - Superplan should improve the workflow, not hijack it
@@ -189,6 +214,14 @@ Apply this order:
 
 Do not bounce already shaped work back through `superplan-route` just because the current message is short.
 
+Completion rule:
+
+- if Superplan stays out, answer directly and stop
+- if readiness is missing, give the concrete missing-layer guidance and stop
+- if the owning phase is already known, hand off directly in the same turn
+- if the request is dense, packed, or structurally ambiguous, do not stop at "this should route"; continue until the owning next phase is explicit
+- if `superplan-route` is invoked and returns `direct`, `task`, `slice`, or `program`, the work is not done until the next workflow owner is explicit, normally `superplan-shape`
+
 ## Routing Model
 
 Treat Superplan as a workflow spine with support disciplines underneath it.
@@ -222,6 +255,7 @@ Process-first rule:
 
 - choose the owning workflow phase first
 - only then let that phase invoke the right support discipline
+- do not end the turn with a vague recommendation to "use Superplan" when a specific owning phase is already knowable
 
 ## Direct Resume Routes
 
@@ -240,6 +274,8 @@ See `references/routing-boundaries.md`.
 - authoring `specs`, `plan.md`, or task artifacts here
 - doing broad execution here
 - reviewing completion here
+- stopping at a generic statement that Superplan should probably be used
+- classifying a dense request as route-worthy but failing to hand off to the owning next phase
 - bypassing the owning workflow phase just because a support skill feels relevant
 - sending already shaped work back to `superplan-route` by reflex
 - forcing engagement when Superplan adds no value
@@ -285,6 +321,8 @@ One of:
 - route to `superplan-review`
 
 The output should be brief and legible.
+
+For packed or ambiguous repo-work, "brief" does not mean vague. The output must still make the owning next phase explicit.
 
 ## Handoff
 

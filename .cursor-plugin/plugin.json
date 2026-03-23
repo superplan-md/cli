@@ -1,0 +1,15 @@
+{
+  "name": "superplan",
+  "displayName": "Superplan",
+  "description": "Local, agent-first planning and execution workflow for repositories",
+  "version": "0.1.0",
+  "author": {
+    "name": "Superplan"
+  },
+  "homepage": "https://github.com/superplan-md/superplan-plugin",
+  "repository": "https://github.com/superplan-md/superplan-plugin",
+  "license": "MIT",
+  "keywords": ["planning", "workflow", "skills", "task-graph", "execution", "superplan"],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks-cursor.json"
+}

@@ -55,8 +55,9 @@ The installer:
 - builds the CLI
 - installs `superplan` globally with npm
 - installs the packaged desktop overlay companion for the current macOS or Linux platform when a release artifact is available
-- runs machine-level `superplan setup` automatically so bundled skills are ready immediately
+- runs machine-level `superplan init --scope global --quiet --json` automatically so bundled skills and agent integrations are ready immediately
 - enables the desktop overlay by default on this machine unless `SUPERPLAN_ENABLE_OVERLAY=0` is set
+- ships host bootstrap assets for Claude Code, Cursor, OpenCode, and Gemini, and installs Antigravity entry rules, so those platforms can preload `superplan-entry` when installed through their native plugin, extension, or rules paths
 
 Prerequisites:
 
@@ -94,16 +95,15 @@ Once `superplan` is available, go to the repo you want to use and run:
 
 ```bash
 cd /path/to/your/repo
-superplan setup
-superplan init --json
+superplan init
 ```
 
 That gives you the usual first-run path:
 
-- `superplan setup` installs or refreshes the machine and agent integrations
-- `superplan init --json` creates the repo-local `.superplan/` workspace
+- `superplan init` installs or refreshes machine-level skills and agent integrations when needed
+- `superplan init` also creates the repo-local `.superplan/` workspace when the repo is not initialized yet
 
-If you used the one-command curl installer, machine-level `setup` is already run automatically, but this is still the right first-use sequence to remember and safe to rerun when needed.
+If you used the one-command curl installer, machine-level initialization is already run automatically, but `superplan init` is still the right entry command to remember and safe to rerun when needed.
 
 When the overlay companion is installed and enabled, the first real authoring or execution transition in a repo can reveal it. In practice, `superplan task new`, `superplan task batch`, `superplan run`, `superplan run <task_id>`, and `superplan task reopen` can surface the overlay. Explicit `superplan overlay ensure` / `hide` commands still exist for manual control and agent guidance.
 
@@ -172,27 +172,27 @@ npm install
 npm run build
 ```
 
-#### 3. Set up Superplan
+#### 3. Initialize Superplan
 
-Global setup:
-
-```bash
-node dist/cli/main.js setup
-```
-
-Interactive setup now scans for agent environments first, shows only the agents it actually found for that scope, includes a `Found:` hint plus a `Select all found AI agents` option when there are multiple detections, and runs immediately after those choices without an extra generic confirmation step.
-
-Successful human-mode `setup` now ends with a short `Superplan setup completed successfully.` message instead of dumping the full structured result payload.
-
-Local Superplan commands resolve to the nearest repo workspace root when run from subdirectories, so `setup`, `init`, and task/change commands reuse the repo-level `.superplan/` instead of creating nested ones under `apps/...`.
-
-Quiet machine-level setup for automation:
+Interactive init:
 
 ```bash
-node dist/cli/main.js setup --quiet --json
+node dist/cli/main.js init
 ```
 
-#### 4. Initialize a repo
+Interactive init now scans for agent environments first, shows only the agents it actually found for that scope, includes a `Found:` hint plus a `Select all found AI agents` option when there are multiple detections, and runs immediately after those choices without an extra generic confirmation step.
+
+Successful human-mode `init` ends with a short `Superplan init completed successfully.` message instead of dumping the full structured result payload.
+
+Local Superplan commands resolve to the nearest repo workspace root when run from subdirectories, so `init` and task/change commands reuse the repo-level `.superplan/` instead of creating nested ones under `apps/...`.
+
+Quiet automation mode:
+
+```bash
+node dist/cli/main.js init --quiet --json
+```
+
+#### 4. Repo scaffold
 
 ```bash
 node dist/cli/main.js init --quiet --json
@@ -228,6 +228,8 @@ printf '%s' '[{"task_id":"T-001"},{"task_id":"T-002","priority":"high"}]' | supe
 ## How It Works
 
 Superplan starts from the moment an agent needs durable structure in a repo. Instead of relying on chat memory, scratch notes, or ad hoc TODOs, it gives the work a local home under `.superplan/`.
+
+For hosts that support startup prompt injection, the bundled platform assets preload `superplan-entry` so dense or packed repo-work requests are routed before broad implementation. Antigravity uses installed rules for the same purpose. Hosts that only support skill discovery still rely on best-effort automatic triggering.
 
 First, it shapes the work into tracked changes, a graph, and task contracts. `superplan change new` creates the change root, `tasks.md` becomes graph truth, `superplan validate` checks that graph, and then `superplan task new` or `superplan task batch` scaffold the executable task contracts by explicit `task_id`.
 
@@ -316,8 +318,7 @@ Current top-level commands:
 | Command | What it does |
 | --- | --- |
 | `change` | Create tracked work structure |
-| `init` | Scaffold the repo-local Superplan workspace |
-| `setup` | Install Superplan config, bundled skills, and the agent integrations you select |
+| `init` | Install machine-level integrations when needed and scaffold the repo-local Superplan workspace |
 | `sync` | Re-parse tasks and repair safe runtime drift after task-file or runtime edits |
 | `update` | Update an installed Superplan CLI and refresh existing skills |
 | `remove` | Remove a Superplan installation or state; use `--scope ... --yes --json` for agent-safe deletion |

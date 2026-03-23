@@ -53,7 +53,6 @@ Commands:
     doctor     Validate install and overlay health
 
   Installation and admin:
-    setup      Install config, skills, and agent integrations
     update     Update an installed Superplan CLI and refresh skills
     remove     Remove Superplan installation or state
 

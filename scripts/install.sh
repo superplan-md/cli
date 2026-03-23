@@ -18,7 +18,7 @@ set -eu
 # - SUPERPLAN_OVERLAY_RELEASE_BASE_URL: base URL that hosts packaged overlay artifacts
 # - SUPERPLAN_OVERLAY_INSTALL_DIR: install directory for the overlay bundle or executable
 # - SUPERPLAN_ENABLE_OVERLAY: yes/no override for machine-default overlay behavior
-# - SUPERPLAN_RUN_SETUP_AFTER_INSTALL: 1 to run machine setup after install, 0 to skip it
+# - SUPERPLAN_RUN_SETUP_AFTER_INSTALL: 1 to run machine init after install, 0 to skip it
 
 SUPERPLAN_REPO_URL="${SUPERPLAN_REPO_URL:-https://github.com/superplan-md/superplan-plugin.git}"
 SUPERPLAN_REF="${SUPERPLAN_REF:-dev}"
@@ -338,8 +338,8 @@ run_machine_setup() {
   fi
 
   say "Configuring Superplan on this machine"
-  "$INSTALL_BIN_DIR/superplan" setup --quiet --json >/dev/null \
-    || fail "machine setup failed after install"
+  "$INSTALL_BIN_DIR/superplan" init --scope global --quiet --json >/dev/null \
+    || fail "machine init failed after install"
 
   # Bug H1 fix: only enable the overlay preference when the overlay was actually
   # installed. Previously this ran unconditionally, which wrote

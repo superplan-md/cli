@@ -1,0 +1,63 @@
+import * as path from 'path';
+import { ALL_ENTRY_SKILL_NAMES } from './skill-names';
+
+export type AgentName =
+  | 'amazonq'
+  | 'antigravity'
+  | 'claude'
+  | 'codex'
+  | 'cursor'
+  | 'gemini'
+  | 'opencode';
+
+export type AgentInstallKind = 'toml_command' | 'skills_namespace' | 'markdown_rule' | 'managed_global_rule';
+export type AgentBootstrapStrength = 'context_bootstrap' | 'rule_bootstrap' | 'skills_only';
+
+export interface AgentEnvironment {
+  name: AgentName;
+  path: string;
+  install_path: string;
+  install_kind: AgentInstallKind;
+  bootstrap_strength: AgentBootstrapStrength;
+  cleanup_paths?: string[];
+}
+
+export const AGENT_DISPLAY_NAMES: Record<AgentName, string> = {
+  amazonq: 'Amazon Q',
+  antigravity: 'Antigravity',
+  claude: 'Claude Code',
+  codex: 'Codex',
+  cursor: 'Cursor',
+  gemini: 'Gemini',
+  opencode: 'OpenCode',
+};
+
+export const AGENT_SELECTION_ORDER: AgentName[] = [
+  'claude',
+  'codex',
+  'gemini',
+  'cursor',
+  'opencode',
+  'amazonq',
+  'antigravity',
+];
+
+export function getSkillsNamespaceCandidates(baseDir: string, ...segments: string[]): string[] {
+  return ALL_ENTRY_SKILL_NAMES.map(skillName => path.join(baseDir, ...segments, skillName));
+}
+
+export function getSkillsFileCandidates(baseDir: string, ...segments: string[]): string[] {
+  return ALL_ENTRY_SKILL_NAMES.map(skillName => path.join(baseDir, ...segments, skillName, 'SKILL.md'));
+}
+
+export function getBootstrapStrengthSummary(strength: AgentBootstrapStrength): string {
+  if (strength === 'context_bootstrap') {
+    return 'bootstrap context';
+  }
+
+  if (strength === 'rule_bootstrap') {
+    return 'always-on rules';
+  }
+
+  return 'skill discovery only';
+}

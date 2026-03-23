@@ -1,0 +1,6 @@
+{
+  "name": "superplan",
+  "description": "Local, agent-first planning and execution workflow for repositories",
+  "version": "0.1.0",
+  "contextFileName": "GEMINI.md"
+}

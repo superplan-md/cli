@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { confirm, select } from '@inquirer/prompts';
+import { AgentInstallKind } from '../agent-integrations';
 import { readInstallMetadata, type InstallMetadata } from '../install-metadata';
 import { ALL_SUPERPLAN_SKILL_NAMES } from '../skill-names';
 
@@ -9,12 +10,17 @@ interface AgentEnvironment {
   name: string;
   path: string;
   install_path: string;
-  install_kind: 'toml_command' | 'skills_namespace';
+  install_kind: AgentInstallKind;
   cleanup_paths?: string[];
 }
 
 type RemoveScope = 'global' | 'local' | 'skip';
 type AgentScope = 'project' | 'global';
+
+const MANAGED_ANTIGRAVITY_BLOCK_START = '<!-- superplan-antigravity:start -->';
+const MANAGED_ANTIGRAVITY_BLOCK_END = '<!-- superplan-antigravity:end -->';
+const MANAGED_ENTRY_INSTRUCTIONS_BLOCK_START = '<!-- superplan-entry-instructions:start -->';
+const MANAGED_ENTRY_INSTRUCTIONS_BLOCK_END = '<!-- superplan-entry-instructions:end -->';
 
 export interface RemoveOptions {
   json?: boolean;
@@ -139,6 +145,12 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
         install_kind: 'skills_namespace',
         cleanup_paths: [path.join(baseDir, '.opencode', 'commands', 'superplan.md')],
       },
+      {
+        name: 'antigravity',
+        path: path.join(baseDir, '.agents'),
+        install_path: path.join(baseDir, '.agents', 'rules', 'superplan-entry.md'),
+        install_kind: 'markdown_rule',
+      },
     ];
   }
 
@@ -176,6 +188,12 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
       install_path: path.join(baseDir, '.config', 'opencode', 'skills'),
       install_kind: 'skills_namespace',
       cleanup_paths: [path.join(baseDir, '.config', 'opencode', 'commands', 'superplan.md')],
+    },
+    {
+      name: 'antigravity',
+      path: path.join(baseDir, '.gemini'),
+      install_path: path.join(baseDir, '.gemini', 'GEMINI.md'),
+      install_kind: 'managed_global_rule',
     },
   ];
 }
@@ -256,12 +274,71 @@ async function removePath(targetPath: string, removedPaths: string[]): Promise<v
   removedPaths.push(targetPath);
 }
 
+function stripManagedAntigravityBlock(content: string): string {
+  return content
+    .replace(new RegExp(`\\n?${MANAGED_ANTIGRAVITY_BLOCK_START}[\\s\\S]*?${MANAGED_ANTIGRAVITY_BLOCK_END}\\n?`, 'm'), '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimEnd();
+}
+
+function stripManagedEntryInstructionsBlock(content: string): string {
+  return content
+    .replace(new RegExp(`\\n?${MANAGED_ENTRY_INSTRUCTIONS_BLOCK_START}[\\s\\S]*?${MANAGED_ENTRY_INSTRUCTIONS_BLOCK_END}\\n?`, 'm'), '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimEnd();
+}
+
+async function removeManagedGlobalRule(targetPath: string, removedPaths: string[]): Promise<void> {
+  if (!await pathExists(targetPath)) {
+    return;
+  }
+
+  const existingContent = await fs.readFile(targetPath, 'utf-8');
+  const nextContent = stripManagedAntigravityBlock(existingContent);
+  if (nextContent === existingContent) {
+    return;
+  }
+
+  if (!nextContent.trim()) {
+    await fs.rm(targetPath, { force: true });
+  } else {
+    await fs.writeFile(targetPath, `${nextContent}\n`, 'utf-8');
+  }
+
+  removedPaths.push(targetPath);
+}
+
+async function removeManagedInstructionsFile(targetPath: string, removedPaths: string[]): Promise<void> {
+  if (!await pathExists(targetPath)) {
+    return;
+  }
+
+  const existingContent = await fs.readFile(targetPath, 'utf-8');
+  const nextContent = stripManagedEntryInstructionsBlock(existingContent);
+  if (nextContent === existingContent) {
+    return;
+  }
+
+  if (!nextContent.trim()) {
+    await fs.rm(targetPath, { force: true });
+  } else {
+    await fs.writeFile(targetPath, `${nextContent}\n`, 'utf-8');
+  }
+
+  removedPaths.push(targetPath);
+}
+
 async function removeAgentInstalls(
   agents: AgentEnvironment[],
   managedSkillNames: string[],
   removedPaths: string[],
 ): Promise<void> {
   for (const agent of agents) {
+    if (agent.install_kind === 'managed_global_rule') {
+      await removeManagedGlobalRule(agent.install_path, removedPaths);
+      continue;
+    }
+
     for (const managedPath of getManagedInstallPaths(agent, managedSkillNames)) {
       await removePath(managedPath, removedPaths);
     }
@@ -330,6 +407,21 @@ function resolveInstalledCliTargets(
 
   for (const inferredTarget of inferInstalledCliTargetsFromInvokedEntryPath(invokedEntryPath)) {
     targets.add(inferredTarget);
+  }
+
+  return Array.from(targets);
+}
+
+function resolveInstalledOverlayTargets(installMetadata: InstallMetadata | null): string[] {
+  const targets = new Set<string>();
+  const overlay = installMetadata?.overlay;
+
+  if (overlay?.install_path) {
+    targets.add(path.normalize(overlay.install_path));
+  }
+
+  if (overlay?.executable_path) {
+    targets.add(path.normalize(overlay.executable_path));
   }
 
   return Array.from(targets);
@@ -412,6 +504,7 @@ async function removeCommand(
       deps.currentPackageRoot ?? path.resolve(__dirname, '../../..'),
       deps.invokedEntryPath ?? process.argv[1] ?? '',
     );
+    const installedOverlayTargets = resolveInstalledOverlayTargets(installMetadata);
     const globalAgents = scope === 'global'
       ? await detectAgents(homeDir, 'global', managedSkillNames)
       : [];
@@ -421,8 +514,13 @@ async function removeCommand(
 
     if (scope === 'global') {
       await removeAgentInstalls(globalAgents, managedSkillNames, removedPaths);
+      await removeManagedInstructionsFile(path.join(homeDir, '.codex', 'AGENTS.md'), removedPaths);
+      await removeManagedInstructionsFile(path.join(homeDir, '.claude', 'CLAUDE.md'), removedPaths);
       for (const installedCliTarget of installedCliTargets) {
         await removePath(installedCliTarget, removedPaths);
+      }
+      for (const installedOverlayTarget of installedOverlayTargets) {
+        await removePath(installedOverlayTarget, removedPaths);
       }
       // Thoroughly wipe the global config directory including metadata and binaries
       await removePath(globalSuperplanDir, removedPaths);
@@ -432,6 +530,8 @@ async function removeCommand(
 
     if (scope === 'local' || scope === 'global') {
       await removeAgentInstalls(localAgents, managedSkillNames, removedPaths);
+      await removeManagedInstructionsFile(path.join(localRootDir, 'AGENTS.md'), removedPaths);
+      await removeManagedInstructionsFile(path.join(localRootDir, 'CLAUDE.md'), removedPaths);
       await removePath(localSuperplanDir, removedPaths);
     }
 

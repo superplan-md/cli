@@ -16,6 +16,8 @@ import { visibility } from "./commands/visibility";
 type CommandOptions = {
   json: boolean;
   quiet: boolean;
+  yes?: boolean;
+  scope?: string;
 };
 
 type CommandResult = {
@@ -66,8 +68,22 @@ function normalizeCliResult(result: CommandResult) {
 export const router: Record<string, CommandHandler> = {
   change: async (args) => change(args),
   context: async (args) => context(args),
-  init: async (_args, options) => init(options),
-  remove: async (args, options) => removeCli(args, options),
+  init: async (_args, options) => init({
+    json: options.json,
+    quiet: options.quiet,
+    yes: options.yes,
+    scope: options.scope === 'local' || options.scope === 'global' || options.scope === 'both' || options.scope === 'skip'
+      ? options.scope
+      : undefined,
+  }),
+  remove: async (args, options) => removeCli(args, {
+    json: options.json,
+    quiet: options.quiet,
+    yes: options.yes,
+    scope: options.scope === 'local' || options.scope === 'global' || options.scope === 'skip'
+      ? options.scope
+      : undefined,
+  }),
   doctor: async (args) => doctor(args),
   parse: async (args, options) => parse(args, options),
   validate: async (args) => validate(args),
@@ -82,9 +98,12 @@ export const router: Record<string, CommandHandler> = {
 
 export async function routeCommand(args: string[]) {
   const command = args[0];
+  const scopeIndex = args.indexOf("--scope");
   const options = {
     json: args.includes("--json"),
     quiet: args.includes("--quiet"),
+    yes: args.includes("--yes"),
+    scope: scopeIndex >= 0 ? args[scopeIndex + 1] : undefined,
   };
   const commandArgs = args.slice(1);
   const handler = command ? router[command as keyof typeof router] : undefined;

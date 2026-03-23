@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+entry_content=$(cat "${PLUGIN_ROOT}/skills/superplan-entry/SKILL.md" 2>&1 || echo "Error reading superplan-entry skill")
+
+escape_for_json() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
+entry_escaped=$(escape_for_json "$entry_content")
+session_context="<EXTREMELY_IMPORTANT>\nSuperplan is available in this repository.\n\n**Below is the full content of your \`superplan-entry\` skill. It is ALREADY LOADED. Follow it before implementation, broad repo exploration, or clarifying questions for repo work. Use the skill loader only for later Superplan skills.**\n\n${entry_escaped}\n</EXTREMELY_IMPORTANT>"
+
+if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
+  printf '{\n  "additional_context": "%s"\n}\n' "$session_context"
+elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "additionalContext": "%s"\n  }\n}\n' "$session_context"
+else
+  printf '{\n  "additional_context": "%s"\n}\n' "$session_context"
+fi
+
+exit 0

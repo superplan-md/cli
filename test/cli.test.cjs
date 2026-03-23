@@ -35,7 +35,6 @@ test('cli without a command shows the main Superplan command list', async () => 
   assert.match(result.stdout, /doctor\s+Validate install and overlay health/);
   assert.match(result.stdout, /parse\s+Parse task contracts and return diagnostics/);
   assert.match(result.stdout, /Installation and admin:/);
-  assert.match(result.stdout, /setup\s+Install config, skills, and agent integrations/);
   assert.match(result.stdout, /update\s+Update an installed Superplan CLI and refresh skills/);
   assert.match(result.stdout, /remove\s+Remove Superplan installation or state/);
   assert.doesNotMatch(result.stdout, /server\s+Start the local dummy server/);
@@ -267,14 +266,14 @@ test('init in human mode prints a concise success message instead of the full pa
   };
 
   try {
-    await withSandboxEnv(sandbox, async () => routeCommand(['setup']));
+    await withSandboxEnv(sandbox, async () => routeCommand(['init']));
   } finally {
     console.log = originalConsoleLog;
     console.error = originalConsoleError;
   }
 
   const combinedOutput = output.join('\n');
-  assert.match(combinedOutput, /Superplan setup completed successfully\./);
+  assert.match(combinedOutput, /Superplan init completed successfully\./);
   assert.doesNotMatch(combinedOutput, /"config_path"/);
   assert.equal(errors.length, 0);
 });
