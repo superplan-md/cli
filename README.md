@@ -97,7 +97,7 @@ That uses a stable installer URL and resolves the latest published GitHub releas
 If you want to pin a specific release instead, keep the same installer URL and set `SUPERPLAN_REF` explicitly:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/dev/scripts/install.sh | SUPERPLAN_REF=alpha.4 sh
+curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/dev/scripts/install.sh | SUPERPLAN_REF=alpha.17 sh
 ```
 
 ### 2. Initialize

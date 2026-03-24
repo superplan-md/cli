@@ -84,7 +84,7 @@ async function main() {
   const json = args.includes('--json');
   const quiet = args.includes('--quiet');
   const showHelp = args.includes('--help') || command === 'help';
-  const showVersion = args.includes('-v') || args.includes('--version') || args.includes('--vesrsion');
+  const showVersion = args.includes('-v') || args.includes('--version');
 
   if (showVersion) {
     if (json || quiet) {
