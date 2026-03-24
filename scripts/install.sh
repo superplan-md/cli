@@ -453,7 +453,7 @@ run_machine_setup() {
   fi
 
   say "Configuring Superplan on this machine"
-  "$INSTALL_BIN_DIR/superplan" install --quiet --json > /dev/null \
+  "$INSTALL_BIN_DIR/superplan" init --scope machine --quiet --json > /dev/null \
     || fail "machine install failed after binary installation"
 
   # Bug H1 fix: only enable the overlay preference when the overlay was actually
