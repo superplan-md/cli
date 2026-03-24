@@ -19,6 +19,14 @@ Superplan does.
 > Planning tells you what to do.
 > Superplan makes sure it actually gets done.
 
+## Quick Start
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/dev/scripts/install.sh | sh
+```
+
+That uses a stable installer URL and resolves the latest published GitHub release tag automatically before installing the CLI and matching overlay artifact.
+
 ## How it works
 
 Superplan sits inside your repo and takes control of execution.
@@ -84,9 +92,9 @@ Each skill enforces structure so the agent doesn’t drift.
 * **superplan-release**: Final discipline check before shipping or recommending as ready.
 * **superplan-docs**: Syncs READMEs, help, and context with code and behavior changes.
 
-## Quick Start
+## Get Started
 
-### 1. Install
+### 1. Install Latest version
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/dev/scripts/install.sh | sh
