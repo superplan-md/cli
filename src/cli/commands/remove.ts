@@ -6,6 +6,7 @@ import { AgentInstallKind } from '../agent-integrations';
 import { readInstallMetadata, type InstallMetadata } from '../install-metadata';
 import { ALL_SUPERPLAN_SKILL_NAMES } from '../skill-names';
 import { stopNextAction, type NextAction } from '../next-action';
+import { terminateInstalledOverlayCompanion } from '../overlay-companion';
 
 interface AgentEnvironment {
   name: string;
@@ -486,6 +487,11 @@ function resolveInstalledOverlayTargets(installMetadata: InstallMetadata | null)
     targets.add(path.normalize(overlay.executable_path));
   }
 
+  // Standard macOS bundle location if not in metadata or if we want to be thorough
+  if (process.platform === 'darwin') {
+    targets.add('/Applications/Superplan Overlay Desktop.app');
+  }
+
   return Array.from(targets);
 }
 
@@ -580,6 +586,12 @@ async function removeCommand(
       : [];
 
     if (scope === 'global') {
+      await terminateInstalledOverlayCompanion();
+    } else if (scope === 'local') {
+      await terminateInstalledOverlayCompanion(localRootDir);
+    }
+
+    if (scope === 'global') {
       await removeAgentInstalls(globalAgents, managedSkillNames, removedPaths);
       await removeManagedInstructionsFile(path.join(homeDir, '.codex', 'AGENTS.md'), removedPaths);
       await removeManagedInstructionsFile(path.join(homeDir, '.claude', 'CLAUDE.md'), removedPaths);
@@ -593,6 +605,14 @@ async function removeCommand(
       await removePath(globalSuperplanDir, removedPaths);
       // Ensure install metadata is also gone if it was outside the main config dir (it isn't, but for safety)
       await removePath(path.join(homeDir, '.config', 'superplan'), removedPaths);
+
+      // Clean up overlay application support files on macOS
+      if (process.platform === 'darwin') {
+        const appSupportDir = path.join(homeDir, 'Library', 'Application Support');
+        await removePath(path.join(appSupportDir, 'superplan-overlay-desktop'), removedPaths);
+        await removePath(path.join(appSupportDir, 'Superplan Overlay Desktop'), removedPaths);
+        await removePath(path.join(appSupportDir, 'com.superplan.overlay'), removedPaths);
+      }
     }
 
     if (scope === 'local' || scope === 'global') {
