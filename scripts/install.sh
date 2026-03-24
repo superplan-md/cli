@@ -56,6 +56,26 @@ require_command() {
   fi
 }
 
+capture_telemetry() {
+  event_name="$1"
+  # Anonymous machine ID for the install script (just a temp one or based on hostname hash)
+  machine_id="$(hostname | md5sum | cut -d' ' -f1 || hostname | md5 | cut -d' ' -f1 || echo "unknown-installer")"
+  
+  # Fire and forget POST to PostHog
+  curl -s -X POST "https://app.posthog.com/capture/" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"api_key\": \"phc_dummy_key_for_dev\",
+      \"event\": \"$event_name\",
+      \"properties\": {
+        \"distinct_id\": \"$machine_id\",
+        \"platform\": \"$(uname -s)\",
+        \"arch\": \"$(uname -m)\",
+        \"version\": \"${SUPERPLAN_RESOLVED_REF:-unknown}\"
+      }
+    }" > /dev/null 2>&1 &
+}
+
 require_command node
 require_command npm
 require_command mktemp
@@ -615,6 +635,7 @@ fs.writeFileSync(installStatePath, JSON.stringify(metadata, null, 2));
 EOF
 
 say "Installed Superplan to $INSTALL_BIN_DIR/superplan"
+capture_telemetry "install_completed"
 if [ -n "$OVERLAY_INSTALL_PATH" ]; then
   say "Installed Superplan overlay to $OVERLAY_INSTALL_PATH"
 fi

@@ -16,6 +16,7 @@ import {
 import { readInstallMetadata, getInstallMetadataPath, type InstallMetadata } from '../install-metadata';
 import { writeOverlayPreference } from '../overlay-preferences';
 import { getBootstrapStrengthSummary } from '../agent-integrations';
+import { captureEvent } from '../telemetry';
 
 export interface InstallOptions {
   json?: boolean;
@@ -209,8 +210,12 @@ export async function install(options: InstallOptions = {}): Promise<InstallResu
     // Default global overlay to true for now since we're making this explicit
     await writeOverlayPreference(true, { scope: 'global' });
 
-    const detectedHomeAgents = await detectAgents(homeDir, 'global');
-    const homeAgents = detectedHomeAgents.filter(a => a.detected);
+    const detectedGlobalAgents = await detectAgents(homeDir, 'global');
+    await captureEvent('machine_setup_completed', {
+      agents_detected: detectedGlobalAgents.filter(a => a.detected).map(a => a.name)
+    });
+
+    const homeAgents = detectedGlobalAgents.filter(a => a.detected);
 
     if (homeAgents.length > 0) {
       if (!options.quiet && !options.json) {

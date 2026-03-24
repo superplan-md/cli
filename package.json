@@ -23,10 +23,12 @@
     "visibility:examples": "node ./scripts/visibility-scenarios.js"
   },
   "dependencies": {
-    "@inquirer/prompts": "^4.0.0"
+    "@inquirer/prompts": "^4.0.0",
+    "posthog-node": "^5.21.2"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/uuid": "^10.0.0",
     "typescript": "^5.0.0"
   }
 }

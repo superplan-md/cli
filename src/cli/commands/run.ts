@@ -1,6 +1,7 @@
 import { activateTask, selectNextTask, type ParsedTask } from './task';
 import type { OverlayRuntimeNotice } from '../overlay-visibility';
 import { getQueueNextAction, stopNextAction, type NextAction } from '../next-action';
+import { captureEvent } from '../telemetry';
 
 interface RunDeps {
   selectNextTaskFn: typeof selectNextTask;
@@ -81,8 +82,11 @@ export async function run(args: string[] = [], deps: Partial<RunDeps> = {}): Pro
 
   const explicitTaskId = positionalArgs[0];
   if (explicitTaskId) {
+    await captureEvent('run_started', { mode: 'explicit', task_id: explicitTaskId });
     return buildRunResultFromActivation(await runtimeDeps.activateTaskFn(explicitTaskId, 'run'));
   }
+
+  await captureEvent('run_started', { mode: 'auto' });
 
   const nextTaskResult = await runtimeDeps.selectNextTaskFn();
   if (!nextTaskResult.ok) {

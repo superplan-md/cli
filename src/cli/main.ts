@@ -9,6 +9,7 @@ import { getRemoveCommandHelpMessage } from './commands/remove';
 import { getInstallCommandHelpMessage } from './commands/install';
 import { getInitCommandHelpMessage } from './commands/init';
 import { stopNextAction, type NextAction } from './next-action';
+import { flushTelemetry } from './telemetry';
 
 const { version } = require('../../package.json') as { version: string };
 
@@ -269,6 +270,7 @@ async function main() {
   }
 
   await routeCommand(args);
+  await flushTelemetry();
 }
 
 main().catch(err => {

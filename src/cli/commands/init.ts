@@ -16,6 +16,8 @@ import {
 import { install as runInstall } from './install';
 import { writeOverlayPreference } from '../overlay-preferences';
 import { ensureWorkspaceArtifacts } from '../workspace-artifacts';
+import { readTelemetryConfig, writeTelemetryConfig } from '../telemetry-preferences';
+import { captureEvent } from '../telemetry';
 
 export interface InitOptions {
   yes?: boolean;
@@ -133,6 +135,21 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
       }
     }
 
+    // Telemetry opt-in check
+    const telemetryConfig = await readTelemetryConfig();
+    if (telemetryConfig.enabled === null && !useDefaults && !isQuiet) {
+      const allowTelemetry = await confirm({
+        message: 'Allow Superplan to collect anonymous usage data to help improve the tool?',
+        default: true,
+      });
+      await writeTelemetryConfig({ enabled: allowTelemetry });
+    } else if (telemetryConfig.enabled === null && useDefaults) {
+      // Default to false for non-interactive/quiet setups if not already set, 
+      // or we could default to true if we want to be more aggressive.
+      // Let's default to false to be safe.
+      await writeTelemetryConfig({ enabled: false });
+    }
+
     const workspaceRoot = resolveWorkspaceRoot(process.cwd());
     const cwd = workspaceRoot;
     const sourceSkillsDir = path.resolve(__dirname, '../../../output/skills');
@@ -145,6 +162,10 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
     const workspaceArtifacts = await ensureWorkspaceArtifacts(superplanRoot);
 
     const detectedProjectAgents = await detectAgents(workspaceRoot, 'project');
+    
+    await captureEvent('project_initialized', {
+      agents_detected: detectedProjectAgents.filter(a => a.detected).map(a => a.name)
+    });
     let projectAgentsToInstall: ExtendedAgentEnvironment[] = [];
 
     if (useDefaults) {
