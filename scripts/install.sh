@@ -30,6 +30,7 @@ SUPERPLAN_OVERLAY_INSTALL_DIR="${SUPERPLAN_OVERLAY_INSTALL_DIR:-${HOME}/.local/s
 SUPERPLAN_ENABLE_OVERLAY="${SUPERPLAN_ENABLE_OVERLAY:-1}"
 SUPERPLAN_RUN_SETUP_AFTER_INSTALL="${SUPERPLAN_RUN_SETUP_AFTER_INSTALL:-1}"
 SUPERPLAN_RESOLVED_REF=""
+SUPERPLAN_OVERLAY_REF=""
 
 OVERLAY_INSTALL_METHOD=""
 OVERLAY_INSTALL_PATH=""
@@ -225,22 +226,29 @@ resolve_install_ref() {
     return 0
   fi
 
+  # Default to dev for the CLI source to ensure latest fixes
+  SUPERPLAN_RESOLVED_REF="dev"
+  say "Defaulting Superplan CLI source to: $SUPERPLAN_RESOLVED_REF"
+}
+
+resolve_overlay_ref() {
+  if [ -n "$SUPERPLAN_REF" ]; then
+    SUPERPLAN_OVERLAY_REF="$SUPERPLAN_REF"
+    return 0
+  fi
+
   latest_release_tag="$(resolve_latest_release_tag_from_github)" || latest_lookup_status=$?
   latest_lookup_status="${latest_lookup_status:-0}"
 
   if [ "$latest_lookup_status" -eq 0 ] && [ -n "$latest_release_tag" ]; then
-    SUPERPLAN_RESOLVED_REF="$latest_release_tag"
-    say "Resolved latest Superplan release: $SUPERPLAN_RESOLVED_REF"
+    SUPERPLAN_OVERLAY_REF="$latest_release_tag"
+    say "Resolved latest Superplan overlay release: $SUPERPLAN_OVERLAY_REF"
     return 0
   fi
 
-  if [ "$latest_lookup_status" -eq 2 ]; then
-    SUPERPLAN_RESOLVED_REF="dev"
-    say "Repo URL is not a GitHub repo; defaulting install ref to $SUPERPLAN_RESOLVED_REF"
-    return 0
-  fi
-
-  fail "failed to resolve the latest GitHub release for $SUPERPLAN_REPO_URL; set SUPERPLAN_REF explicitly to a tag or branch to continue"
+  # Fallback to dev if no release found
+  SUPERPLAN_OVERLAY_REF="dev"
+  say "No release tag found; defaulting overlay ref to $SUPERPLAN_OVERLAY_REF"
 }
 
 resolve_overlay_release_base_url() {
@@ -248,7 +256,7 @@ resolve_overlay_release_base_url() {
     return 0
   fi
 
-  SUPERPLAN_OVERLAY_RELEASE_BASE_URL="${SUPERPLAN_REPO_URL%.git}/releases/download/${SUPERPLAN_RESOLVED_REF}"
+  SUPERPLAN_OVERLAY_RELEASE_BASE_URL="${SUPERPLAN_REPO_URL%.git}/releases/download/${SUPERPLAN_OVERLAY_REF}"
 }
 
 resolve_packaged_overlay_source() {
@@ -480,6 +488,7 @@ if [ -n "$SUPERPLAN_INSTALL_PREFIX" ]; then
 fi
 
 resolve_install_ref
+resolve_overlay_ref
 resolve_overlay_release_base_url
 
 if [ -n "$SUPERPLAN_SOURCE_DIR" ]; then
