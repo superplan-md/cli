@@ -198,6 +198,7 @@ export function getManagedEntryInstructionsBlock(targetPath: string): string {
         '- `.cursor/skills/superplan-entry/SKILL.md`',
         '- `.codex/skills/superplan-entry/SKILL.md`',
         '- `.opencode/skills/superplan-entry/SKILL.md`',
+        '- `.github/copilot-instructions.md`',
         '- `.superplan/skills/superplan-entry/SKILL.md`'
       ].join('\n')
     : [
@@ -505,6 +506,13 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
         bootstrap_strength: 'rule_bootstrap',
         cleanup_paths: [path.join(baseDir, '.agents', 'rules', 'superplan-entry.md')],
       },
+      {
+        name: 'copilot',
+        path: path.join(baseDir, '.github'),
+        install_path: path.join(baseDir, '.github', 'copilot-instructions.md'),
+        install_kind: 'pointer_rule',
+        bootstrap_strength: 'rule_bootstrap',
+      },
     ];
   }
 
@@ -562,6 +570,13 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       install_kind: 'managed_global_rule',
       bootstrap_strength: 'rule_bootstrap',
     },
+    {
+      name: 'copilot',
+      path: path.join(baseDir, '.github'),
+      install_path: path.join(baseDir, '.github', 'copilot-instructions.md'),
+      install_kind: 'pointer_rule',
+      bootstrap_strength: 'rule_bootstrap',
+    },
   ];
 }
 
@@ -579,6 +594,7 @@ export async function detectVSCodeExtensions(): Promise<Set<string>> {
       if (name.startsWith('anthropic.claude-code')) detected.add('claude');
       if (name.startsWith('google.gemini-cli-vscode')) detected.add('gemini');
       if (name.startsWith('openai.chatgpt')) detected.add('codex');
+      if (name.startsWith('github.copilot')) detected.add('copilot');
     }
   } catch {
     // Ignore errors if directory doesn't exist

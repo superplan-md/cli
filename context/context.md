@@ -22,7 +22,9 @@ The current documented top-level command surface is:
 
 - `change`
 - `init`
-
+- `install`
+- `context`
+- `validate`
 - `sync`
 - `update`
 - `remove`
@@ -38,14 +40,14 @@ The current documented top-level command surface is:
 
 Supported install paths in the current repo are:
 
-- curl installer: `curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/alpha.4/scripts/install.sh | SUPERPLAN_REF=alpha.4 sh`
-- curl installer with custom prefix: `curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/alpha.4/scripts/install.sh | SUPERPLAN_REF=alpha.4 SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh`
+- curl installer: `curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/0.1.0/scripts/install.sh | SUPERPLAN_REF=0.1.0 sh`
+- curl installer with custom prefix: `curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/0.1.0/scripts/install.sh | SUPERPLAN_REF=0.1.0 SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh`
 - npm from a local checkout after build (release mode): `npm install -g .`
 - npm link for active local development: `npm link` from the project root after `npm run build`.
 
 Important install note:
 
-- Public quick-start docs pin the installer to `alpha.4` by using both the tagged raw URL and `SUPERPLAN_REF=alpha.4`, because `scripts/install.sh` still defaults `SUPERPLAN_REF` to `dev` when that env var is absent.
+- Public quick-start docs pin the installer to `0.1.0` by using both the tagged raw URL and `SUPERPLAN_REF=0.1.0`, because `scripts/install.sh` still defaults `SUPERPLAN_REF` to `dev` when that env var is absent.
 - `scripts/install.sh` records install metadata under `~/.config/superplan/install.json` so `superplan update` can reuse the install source later and then refresh existing skill installs.
 - Older installed binaries that predate the `update` command still need one manual rebuild/reinstall before `superplan update` becomes available.
 - The documented npm flow assumes a local checkout where dependencies are installed and `npm run build` has been run before `npm install -g .`.
@@ -56,6 +58,9 @@ Important install note:
 - `src/cli/router.ts`: Maps top-level commands to command handlers and normalizes CLI responses.
 - `src/cli/commands/change.ts`: Creates new change scaffolding under `.superplan/changes/<slug>/`.
 - `src/cli/commands/init.ts`: Creates `.superplan/` scaffolding (config, context, runtime, changes) and handles agent integration setup. Interactive mode scans for agent environments, presents a checklist of found agents, and installs selected entries across global, local, both, and skip flows.
+- `src/cli/commands/install.ts`: Installs the Superplan CLI globally on the machine.
+- `src/cli/commands/context.ts`: Manages durable workspace context artifacts (bootstrap, status).
+- `src/cli/commands/validate.ts`: Validates `tasks.md` graph and task-contract consistency.
 - `src/cli/commands/update.ts`: Reruns the bundled installer for normal installed copies of the CLI using recorded install metadata, then refreshes existing skill installs.
 - `src/cli/commands/remove.ts`: Removes or purges Superplan installation state. Machine-level removal also uninstalls the managed CLI package/bin, symlinked dev installs that can be inferred from the invoked `superplan` bin path, and overlay artifacts when they are recorded or inferable, and local removal targets the nearest parent Superplan workspace rather than only the exact current directory.
 - `src/cli/commands/doctor.ts`: Validates setup state and, in deep mode, inspects parsed tasks plus runtime consistency.

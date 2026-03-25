@@ -9,7 +9,8 @@ export type AgentName =
   | 'codex'
   | 'cursor'
   | 'gemini'
-  | 'opencode';
+  | 'opencode'
+  | 'copilot';
 
 export type AgentScope = 'global' | 'project';
 export type AgentInstallKind = 'toml_command' | 'skills_namespace' | 'pointer_rule' | 'markdown_rule' | 'managed_global_rule' | 'amazonq_rules' | 'antigravity_workflows';
@@ -32,6 +33,7 @@ export const AGENT_DISPLAY_NAMES: Record<AgentName, string> = {
   cursor: 'Cursor',
   gemini: 'Gemini',
   opencode: 'OpenCode',
+  copilot: 'GitHub Copilot',
 };
 
 export const AGENT_SELECTION_ORDER: AgentName[] = [
@@ -42,6 +44,7 @@ export const AGENT_SELECTION_ORDER: AgentName[] = [
   'opencode',
   'amazonq',
   'antigravity',
+  'copilot',
 ];
 
 export function getSkillsNamespaceCandidates(baseDir: string, ...segments: string[]): string[] {
