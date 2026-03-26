@@ -88,14 +88,14 @@ Do not expose routing mechanics as progress narration.
 ## Depth Modes
 
 - `stay_out`: direct answer, no durable artifact
-- `direct`: engaged but tiny and obvious; usually create one lightweight tracked task for visibility, then execute immediately
+- `direct`: engaged but tiny and obvious; always create one lightweight tracked task — task creation is non-optional even for the smallest work; the only exception is work that qualifies for Stay Out (one file, no decisions)
 - `task`: one bounded, reviewable task contract is enough
 - `slice`: bounded multi-step work; usually needs a small implementation plan plus a small task graph, and should add a spec when target truth is still fuzzy
 - `program`: broad, ambiguous, multi-workstream, or major-interface work; should usually route through clarification plus plan/spec work before final task-graph authoring
 
 Expected artifact pattern by depth:
 
-- `direct`: usually `tasks.md` plus one CLI-scaffolded lightweight task contract
+- `direct`: always `tasks.md` plus one CLI-scaffolded lightweight task contract — always required for visibility, even for tiny work; the only exception is Stay Out (one file, no decisions)
 - `task`: `tasks.md` plus one CLI-scaffolded normal task contract
 - `slice`: usually `plan.md`, `tasks.md`, and CLI-scaffolded `tasks/T-*.md`; add specs when target misunderstanding is the bigger risk than sequencing
 - `program`: clarification and/or brainstorm output, then `plan.md`, `tasks.md`, CLI-scaffolded `tasks/T-*.md`, and specs where multiple interfaces, expectations, or product truths need durable capture

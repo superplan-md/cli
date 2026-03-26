@@ -54,6 +54,7 @@ Assumptions:
 - some work should be represented as investigation, prototype, or decision-gate work before deeper decomposition
 - the right shaping output is often a trajectory, not a frozen perfect plan
 - shaping should stop once the minimum useful artifact set and next executable frontier are clear
+- **multi-step work** means work with 3 or more distinct steps, or work where sequencing across files or components matters; do not rationalize 3-step work as "only two steps" to skip graph shaping
 
 ## Artifact Distinction Rule
 
@@ -288,6 +289,8 @@ Treat the workspace's existing setup as the default operating surface.
 - using shaping as an excuse for CLI command-surface exploration after the artifact and frontier decisions are already clear
 - calling `--help`, `doctor`, `status`, or `task inspect show` without a concrete shaping reason
 - pushing all ambiguity downstream into execution
+- beginning execution without a complete scaffolded task graph when the work has 3 or more distinct steps
+- rationalizing that work with 3+ steps is "only two steps" to avoid graph shaping
 - replacing a working repo-native workflow with a Superplan-specific one by default
 
 ## Output Schema
