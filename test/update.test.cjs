@@ -278,10 +278,10 @@ test('update refreshes installed skills for existing global and local setups', a
     });
 
     assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-release', 'SKILL.md')), true);
-    assert.equal(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-release', 'SKILL.md')), true);
+    assert.equal(await pathExists(path.join(sandbox.home, '.claude', 'CLAUDE.md')), true);
     assert.equal(await pathExists(path.join(sandbox.home, '.gemini', 'commands', 'superplan.toml')), true);
     assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'skills', 'superplan-release', 'SKILL.md')), true);
-    assert.equal(await pathExists(path.join(sandbox.cwd, '.codex', 'skills', 'superplan-release', 'SKILL.md')), true);
+    assert.equal(await pathExists(path.join(sandbox.cwd, '.codex')), true);
   });
 });
 

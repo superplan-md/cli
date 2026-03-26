@@ -69,7 +69,7 @@ Default priority task
 
   const nextPayload = await withSandboxEnv(sandbox, async () => selectNextTask());
   assert.equal(nextPayload.ok, true);
-  assert.equal(nextPayload.data.task_id, 'T-002');
+  assert.equal(nextPayload.data.task_id, 'demo/T-002');
   assert.equal(nextPayload.data.status, 'ready');
   assert.equal(nextPayload.data.reason, 'Highest priority among ready tasks');
   assert.equal(nextPayload.data.task.task_id, 'T-002');
@@ -80,7 +80,7 @@ Default priority task
   const statusResult = await runCli(['status', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const statusPayload = parseCliJson(statusResult);
   assert.equal(statusPayload.data.active, null);
-  assert.deepEqual(statusPayload.data.ready, ['T-002', 'T-003', 'T-001']);
+  assert.deepEqual(statusPayload.data.ready, ['demo/T-002', 'demo/T-003', 'demo/T-001']);
   assert.deepEqual(statusPayload.data.in_review, []);
   assert.deepEqual(statusPayload.data.blocked, []);
   assert.deepEqual(statusPayload.data.needs_feedback, []);
@@ -115,7 +115,7 @@ Run me
   const firstRunResult = await runCli(['run', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const firstRunPayload = parseCliJson(firstRunResult);
   assert.equal(firstRunPayload.ok, true);
-  assert.equal(firstRunPayload.data.task_id, 'T-100');
+  assert.equal(firstRunPayload.data.task_id, 'demo/T-100');
   assert.equal(firstRunPayload.data.action, 'start');
   assert.equal(firstRunPayload.data.reason, 'Highest priority among ready tasks');
   assert.equal(firstRunPayload.data.task.task_id, 'T-100');
@@ -124,13 +124,13 @@ Run me
   assert.equal(firstRunPayload.error, null);
 
   const runtimeState = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'));
-  assert.equal(runtimeState.tasks['T-100'].status, 'in_progress');
-  assert.ok(runtimeState.tasks['T-100'].started_at);
+  assert.equal(runtimeState.tasks['demo/T-100'].status, 'in_progress');
+  assert.ok(runtimeState.tasks['demo/T-100'].started_at);
 
   const secondRunResult = await runCli(['run', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const secondRunPayload = parseCliJson(secondRunResult);
   assert.equal(secondRunPayload.ok, true);
-  assert.equal(secondRunPayload.data.task_id, 'T-100');
+  assert.equal(secondRunPayload.data.task_id, 'demo/T-100');
   assert.equal(secondRunPayload.data.action, 'continue');
   assert.equal(secondRunPayload.data.reason, 'Task is currently in progress');
   assert.equal(secondRunPayload.data.task.task_id, 'T-100');
@@ -163,14 +163,14 @@ Start from nested cwd
 - [ ] Works
 `);
 
-  const startPayload = parseCliJson(await runCli(['run', 'T-150', '--json'], {
+  const startPayload = parseCliJson(await runCli(['run', 'demo/T-150', '--json'], {
     cwd: nestedCwd,
     env: sandbox.env,
   }));
 
   assert.equal(startPayload.data.action, 'start');
   assert.equal(startPayload.data.status, 'in_progress');
-  assert.equal((await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'))).tasks['T-150'].status, 'in_progress');
+  assert.equal((await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'))).tasks['demo/T-150'].status, 'in_progress');
   assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
 });
 
@@ -197,27 +197,27 @@ Lifecycle task
 - [ ] A
 `);
 
-  const startPayload = parseCliJson(await runCli(['run', 'T-200', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  const startPayload = parseCliJson(await runCli(['run', 'demo/T-200', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   assert.equal(startPayload.data.action, 'start');
   assert.equal(startPayload.data.status, 'in_progress');
 
-  const blockPayload = parseCliJson(await runCli(['task', 'runtime', 'block', 'T-200', '--reason', 'Waiting on review', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  const blockPayload = parseCliJson(await runCli(['task', 'runtime', 'block', 'demo/T-200', '--reason', 'Waiting on review', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   assert.equal(blockPayload.data.status, 'blocked');
 
   const blockedStatusPayload = parseCliJson(await runCli(['status', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   assert.equal(blockedStatusPayload.data.active, null);
   assert.deepEqual(blockedStatusPayload.data.ready, []);
   assert.deepEqual(blockedStatusPayload.data.in_review, []);
-  assert.deepEqual(blockedStatusPayload.data.blocked, ['T-200']);
+  assert.deepEqual(blockedStatusPayload.data.blocked, ['demo/T-200']);
   assert.deepEqual(blockedStatusPayload.data.needs_feedback, []);
   assert.equal(blockedStatusPayload.data.next_action.type, 'stop');
 
-  const resumePayload = parseCliJson(await runCli(['run', 'T-200', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  const resumePayload = parseCliJson(await runCli(['run', 'demo/T-200', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   assert.equal(resumePayload.data.action, 'resume');
   assert.equal(resumePayload.data.status, 'in_progress');
   assert.equal(resumePayload.data.reason, 'Task was resumed explicitly');
 
-  const feedbackPayload = parseCliJson(await runCli(['task', 'runtime', 'request-feedback', 'T-200', '--message', 'Please review', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  const feedbackPayload = parseCliJson(await runCli(['task', 'runtime', 'request-feedback', 'demo/T-200', '--message', 'Please review', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   assert.equal(feedbackPayload.data.status, 'needs_feedback');
 
   const feedbackStatusPayload = parseCliJson(await runCli(['status', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
@@ -225,12 +225,12 @@ Lifecycle task
   assert.deepEqual(feedbackStatusPayload.data.ready, []);
   assert.deepEqual(feedbackStatusPayload.data.in_review, []);
   assert.deepEqual(feedbackStatusPayload.data.blocked, []);
-  assert.deepEqual(feedbackStatusPayload.data.needs_feedback, ['T-200']);
+  assert.deepEqual(feedbackStatusPayload.data.needs_feedback, ['demo/T-200']);
   assert.equal(feedbackStatusPayload.data.next_action.type, 'wait_for_user');
 
-  const resetPayload = parseCliJson(await runCli(['task', 'repair', 'reset', 'T-200', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  const resetPayload = parseCliJson(await runCli(['task', 'repair', 'reset', 'demo/T-200', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   assert.equal(resetPayload.ok, true);
-  assert.equal(resetPayload.data.task_id, 'T-200');
+  assert.equal(resetPayload.data.task_id, 'demo/T-200');
   assert.equal(resetPayload.data.reset, true);
   assert.equal(resetPayload.data.next_action.type, 'command');
   assert.equal(resetPayload.data.next_action.command, 'superplan status --json');
@@ -259,7 +259,7 @@ Lifecycle task
   ]);
 });
 
-test('task complete hands work to review, approve finalizes it, and reopen returns it to implementation', async () => {
+test('task complete auto-finishes routine work and reopen returns it to implementation', async () => {
   const sandbox = await makeSandbox('superplan-task-complete-');
 
   await writeChangeGraph(sandbox.cwd, 'demo', {
@@ -284,62 +284,51 @@ Complete me
 
   await writeJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'), {
     tasks: {
-      'T-300': {
+      'demo/T-300': {
         status: 'in_progress',
         started_at: '2026-03-19T12:00:00.000Z',
       },
     },
   });
 
-  const completePayload = parseCliJson(await runCli(['task', 'review', 'complete', 'T-300', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  const completePayload = parseCliJson(await runCli(['task', 'review', 'complete', 'demo/T-300', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   assert.equal(completePayload.ok, true);
-  assert.equal(completePayload.data.task_id, 'T-300');
-  assert.equal(completePayload.data.status, 'in_review');
+  assert.equal(completePayload.data.task_id, 'demo/T-300');
+  assert.equal(completePayload.data.status, 'done');
   assert.equal(completePayload.data.task.task_id, 'T-300');
-  assert.equal(completePayload.data.task.status, 'in_review');
+  assert.equal(completePayload.data.task.status, 'done');
   assert.equal(completePayload.error, null);
 
-  const showPayload = parseCliJson(await runCli(['task', 'inspect', 'show', 'T-300', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
-  assert.equal(showPayload.data.task.status, 'in_review');
+  const showPayload = parseCliJson(await runCli(['task', 'inspect', 'show', 'demo/T-300', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  assert.equal(showPayload.data.task.status, 'done');
 
   const statusPayload = parseCliJson(await runCli(['status', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   assert.equal(statusPayload.data.active, null);
   assert.deepEqual(statusPayload.data.ready, []);
-  assert.deepEqual(statusPayload.data.in_review, ['T-300']);
+  assert.deepEqual(statusPayload.data.in_review, []);
   assert.deepEqual(statusPayload.data.blocked, []);
   assert.deepEqual(statusPayload.data.needs_feedback, []);
   assert.equal(statusPayload.data.next_action.type, 'stop');
 
-  const approvePayload = parseCliJson(await runCli(['task', 'review', 'approve', 'T-300', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
-  assert.equal(approvePayload.ok, true);
-  assert.equal(approvePayload.data.task_id, 'T-300');
-  assert.equal(approvePayload.data.status, 'done');
-  assert.equal(approvePayload.data.task.task_id, 'T-300');
-  assert.equal(approvePayload.data.task.status, 'done');
-  assert.equal(approvePayload.error, null);
-
-  const approvedShowPayload = parseCliJson(await runCli(['task', 'inspect', 'show', 'T-300', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
-  assert.equal(approvedShowPayload.data.task.status, 'done');
-
-  const reopenPayload = parseCliJson(await runCli(['task', 'review', 'reopen', 'T-300', '--reason', 'Changes requested', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  const reopenPayload = parseCliJson(await runCli(['task', 'review', 'reopen', 'demo/T-300', '--reason', 'Changes requested', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   assert.equal(reopenPayload.ok, true);
-  assert.equal(reopenPayload.data.task_id, 'T-300');
+  assert.equal(reopenPayload.data.task_id, 'demo/T-300');
   assert.equal(reopenPayload.data.status, 'in_progress');
   assert.equal(reopenPayload.data.task.task_id, 'T-300');
   assert.equal(reopenPayload.data.task.status, 'in_progress');
   assert.equal(reopenPayload.error, null);
 
-  const reopenedShowPayload = parseCliJson(await runCli(['task', 'inspect', 'show', 'T-300', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  const reopenedShowPayload = parseCliJson(await runCli(['task', 'inspect', 'show', 'demo/T-300', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   assert.equal(reopenedShowPayload.data.task.status, 'in_progress');
 
   const reopenedStatusPayload = parseCliJson(await runCli(['status', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
-  assert.equal(reopenedStatusPayload.data.active, 'T-300');
+  assert.equal(reopenedStatusPayload.data.active, 'demo/T-300');
   assert.deepEqual(reopenedStatusPayload.data.ready, []);
   assert.deepEqual(reopenedStatusPayload.data.in_review, []);
   assert.deepEqual(reopenedStatusPayload.data.blocked, []);
   assert.deepEqual(reopenedStatusPayload.data.needs_feedback, []);
   assert.equal(reopenedStatusPayload.data.next_action.type, 'command');
-  assert.equal(reopenedStatusPayload.data.next_action.command, 'superplan run T-300 --json');
+  assert.equal(reopenedStatusPayload.data.next_action.command, 'superplan run demo/T-300 --json');
 
   const eventsFile = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'runtime', 'events.ndjson'), 'utf-8');
   const allEventTypes = eventsFile
@@ -348,8 +337,6 @@ Complete me
     .filter(Boolean)
     .map(line => JSON.parse(line).type);
   assert.deepEqual(allEventTypes, [
-    'task.review_requested',
-    'overlay.ensure',
     'task.approved',
     'overlay.ensure',
     'task.reopened',
@@ -361,10 +348,9 @@ Complete me
     .split(/\r?\n/)
     .filter(Boolean)
     .map(line => JSON.parse(line))
-    .filter(event => event.task_id === 'T-300')
+    .filter(event => event.task_id === 'demo/T-300')
     .map(event => event.type);
   assert.deepEqual(eventTypes, [
-    'task.review_requested',
     'task.approved',
     'task.reopened',
   ]);
@@ -445,11 +431,11 @@ Broken dependency task
 
   await writeJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'), {
     tasks: {
-      'T-401': {
+      'demo/T-401': {
         status: 'in_progress',
         started_at: '2026-03-19T10:00:00.000Z',
       },
-      'T-402': {
+      'demo/T-402': {
         status: 'in_progress',
         started_at: '2026-03-19T11:00:00.000Z',
       },
@@ -466,11 +452,11 @@ Broken dependency task
   assert.equal(fixPayload.data.fixed, true);
   assert.deepEqual(fixPayload.data.actions, [
     {
-      task_id: 'T-401',
+      task_id: 'demo/T-401',
       action: 'reset',
     },
     {
-      task_id: 'T-402',
+      task_id: 'demo/T-402',
       action: 'block',
       reason: 'Dependency not satisfied',
     },
@@ -482,15 +468,15 @@ Broken dependency task
   const runtimeState = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'));
   assert.deepEqual(runtimeState, {
     tasks: {
-      'T-402': {
+      'demo/T-402': {
         status: 'blocked',
         started_at: '2026-03-19T11:00:00.000Z',
         reason: 'Dependency not satisfied',
-        updated_at: runtimeState.tasks['T-402'].updated_at,
+        updated_at: runtimeState.tasks['demo/T-402'].updated_at,
       },
     },
   });
-  assert.ok(runtimeState.tasks['T-402'].updated_at);
+  assert.ok(runtimeState.tasks['demo/T-402'].updated_at);
 
   const deepDoctorAfter = parseCliJson(await runCli(['doctor', '--deep', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   const doctorCodesAfter = new Set(deepDoctorAfter.data.issues.map(issue => issue.code));

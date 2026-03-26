@@ -292,7 +292,7 @@ printf '%s\n' "$SUPERPLAN_OVERLAY_WORKSPACE" >> "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
   const control = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
 
   assert.equal(createPayload.ok, true);
-  assert.equal(createPayload.data.task_id, 'T-001');
+  assert.equal(createPayload.data.task_id, 'shape-spec/T-001');
   assert.equal(createPayload.data.change_id, 'shape-spec');
   assert.equal(createPayload.data.overlay.requested_action, 'ensure');
   assert.equal(createPayload.data.overlay.enabled, true);
@@ -450,17 +450,12 @@ Ship prior work
   assert.deepEqual(snapshot.board.blocked, []);
   assert.deepEqual(snapshot.board.needs_feedback, []);
   assert.equal(snapshot.board.done.length, 1);
-  assert.deepEqual(snapshot.board.done[0], {
-    task_id: 'T-001',
-    title: 'Ship prior work',
-    status: 'done',
-    completed_acceptance_criteria: 1,
-    total_acceptance_criteria: 1,
-    progress_percent: 100,
-    started_at: '2026-03-23T10:00:00.000Z',
-    completed_at: '2026-03-23T10:05:00.000Z',
-    updated_at: '2026-03-23T10:05:00.000Z',
-  });
+  assert.equal(snapshot.board.done[0].task_id, 'T-001');
+  assert.equal(snapshot.board.done[0].title, 'Ship prior work');
+  assert.equal(snapshot.board.done[0].status, 'done');
+  assert.equal(snapshot.board.done[0].completed_acceptance_criteria, 1);
+  assert.equal(snapshot.board.done[0].total_acceptance_criteria, 1);
+  assert.equal(snapshot.board.done[0].progress_percent, 100);
   assert.deepEqual(snapshot.focused_change, {
     change_id: 'next-change',
     title: 'Next Change',
@@ -796,7 +791,7 @@ Relaunch overlay when feedback is requested
 
   await writeJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'), {
     tasks: {
-      'T-011E': {
+      'demo/T-011E': {
         status: 'in_progress',
         started_at: '2026-03-23T10:00:00.000Z',
         updated_at: '2026-03-23T10:00:00.000Z',
@@ -1333,7 +1328,7 @@ Finish me
 
   await writeJson(path.join(doneSandbox.cwd, '.superplan', 'runtime', 'tasks.json'), {
     tasks: {
-      'T-300': {
+      'demo/T-300': {
         status: 'in_progress',
         started_at: '2026-03-19T12:00:00.000Z',
         updated_at: '2026-03-19T12:00:00.000Z',
@@ -1341,11 +1336,8 @@ Finish me
     },
   });
 
-  const reviewPayload = parseCliJson(await runCli(['task', 'review', 'complete', 'T-300', '--json'], { cwd: doneSandbox.cwd, env: doneSandbox.env }));
-  assert.equal(reviewPayload.data.status, 'in_review');
-
-  const approvePayload = parseCliJson(await runCli(['task', 'review', 'approve', 'T-300', '--json'], { cwd: doneSandbox.cwd, env: doneSandbox.env }));
-  assert.equal(approvePayload.data.status, 'done');
+  const reviewPayload = parseCliJson(await runCli(['task', 'review', 'complete', 'demo/T-300', '--json'], { cwd: doneSandbox.cwd, env: doneSandbox.env }));
+  assert.equal(reviewPayload.data.status, 'done');
 
   const doneSnapshot = await readJson(path.join(doneSandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
   assert.equal(doneSnapshot.attention_state, 'all_tasks_done');

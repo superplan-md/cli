@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { loadChangeGraph } from '../graph';
+import { getLocalTaskId, toQualifiedTaskId } from '../task-identity';
 import { resolveWorkspaceRoot } from '../workspace-root';
 import { commandNextAction, stopNextAction, type NextAction } from '../next-action';
 
@@ -21,6 +22,9 @@ export interface ParseDiagnostic {
 
 export interface ParsedTask {
   task_id: string;
+  change_id?: string;
+  task_ref?: string;
+  task_file_path?: string;
   status: string;
   priority: 'high' | 'medium' | 'low';
   depends_on_all: string[];
@@ -288,12 +292,21 @@ function buildTask(lines: string[], filePath: string): { task: ParsedTask; diagn
     ? 0
     : Math.round((completedAcceptanceCriteria / totalAcceptanceCriteria) * 100);
 
+  const changeDir = getChangeDirForTaskFile(filePath);
+  const changeId = changeDir ? path.basename(changeDir) : undefined;
+  const rawTaskId = frontmatter.task_id;
+  const localTaskId = rawTaskId ? getLocalTaskId(rawTaskId) : rawTaskId;
+  const qualifiedTaskId = localTaskId ? toQualifiedTaskId(changeId, localTaskId) : localTaskId;
+
   const task: ParsedTask = {
-    task_id: frontmatter.task_id,
+    task_id: localTaskId,
+    change_id: changeId,
+    task_ref: qualifiedTaskId,
+    task_file_path: path.resolve(process.cwd(), filePath),
     status: frontmatter.status,
     priority: frontmatter.priority,
-    depends_on_all: frontmatter.depends_on_all,
-    depends_on_any: frontmatter.depends_on_any,
+    depends_on_all: frontmatter.depends_on_all.map(getLocalTaskId),
+    depends_on_any: frontmatter.depends_on_any.map(getLocalTaskId),
     description,
     acceptance_criteria: acceptanceCriteria,
     total_acceptance_criteria: totalAcceptanceCriteria,
@@ -317,14 +330,14 @@ function computeTaskReadiness(tasks: ParsedTask[]): void {
   const doneTaskIds = new Set(
     tasks
       .filter(task => task.status === 'done')
-      .map(task => task.task_id),
+      .map(task => task.task_ref ?? task.task_id),
   );
 
   for (const task of tasks) {
-    const allDependenciesSatisfied = task.depends_on_all.every(dependsOnTaskId => doneTaskIds.has(dependsOnTaskId));
+    const allDependenciesSatisfied = task.depends_on_all.every(dependsOnTaskId => doneTaskIds.has(toQualifiedTaskId(task.change_id, dependsOnTaskId)));
     const anyDependenciesSatisfied = task.depends_on_any.length === 0
       ? true
-      : task.depends_on_any.some(dependsOnTaskId => doneTaskIds.has(dependsOnTaskId));
+      : task.depends_on_any.some(dependsOnTaskId => doneTaskIds.has(toQualifiedTaskId(task.change_id, dependsOnTaskId)));
 
     task.is_ready =
       task.is_valid &&
@@ -466,17 +479,19 @@ async function parseChangeDir(changeDir: string): Promise<{ tasks: ParsedTask[];
       continue;
     }
 
-    taskIdCounts.set(task.task_id, (taskIdCounts.get(task.task_id) ?? 0) + 1);
+    const taskRef = task.task_ref ?? task.task_id;
+    taskIdCounts.set(taskRef, (taskIdCounts.get(taskRef) ?? 0) + 1);
   }
 
   for (const task of tasks) {
-    if (!task.task_id || taskIdCounts.get(task.task_id) === 1) {
+    const taskRef = task.task_ref ?? task.task_id;
+    if (!task.task_id || taskIdCounts.get(taskRef) === 1) {
       continue;
     }
 
     diagnostics.push({
       code: 'DUPLICATE_TASK_ID',
-      message: `Duplicate task_id found: ${task.task_id}`,
+      message: `Duplicate task_id found: ${taskRef}`,
       task_id: task.task_id,
     });
   }

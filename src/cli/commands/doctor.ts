@@ -17,6 +17,7 @@ import { parse } from './parse';
 import { inspectOverlayCompanionInstall } from '../overlay-companion';
 import { readOverlayPreferences } from '../overlay-preferences';
 import { collectWorkspaceHealthIssues } from '../workspace-health';
+import { getTaskRef, toQualifiedTaskId } from '../task-identity';
 import { commandNextAction, stopNextAction, type NextAction } from '../next-action';
 
 interface DoctorIssue {
@@ -28,6 +29,8 @@ interface DoctorIssue {
 
 interface ParsedTask {
   task_id: string;
+  change_id?: string;
+  task_ref?: string;
   status: string;
   depends_on_all: string[];
   depends_on_any: string[];
@@ -78,14 +81,14 @@ function getDependencyState(tasks: ParsedTask[], task: ParsedTask): {
   const doneTaskIds = new Set(
     tasks
       .filter(taskItem => taskItem.status === 'done')
-      .map(taskItem => taskItem.task_id),
+      .map(taskItem => getTaskRef(taskItem)),
   );
 
   return {
-    allDependenciesSatisfied: task.depends_on_all.every(dependsOnTaskId => doneTaskIds.has(dependsOnTaskId)),
+    allDependenciesSatisfied: task.depends_on_all.every(dependsOnTaskId => doneTaskIds.has(toQualifiedTaskId(task.change_id, dependsOnTaskId))),
     anyDependenciesSatisfied: task.depends_on_any.length === 0
       ? true
-      : task.depends_on_any.some(dependsOnTaskId => doneTaskIds.has(dependsOnTaskId)),
+      : task.depends_on_any.some(dependsOnTaskId => doneTaskIds.has(toQualifiedTaskId(task.change_id, dependsOnTaskId))),
   };
 }
 
@@ -94,8 +97,9 @@ function getInProgressEntries(runtimeState: RuntimeState): [string, RuntimeTaskS
 }
 
 function getMissingDependencyIds(tasks: ParsedTask[], task: ParsedTask): string[] {
-  const knownTaskIds = new Set(tasks.map(taskItem => taskItem.task_id).filter(Boolean));
-  return [...task.depends_on_all, ...task.depends_on_any].filter(dependencyTaskId => !knownTaskIds.has(dependencyTaskId));
+  const knownTaskIds = new Set(tasks.map(taskItem => getTaskRef(taskItem)).filter(Boolean));
+  return [...task.depends_on_all, ...task.depends_on_any]
+    .filter(dependencyTaskId => !knownTaskIds.has(toQualifiedTaskId(task.change_id, dependencyTaskId)));
 }
 
 async function collectDeepIssues(cwd: string): Promise<DoctorIssue[]> {
@@ -114,8 +118,8 @@ async function collectDeepIssues(cwd: string): Promise<DoctorIssue[]> {
   const tasks = parseResult.data.tasks as ParsedTask[];
   const runtimePath = path.join(cwd, '.superplan', 'runtime', 'tasks.json');
   const runtimeState = await readRuntimeState(runtimePath);
-  const mergedTasks = tasks.map(task => applyRuntimeStatus(task, runtimeState.tasks[task.task_id]));
-  const taskMap = new Map(tasks.map(task => [task.task_id, task]));
+  const mergedTasks = tasks.map(task => applyRuntimeStatus(task, runtimeState.tasks[getTaskRef(task)]));
+  const taskMap = new Map(tasks.map(task => [getTaskRef(task), task]));
 
   for (const task of tasks) {
     if (!task.is_valid) {
@@ -161,7 +165,7 @@ async function collectDeepIssues(cwd: string): Promise<DoctorIssue[]> {
   }
 
   for (const [taskId] of inProgressEntries) {
-    const matchedTask = mergedTasks.find(task => task.task_id === taskId);
+    const matchedTask = mergedTasks.find(task => getTaskRef(task) === taskId);
 
     if (!matchedTask || !matchedTask.is_valid) {
       issues.push({

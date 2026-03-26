@@ -103,8 +103,8 @@ test('task --help explains task subcommands explicitly', async () => {
 
   assert.equal(result.code, 0);
   assert.match(result.stdout, /Task lifecycle:/);
-  assert.match(result.stdout, /run -> complete -> approve/);
-  assert.match(result.stdout, /complete moves finished implementation into review; approve is final signoff that marks the task done\./);
+  assert.match(result.stdout, /run -> complete/);
+  assert.match(result.stdout, /complete verifies acceptance criteria and marks routine work done/);
   assert.match(result.stdout, /Inspect:/);
   assert.match(result.stdout, /Scaffold:/);
   assert.match(result.stdout, /Review:/);
@@ -113,8 +113,8 @@ test('task --help explains task subcommands explicitly', async () => {
   assert.match(result.stdout, /inspect show <task_id>\s+Show one task and its readiness details/);
   assert.match(result.stdout, /scaffold new <change-slug>\s+Scaffold one graph-declared task contract/);
   assert.match(result.stdout, /scaffold batch <change-slug> --stdin\s+Scaffold multiple graph-declared task contracts from JSON stdin/);
-  assert.match(result.stdout, /review complete <task_id>\s+Finish implementation and send the task to review/);
-  assert.match(result.stdout, /review approve <task_id>\s+Approve an in-review task and mark it done/);
+  assert.match(result.stdout, /review complete <task_id>\s+Finish implementation and mark the task done when acceptance criteria pass/);
+  assert.match(result.stdout, /review approve <task_id>\s+Approve an in-review task and mark it done when strict review is required/);
   assert.match(result.stdout, /review reopen <task_id>\s+Move a review or done task back into implementation/);
   assert.match(result.stdout, /runtime block <task_id> --reason\s+Pause a task because something external is blocking it/);
   assert.match(result.stdout, /For a fast start:\s+superplan run --json/);

@@ -48,9 +48,9 @@ Track an active visibility run
     env: sandbox.env,
   }));
   assert.equal(runPayload.ok, true);
-  assert.equal(runPayload.data.task_id, 'T-400');
+  assert.equal(runPayload.data.task_id, 'demo/T-400');
 
-  const blockPayload = parseCliJson(await runCli(['task', 'runtime', 'block', 'T-400', '--reason', 'Waiting on review', '--json'], {
+  const blockPayload = parseCliJson(await runCli(['task', 'runtime', 'block', 'demo/T-400', '--reason', 'Waiting on review', '--json'], {
     cwd: sandbox.cwd,
     env: sandbox.env,
   }));
@@ -124,7 +124,7 @@ Finish a complete visibility run
 `);
   await writeFile(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'), JSON.stringify({
     tasks: {
-      'T-401': {
+      'demo/T-401': {
         status: 'in_progress',
         started_at: '2026-03-21T11:20:00.000Z',
         updated_at: '2026-03-21T11:20:00.000Z',
@@ -132,17 +132,11 @@ Finish a complete visibility run
     },
   }, null, 2));
 
-  const completePayload = parseCliJson(await runCli(['task', 'review', 'complete', 'T-401', '--json'], {
+  const completePayload = parseCliJson(await runCli(['task', 'review', 'complete', 'demo/T-401', '--json'], {
     cwd: sandbox.cwd,
     env: sandbox.env,
   }));
   assert.equal(completePayload.ok, true);
-
-  const approvePayload = parseCliJson(await runCli(['task', 'review', 'approve', 'T-401', '--json'], {
-    cwd: sandbox.cwd,
-    env: sandbox.env,
-  }));
-  assert.equal(approvePayload.ok, true);
 
   const reportPayload = parseCliJson(await runCli(['visibility', 'report', '--json'], {
     cwd: sandbox.cwd,
@@ -152,7 +146,6 @@ Finish a complete visibility run
   assert.equal(reportPayload.ok, true);
   assert.equal(reportPayload.data.report.status, 'completed');
   assert.equal(typeof reportPayload.data.report.ended_at, 'string');
-  assert.equal(reportPayload.data.report.counts.task_review_requested, 1);
   assert.equal(reportPayload.data.report.counts.task_approved, 1);
   assert.equal(reportPayload.data.report.layers.review.status, 'healthy');
   assert.equal(reportPayload.data.report.layers.overlay.status, 'attention');

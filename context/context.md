@@ -97,8 +97,8 @@ Important install note:
 ## Task Storage And Parsing
 
 - Default parsing path is `.superplan/changes`, not repo-root `changes/`.
-- Task contracts live at `.superplan/changes/<slug>/tasks/T-xxx.md` and should normally be minted with `superplan task new` after the owning `tasks.md` graph is shaped.
-- Task IDs are allocated globally across `.superplan/changes/`, not restarted per change.
+- Task contracts live at `.superplan/changes/<slug>/tasks/T-xxx.md` and should normally be minted with `superplan task scaffold new` after the owning `tasks.md` graph is shaped.
+- Parsed task payloads now expose the local `task_id`, the owning `change_id`, and a qualified task reference used for runtime identity and unambiguous command routing (for example `change-slug/T-001`).
 - Parsed tasks currently rely on frontmatter such as:
   - `task_id`
   - `status`
@@ -139,22 +139,22 @@ Runtime truth is stored under `.superplan/runtime/`.
 
 The core execution loop is:
 
-- `superplan status --json`
-- `superplan run --json`
-- `superplan task show <task_id> --json`
+- `superplan status --json` (initially check the frontier)
+- `superplan run --json` (returns a fully qualified task identity for the next actionable task)
+- `superplan task inspect show <change-slug/T-001> --json`
 
 The primary authoring loop is:
 
 - `superplan change new <change-slug> --json`
-- `superplan task new <change-slug> --title "..." --json`
-- `superplan task batch <change-slug> --stdin --json`
+- `superplan task scaffold new <change-slug> --task-id <task_id> --json`
+- `superplan task scaffold batch <change-slug> --stdin --json`
 
 Authoring rule:
 
 - let the main graph breakdown live in `.superplan/changes/<slug>/tasks.md` first
 - manual creation of individual `.superplan/changes/<slug>/tasks/T-xxx.md` files is off limits
-- once the graph structure is ready, use `superplan task new` for one task or `superplan task batch` for multiple tasks instead of hand-creating task files
-- when two or more tasks are already clear enough to author together, `superplan task batch --stdin --json` is the default path
+- once the graph structure is ready, use `superplan task scaffold new` for one task or `superplan task scaffold batch` for multiple tasks instead of hand-creating task files
+- when two or more tasks are already clear enough to author together, `superplan task scaffold batch --stdin --json` is the default path
 
 The repo-refresh loop is:
 
@@ -164,21 +164,21 @@ Important runtime commands:
 
 - `superplan status --json`
 - `superplan run --json`
-- `superplan task show <task_id> --json`
-- `superplan task block <task_id> --reason "..."`
-- `superplan task request-feedback <task_id> --message "..."`
-- `superplan task approve <task_id> --json`
-- `superplan task reopen <task_id> --reason "..."`
-- `superplan task fix --json`
-- `superplan task complete <task_id> --json`
+- `superplan task inspect show <change-slug/T-001> --json`
+- `superplan task runtime block <change-slug/T-001> --reason "..."`
+- `superplan task runtime request-feedback <change-slug/T-001> --message "..."`
+- `superplan task review approve <change-slug/T-001> --json`
+- `superplan task review reopen <change-slug/T-001> --reason "..."`
+- `superplan task repair fix --json`
+- `superplan task review complete <change-slug/T-001> --json`
 - `superplan visibility report --json`
 
-Task markdown should not be hand-edited to reflect runtime lifecycle changes, and new `T-xxx.md` contracts should normally be minted with `superplan task new` for one task or `superplan task batch` for multiple tasks after `tasks.md` graph structure is ready.
+Task markdown should not be hand-edited to reflect runtime lifecycle changes, and new `T-xxx.md` contracts should normally be minted with `superplan task scaffold new` for one task or `superplan task scaffold batch` for multiple tasks after `tasks.md` graph structure is ready.
 
-Review handoff now works in two steps:
+Review handoff now works efficiently:
 
-- `superplan task complete <task_id> --json` moves finished implementation into `in_review`
-- `superplan task approve <task_id> --json` is the final review signoff and marks an in-review task as `done`
+- `superplan task complete <task_id> --json` automatically verifies acceptance criteria and moves the task straight to `done`. If review is strictly required, it routes to `in_review`.
+- `superplan task approve <task_id> --json` is the final review signoff for tasks stuck `in_review`, marking them `done`.
 - `superplan task reopen <task_id> --reason "..."` moves an in-review or done task back to `in_progress`
 
 ## Behavioral Notes

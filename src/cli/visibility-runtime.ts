@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { getTaskRef } from './task-identity';
 import { resolveSuperplanRoot } from './workspace-root';
 
 export type VisibilityEventSource = 'human' | 'agent' | 'unknown';
@@ -32,6 +33,8 @@ export interface VisibilitySessionState {
 
 export interface VisibilityTaskSnapshot {
   task_id: string;
+  change_id?: string;
+  task_ref?: string;
   status: string;
   is_ready?: boolean;
   started_at?: string;
@@ -548,7 +551,7 @@ export async function buildAndWriteVisibilityReport(options: {
   }
 
   const runTaskIds = getReportTaskIds(runEvents);
-  const runTasks = options.tasks.filter(task => runTaskIds.size === 0 || runTaskIds.has(task.task_id));
+  const runTasks = options.tasks.filter(task => runTaskIds.size === 0 || runTaskIds.has(getTaskRef(task)));
   const startedAt = session?.run_id === targetRunId
     ? session.started_at
     : (runEvents[0] ? new Date(Math.min(...runEvents.map(event => event.ts))).toISOString() : null);
@@ -611,7 +614,7 @@ export async function buildAndWriteVisibilityReport(options: {
           : counts.task_started > 0 || counts.task_resumed > 0 || counts.task_review_requested > 0
             ? 'healthy'
             : 'idle',
-        active_task_id: activeTask?.task_id ?? null,
+        active_task_id: activeTask ? getTaskRef(activeTask) : null,
         started_count: counts.task_started,
         complete_failed_count: counts.task_complete_failed,
       },

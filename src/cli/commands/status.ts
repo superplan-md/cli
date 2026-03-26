@@ -1,4 +1,5 @@
 import { loadTasks, sortTasksByPriorityAndId, type ParsedTask } from './task';
+import { getTaskRef } from '../task-identity';
 import { getQueueNextAction, type NextAction } from '../next-action';
 
 export type StatusResult =
@@ -30,19 +31,19 @@ export async function status(): Promise<StatusResult> {
   const readyTasks = tasks
     .filter(taskItem => taskItem.is_ready)
     .sort(sortTasksByPriorityAndId)
-    .map(taskItem => taskItem.task_id);
-  const inReviewTasks = tasks.filter(taskItem => taskItem.status === 'in_review').map(taskItem => taskItem.task_id);
-  const blockedTasks = tasks.filter(taskItem => taskItem.status === 'blocked').map(taskItem => taskItem.task_id);
-  const needsFeedbackTasks = tasks.filter(taskItem => taskItem.status === 'needs_feedback').map(taskItem => taskItem.task_id);
+    .map(taskItem => getTaskRef(taskItem));
+  const inReviewTasks = tasks.filter(taskItem => taskItem.status === 'in_review').map(taskItem => getTaskRef(taskItem));
+  const blockedTasks = tasks.filter(taskItem => taskItem.status === 'blocked').map(taskItem => getTaskRef(taskItem));
+  const needsFeedbackTasks = tasks.filter(taskItem => taskItem.status === 'needs_feedback').map(taskItem => getTaskRef(taskItem));
 
   const data = {
-    active: activeTask?.task_id ?? null,
+    active: activeTask ? getTaskRef(activeTask) : null,
     ready: readyTasks,
     in_review: sortTaskIds(inReviewTasks),
     blocked: sortTaskIds(blockedTasks),
     needs_feedback: sortTaskIds(needsFeedbackTasks),
     next_action: getQueueNextAction({
-      active: activeTask?.task_id ?? null,
+      active: activeTask ? getTaskRef(activeTask) : null,
       ready: readyTasks,
       in_review: sortTaskIds(inReviewTasks),
       blocked: sortTaskIds(blockedTasks),

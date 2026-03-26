@@ -86,7 +86,7 @@ test('install script installs superplan from a local source snapshot into a cust
   assert.equal(installMetadata.install_prefix, prefixDir);
   assert.equal(installMetadata.install_bin, path.join(prefixDir, 'bin'));
   assert.equal(installMetadata.source_dir, REPO_ROOT);
-  assert.equal(installMetadata.ref, 'dev');
+  assert.equal(installMetadata.ref, 'main');
   assert.equal(await fs.stat(path.join(sandbox.home, '.config', 'superplan', 'config.toml')).then(() => true, () => false), true);
   assert.equal(await fs.stat(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-entry', 'SKILL.md')).then(() => true, () => false), true);
 
@@ -166,7 +166,7 @@ test('install script resolves the latest GitHub release when no ref is pinned', 
   );
   assert.match(
     installerSource,
-    /Resolved latest Superplan release:/,
+    /Resolved latest Superplan overlay release:/,
   );
 });
 

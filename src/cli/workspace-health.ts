@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { parse, type ParseDiagnostic, type ParsedTask } from './commands/parse';
+import { getTaskRef } from './task-identity';
 import { getWorkspaceArtifactPaths } from './workspace-artifacts';
 
 export interface WorkspaceHealthIssue {
@@ -60,10 +61,11 @@ function taskStateIssues(task: ParsedTask, runtimeTask: RuntimeTaskState | undef
   const runtimeStatus = runtimeTask?.status;
 
   if (allCriteriaDone && task.status === 'pending') {
+    const taskRef = getTaskRef(task);
     issues.push({
       code: 'TASK_STATE_DRIFT_PENDING_WITH_COMPLETED_ACCEPTANCE',
       message: `Task ${task.task_id} still says pending even though all acceptance criteria are checked.`,
-      fix: `Run superplan task review complete ${task.task_id} --json or update the task contract status intentionally.`,
+      fix: `Run superplan task review complete ${taskRef} --json or update the task contract status intentionally.`,
       task_id: task.task_id,
     });
   }
@@ -141,7 +143,7 @@ export async function collectWorkspaceHealthIssues(workspaceRoot: string): Promi
     }
 
     for (const task of parsedResult.data.tasks) {
-      issues.push(...taskStateIssues(task, runtimeState.tasks[task.task_id]));
+      issues.push(...taskStateIssues(task, runtimeState.tasks[getTaskRef(task)]));
     }
   }
 

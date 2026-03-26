@@ -121,32 +121,33 @@ test('task scaffold new scaffolds a contract for a graph-declared task id withou
   }));
 
   assert.equal(firstTaskPayload.ok, true);
-  assert.equal(firstTaskPayload.data.task_id, 'T-001');
+  assert.equal(firstTaskPayload.data.task_id, 'improve-planning/T-001');
   assert.equal(firstTaskPayload.data.change_id, 'improve-planning');
   assert.equal(firstTaskPayload.data.path, '.superplan/changes/improve-planning/tasks/T-001.md');
-  assert.deepEqual(firstTaskPayload.data.task, {
-    task_id: 'T-001',
-    status: 'pending',
-    priority: 'high',
-    depends_on_all: [],
-    depends_on_any: [],
-    description: 'Add scaffolding command',
-    acceptance_criteria: [
-      {
-        text: 'Define the first acceptance criterion.',
-        done: false,
-      },
-    ],
-    total_acceptance_criteria: 1,
-    completed_acceptance_criteria: 0,
-    progress_percent: 0,
-    effective_status: 'draft',
-    is_valid: true,
-    is_ready: true,
-    issues: [],
-  });
+  assert.equal(firstTaskPayload.data.task.task_id, 'T-001');
+  assert.equal(firstTaskPayload.data.task.change_id, 'improve-planning');
+  assert.equal(firstTaskPayload.data.task.task_ref, 'improve-planning/T-001');
+  assert.match(firstTaskPayload.data.task.task_file_path, /\/\.superplan\/changes\/improve-planning\/tasks\/T-001\.md$/);
+  assert.equal(firstTaskPayload.data.task.status, 'pending');
+  assert.equal(firstTaskPayload.data.task.priority, 'high');
+  assert.deepEqual(firstTaskPayload.data.task.depends_on_all, []);
+  assert.deepEqual(firstTaskPayload.data.task.depends_on_any, []);
+  assert.equal(firstTaskPayload.data.task.description, 'Add scaffolding command');
+  assert.deepEqual(firstTaskPayload.data.task.acceptance_criteria, [
+    {
+      text: 'Define the first acceptance criterion.',
+      done: false,
+    },
+  ]);
+  assert.equal(firstTaskPayload.data.task.total_acceptance_criteria, 1);
+  assert.equal(firstTaskPayload.data.task.completed_acceptance_criteria, 0);
+  assert.equal(firstTaskPayload.data.task.progress_percent, 0);
+  assert.equal(firstTaskPayload.data.task.effective_status, 'draft');
+  assert.equal(firstTaskPayload.data.task.is_valid, true);
+  assert.equal(firstTaskPayload.data.task.is_ready, true);
+  assert.deepEqual(firstTaskPayload.data.task.issues, []);
   assert.equal(firstTaskPayload.data.next_action.type, 'command');
-  assert.equal(firstTaskPayload.data.next_action.command, 'superplan run T-001 --json');
+  assert.equal(firstTaskPayload.data.next_action.command, 'superplan run improve-planning/T-001 --json');
   assert.equal(firstTaskPayload.error, null);
 
   const secondTaskPayload = parseCliJson(await runCli([
@@ -162,7 +163,7 @@ test('task scaffold new scaffolds a contract for a graph-declared task id withou
     env: sandbox.env,
   }));
 
-  assert.equal(secondTaskPayload.data.task_id, 'T-002');
+  assert.equal(secondTaskPayload.data.task_id, 'improve-planning/T-002');
 
   parseCliJson(await runCli(['change', 'new', 'release-polish', '--json'], {
     cwd: sandbox.cwd,
@@ -193,32 +194,33 @@ test('task scaffold new scaffolds a contract for a graph-declared task id withou
   }));
 
   assert.equal(thirdTaskPayload.ok, true);
-  assert.equal(thirdTaskPayload.data.task_id, 'T-003');
+  assert.equal(thirdTaskPayload.data.task_id, 'release-polish/T-003');
   assert.equal(thirdTaskPayload.data.change_id, 'release-polish');
   assert.equal(thirdTaskPayload.data.path, '.superplan/changes/release-polish/tasks/T-003.md');
-  assert.deepEqual(thirdTaskPayload.data.task, {
-    task_id: 'T-003',
-    status: 'pending',
-    priority: 'medium',
-    depends_on_all: [],
-    depends_on_any: [],
-    description: 'Add release notes',
-    acceptance_criteria: [
-      {
-        text: 'Define the first acceptance criterion.',
-        done: false,
-      },
-    ],
-    total_acceptance_criteria: 1,
-    completed_acceptance_criteria: 0,
-    progress_percent: 0,
-    effective_status: 'draft',
-    is_valid: true,
-    is_ready: true,
-    issues: [],
-  });
+  assert.equal(thirdTaskPayload.data.task.task_id, 'T-003');
+  assert.equal(thirdTaskPayload.data.task.change_id, 'release-polish');
+  assert.equal(thirdTaskPayload.data.task.task_ref, 'release-polish/T-003');
+  assert.match(thirdTaskPayload.data.task.task_file_path, /\/\.superplan\/changes\/release-polish\/tasks\/T-003\.md$/);
+  assert.equal(thirdTaskPayload.data.task.status, 'pending');
+  assert.equal(thirdTaskPayload.data.task.priority, 'medium');
+  assert.deepEqual(thirdTaskPayload.data.task.depends_on_all, []);
+  assert.deepEqual(thirdTaskPayload.data.task.depends_on_any, []);
+  assert.equal(thirdTaskPayload.data.task.description, 'Add release notes');
+  assert.deepEqual(thirdTaskPayload.data.task.acceptance_criteria, [
+    {
+      text: 'Define the first acceptance criterion.',
+      done: false,
+    },
+  ]);
+  assert.equal(thirdTaskPayload.data.task.total_acceptance_criteria, 1);
+  assert.equal(thirdTaskPayload.data.task.completed_acceptance_criteria, 0);
+  assert.equal(thirdTaskPayload.data.task.progress_percent, 0);
+  assert.equal(thirdTaskPayload.data.task.effective_status, 'draft');
+  assert.equal(thirdTaskPayload.data.task.is_valid, true);
+  assert.equal(thirdTaskPayload.data.task.is_ready, true);
+  assert.deepEqual(thirdTaskPayload.data.task.issues, []);
   assert.equal(thirdTaskPayload.data.next_action.type, 'command');
-  assert.equal(thirdTaskPayload.data.next_action.command, 'superplan run T-003 --json');
+  assert.equal(thirdTaskPayload.data.next_action.command, 'superplan run release-polish/T-003 --json');
   assert.equal(thirdTaskPayload.error, null);
 
   const firstTaskPath = path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks', 'T-001.md');
@@ -305,13 +307,13 @@ test('task scaffold batch scaffolds graph-declared task ids and parse derives de
   assert.deepEqual(batchPayload.data.created, [
     {
       task_id: 'T-001',
-      ref: null,
+      ref: 'improve-planning/T-001',
       title: 'Add scaffolding command',
       path: '.superplan/changes/improve-planning/tasks/T-001.md',
     },
     {
       task_id: 'T-002',
-      ref: null,
+      ref: 'improve-planning/T-002',
       title: 'Add help coverage',
       path: '.superplan/changes/improve-planning/tasks/T-002.md',
     },
