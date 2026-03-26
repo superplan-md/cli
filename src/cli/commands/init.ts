@@ -65,7 +65,7 @@ async function verifyLocalSetup(paths: {
   }
 
   for (const agent of paths.projectAgents) {
-    if (!await pathExists(agent.install_path)) {
+    if (agent.install_path && !await pathExists(agent.install_path)) {
       issues.push(`Local ${agent.name} integration was not installed correctly.`);
     }
   }

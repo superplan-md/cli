@@ -6,12 +6,16 @@ import {
   getSkillsFileCandidates,
   getSkillsNamespaceCandidates,
   getAntigravityWorkflowCandidates,
-  getBootstrapStrengthSummary,
 } from '../agent-integrations';
+import {
+  getAgentDefinitions, 
+  resolveWorkspaceRoot,
+  pathExists,
+  directoryHasAtLeastOneFile
+} from './install-helpers';
 import { parse } from './parse';
 import { inspectOverlayCompanionInstall } from '../overlay-companion';
 import { readOverlayPreferences } from '../overlay-preferences';
-import { resolveWorkspaceRoot } from '../workspace-root';
 import { collectWorkspaceHealthIssues } from '../workspace-health';
 import { commandNextAction, stopNextAction, type NextAction } from '../next-action';
 
@@ -39,36 +43,7 @@ interface RuntimeState {
   tasks: Record<string, RuntimeTaskState>;
 }
 
-async function pathExists(targetPath: string): Promise<boolean> {
-  try {
-    await fs.access(targetPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function directoryHasAtLeastOneFile(dirPath: string): Promise<boolean> {
-  try {
-    const entries = await fs.readdir(dirPath, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const entryPath = path.join(dirPath, entry.name);
-
-      if (entry.isFile()) {
-        return true;
-      }
-
-      if (entry.isDirectory() && await directoryHasAtLeastOneFile(entryPath)) {
-        return true;
-      }
-    }
-
-    return false;
-  } catch {
-    return false;
-  }
-}
+// Helper functions are now imported from install-helpers.ts
 
 async function readRuntimeState(runtimeFilePath: string): Promise<RuntimeState> {
   try {
@@ -83,122 +58,7 @@ async function readRuntimeState(runtimeFilePath: string): Promise<RuntimeState> 
   }
 }
 
-function getProjectAgents(baseDir: string): (AgentEnvironment & { skillsPaths: string[] })[] {
-  return [
-    {
-      name: 'claude',
-      path: path.join(baseDir, '.claude'),
-      skillsPaths: getSkillsNamespaceCandidates(baseDir, '.claude', 'skills'),
-      install_path: path.join(baseDir, '.claude', 'skills'),
-      install_kind: 'skills_namespace',
-      bootstrap_strength: 'skills_only',
-    },
-    {
-      name: 'gemini',
-      path: path.join(baseDir, '.gemini'),
-      skillsPaths: [path.join(baseDir, '.gemini', 'commands', 'superplan.toml')],
-      install_path: path.join(baseDir, '.gemini', 'commands', 'superplan.toml'),
-      install_kind: 'toml_command',
-      bootstrap_strength: 'context_bootstrap',
-    },
-    {
-      name: 'cursor',
-      path: path.join(baseDir, '.cursor'),
-      skillsPaths: getSkillsNamespaceCandidates(baseDir, '.cursor', 'skills'),
-      install_path: path.join(baseDir, '.cursor', 'skills'),
-      install_kind: 'skills_namespace',
-      bootstrap_strength: 'skills_only',
-    },
-    {
-      name: 'codex',
-      path: path.join(baseDir, '.codex'),
-      skillsPaths: getSkillsNamespaceCandidates(baseDir, '.codex', 'skills'),
-      install_path: path.join(baseDir, '.codex', 'skills'),
-      install_kind: 'skills_namespace',
-      bootstrap_strength: 'skills_only',
-    },
-    {
-      name: 'opencode',
-      path: path.join(baseDir, '.opencode'),
-      skillsPaths: getSkillsNamespaceCandidates(baseDir, '.opencode', 'skills'),
-      install_path: path.join(baseDir, '.opencode', 'skills'),
-      install_kind: 'skills_namespace',
-      bootstrap_strength: 'skills_only',
-    },
-    {
-      name: 'amazonq',
-      path: path.join(baseDir, '.amazonq'),
-      skillsPaths: [
-        path.join(baseDir, '.amazonq', 'rules', 'superplan-entry.md'),
-        path.join(baseDir, '.amazonq', 'rules', 'memory-bank', 'guidelines.md'),
-      ],
-      install_path: path.join(baseDir, '.amazonq', 'rules'),
-      install_kind: 'amazonq_rules',
-      bootstrap_strength: 'rule_bootstrap',
-    },
-    {
-      name: 'antigravity',
-      path: path.join(baseDir, '.agents'),
-      skillsPaths: getAntigravityWorkflowCandidates(baseDir, '.agents', 'workflows'),
-      install_path: path.join(baseDir, '.agents', 'workflows'),
-      install_kind: 'antigravity_workflows',
-      bootstrap_strength: 'rule_bootstrap',
-    },
-  ];
-}
-
-function getGlobalAgents(baseDir: string): (AgentEnvironment & { skillsPaths: string[] })[] {
-  return [
-    {
-      name: 'claude',
-      path: path.join(baseDir, '.claude'),
-      skillsPaths: getSkillsFileCandidates(baseDir, '.claude', 'skills'),
-      install_path: path.join(baseDir, '.claude', 'skills'),
-      install_kind: 'skills_namespace',
-      bootstrap_strength: 'skills_only',
-    },
-    {
-      name: 'gemini',
-      path: path.join(baseDir, '.gemini'),
-      skillsPaths: [path.join(baseDir, '.gemini', 'commands', 'superplan.toml')],
-      install_path: path.join(baseDir, '.gemini', 'commands', 'superplan.toml'),
-      install_kind: 'toml_command',
-      bootstrap_strength: 'context_bootstrap',
-    },
-    {
-      name: 'cursor',
-      path: path.join(baseDir, '.cursor'),
-      skillsPaths: getSkillsFileCandidates(baseDir, '.cursor', 'skills'),
-      install_path: path.join(baseDir, '.cursor', 'skills'),
-      install_kind: 'skills_namespace',
-      bootstrap_strength: 'skills_only',
-    },
-    {
-      name: 'codex',
-      path: path.join(baseDir, '.codex'),
-      skillsPaths: getSkillsFileCandidates(baseDir, '.codex', 'skills'),
-      install_path: path.join(baseDir, '.codex', 'skills'),
-      install_kind: 'skills_namespace',
-      bootstrap_strength: 'skills_only',
-    },
-    {
-      name: 'opencode',
-      path: path.join(baseDir, '.config', 'opencode'),
-      skillsPaths: getSkillsFileCandidates(baseDir, '.config', 'opencode', 'skills'),
-      install_path: path.join(baseDir, '.config', 'opencode', 'skills'),
-      install_kind: 'skills_namespace',
-      bootstrap_strength: 'skills_only',
-    },
-    {
-      name: 'antigravity',
-      path: path.join(baseDir, '.gemini'),
-      skillsPaths: [path.join(baseDir, '.gemini', 'GEMINI.md')],
-      install_path: path.join(baseDir, '.gemini', 'GEMINI.md'),
-      install_kind: 'managed_global_rule',
-      bootstrap_strength: 'rule_bootstrap',
-    },
-  ];
-}
+// getProjectAgents and getGlobalAgents are replaced by getAgentDefinitions from install-helpers.ts
 
 function applyRuntimeStatus(task: ParsedTask, runtimeTask?: RuntimeTaskState): ParsedTask {
   if (!runtimeTask) {
@@ -356,20 +216,37 @@ export async function doctor(args: string[] = []) {
   }
 
   const agents = [
-    ...getGlobalAgents(homeDir),
-    ...getProjectAgents(workspaceRoot),
+    ...getAgentDefinitions(homeDir, 'global'),
+    ...getAgentDefinitions(workspaceRoot, 'project'),
   ];
   for (const agent of agents) {
-    const hasInstalledSkills = (await Promise.all(agent.skillsPaths.map(candidatePath => pathExists(candidatePath)))).some(Boolean);
-    if (await pathExists(agent.path) && !hasInstalledSkills) {
-      issues.push({
-        code: 'AGENT_SKILLS_MISSING',
-        message: `Superplan skills not installed for ${agent.name} agent`,
-        fix: 'Run superplan install --quiet --json',
-      });
+    if (!await pathExists(agent.path)) {
       continue;
     }
 
+    if (agent.install_path) {
+      const hasInstalledSkills = await pathExists(agent.install_path);
+      if (!hasInstalledSkills) {
+        issues.push({
+          code: 'AGENT_SKILLS_MISSING',
+          message: `Superplan skills not installed for ${agent.name} agent`,
+          fix: 'Run superplan install --quiet --json',
+        });
+      }
+    }
+
+    // Check for redundant local skills (SSoT check)
+    if (agent.cleanup_paths) {
+      for (const cleanupPath of agent.cleanup_paths) {
+        if (cleanupPath.endsWith('/skills') && await pathExists(cleanupPath)) {
+          issues.push({
+            code: 'AGENT_REDUNDANT_SKILLS',
+            message: `Redundant skills directory found for ${agent.name} at ${cleanupPath}`,
+            fix: `superplan init --yes --json`, // Init already handles cleanup in SSoT mode
+          });
+        }
+      }
+    }
   }
 
   if (overlayPreferences.effective_enabled && !overlayCompanion.launchable) {
