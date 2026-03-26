@@ -7,6 +7,8 @@
     "dist",
     "output",
     "scripts/install.sh",
+    "scripts/install.ps1",
+    "scripts/install.cmd",
     "README.md",
     "package.json"
   ],

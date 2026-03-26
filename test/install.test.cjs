@@ -170,6 +170,34 @@ test('install script resolves the latest GitHub release when no ref is pinned', 
   );
 });
 
+test('windows installer scripts are packaged and documented', async () => {
+  const packageJson = JSON.parse(await fs.readFile(path.join(REPO_ROOT, 'package.json'), 'utf-8'));
+  const readme = await fs.readFile(path.join(REPO_ROOT, 'README.md'), 'utf-8');
+
+  assert.ok(packageJson.files.includes('scripts/install.ps1'));
+  assert.ok(packageJson.files.includes('scripts/install.cmd'));
+  assert.match(readme, /install\.ps1 \| iex/);
+  assert.match(readme, /install-superplan\.cmd/);
+  assert.match(readme, /Windows installer currently installs the CLI only/i);
+});
+
+test('windows powershell installer resolves the latest release and records Windows metadata', async () => {
+  const installerSource = await fs.readFile(path.join(REPO_ROOT, 'scripts', 'install.ps1'), 'utf-8');
+
+  assert.match(installerSource, /Resolve-LatestReleaseTagFromGitHub/);
+  assert.match(installerSource, /SUPERPLAN_REF/);
+  assert.match(installerSource, /platform = 'windows'/);
+  assert.match(installerSource, /Windows installer note: the desktop overlay companion is not packaged by this script yet\./);
+});
+
+test('windows cmd installer delegates to powershell', async () => {
+  const installerSource = await fs.readFile(path.join(REPO_ROOT, 'scripts', 'install.cmd'), 'utf-8');
+
+  assert.match(installerSource, /install\.ps1/);
+  assert.match(installerSource, /powershell -NoProfile -ExecutionPolicy Bypass/);
+  assert.match(installerSource, /raw\.githubusercontent\.com\/superplan-md\/superplan-plugin\/main\/scripts\/install\.ps1/);
+});
+
 test('install script stops a running installed overlay before replacing it', async () => {
   const sandbox = await makeSandbox('superplan-install-overlay-replace-');
   const prefixDir = path.join(sandbox.root, 'prefix');
