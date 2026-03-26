@@ -11,5 +11,5 @@
   "license": "MIT",
   "keywords": ["planning", "workflow", "skills", "task-graph", "execution", "superplan"],
   "skills": "./skills/",
-  "hooks": "./hooks/hooks-cursor.json"
+  "hooks": "./hooks-cursor.json"
 }

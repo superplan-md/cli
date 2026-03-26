@@ -3,7 +3,7 @@
   "hooks": {
     "sessionStart": [
       {
-        "command": "./output/hooks/session-start"
+        "command": "./session-start"
       }
     ]
   }

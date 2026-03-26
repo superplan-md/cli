@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/output/hooks/run-hook.cmd\" session-start",
+            "command": "./run-hook.cmd session-start",
             "async": false
           }
         ]
