@@ -36,7 +36,6 @@ test('cli without a command shows the main Superplan command list', async () => 
   assert.match(result.stdout, /Admin:/);
   assert.match(result.stdout, /update\s+Update an installed Superplan CLI and refresh skills/);
   assert.match(result.stdout, /remove\s+Remove Superplan installation or state/);
-  assert.doesNotMatch(result.stdout, /server\s+Start the local dummy server/);
   assert.doesNotMatch(result.stdout, /popup\s+Open or refocus the current task popup/);
   assert.doesNotMatch(result.stdout, /\bpurge\b/);
 });

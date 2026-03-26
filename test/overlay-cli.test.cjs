@@ -602,6 +602,55 @@ Launch overlay companion
   assert.match(launchOutput, new RegExp(`${realWorkspacePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
 });
 
+test('overlay ensure suppresses repeated launch attempts after a recent failure', async () => {
+  const sandbox = await makeSandbox('superplan-overlay-launch-suppressed-');
+  const fakeOverlayPath = path.join(sandbox.root, 'fake-overlay-noexec');
+
+  await writeFile(fakeOverlayPath, '#!/bin/sh\nexit 0\n');
+
+  await writeDemoGraph(sandbox.cwd, [
+    { task_id: 'T-011C', title: 'Suppress repeated overlay launch failures' },
+  ]);
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-011C.md'), `---
+task_id: T-011C
+status: pending
+priority: high
+---
+
+## Description
+Suppress repeated overlay launch failures
+
+## Acceptance Criteria
+- [ ] A
+`);
+
+  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+
+  const overlayEnv = {
+    ...sandbox.env,
+    SUPERPLAN_OVERLAY_BINARY_PATH: fakeOverlayPath,
+  };
+
+  const firstEnsurePayload = parseCliJson(await runCli(['overlay', 'ensure', '--json'], {
+    cwd: sandbox.cwd,
+    env: overlayEnv,
+  }));
+  assert.equal(firstEnsurePayload.ok, true);
+  assert.equal(firstEnsurePayload.data.companion.attempted, true);
+  assert.equal(firstEnsurePayload.data.companion.launched, false);
+  assert.equal(firstEnsurePayload.data.companion.reason, 'launch_failed');
+
+  const secondEnsurePayload = parseCliJson(await runCli(['overlay', 'ensure', '--json'], {
+    cwd: sandbox.cwd,
+    env: overlayEnv,
+  }));
+  assert.equal(secondEnsurePayload.ok, true);
+  assert.equal(secondEnsurePayload.data.companion.attempted, false);
+  assert.equal(secondEnsurePayload.data.companion.launched, false);
+  assert.equal(secondEnsurePayload.data.companion.reason, 'launch_suppressed');
+  assert.match(secondEnsurePayload.data.companion.message, /Recent overlay launch failure detected/);
+});
+
 test('overlay ensure does not launch a second detached companion when one is already running', async (t) => {
   const sandbox = await makeSandbox('superplan-overlay-single-instance-');
   const fakeOverlayPath = path.join(sandbox.root, 'fake-overlay');

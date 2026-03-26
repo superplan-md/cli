@@ -277,8 +277,8 @@ function createEmptyCounts() {
   };
 }
 
-export function getVisibilityPaths(): VisibilityPaths {
-  const runtimeDir = path.join(resolveSuperplanRoot(), 'runtime');
+export function getVisibilityPaths(startDir = process.cwd()): VisibilityPaths {
+  const runtimeDir = path.join(resolveSuperplanRoot(startDir), 'runtime');
   const reportsDir = path.join(runtimeDir, 'reports');
 
   return {
@@ -290,8 +290,8 @@ export function getVisibilityPaths(): VisibilityPaths {
   };
 }
 
-export async function readVisibilitySession(): Promise<VisibilitySessionState | null> {
-  const { session_path: sessionPath } = getVisibilityPaths();
+export async function readVisibilitySession(startDir = process.cwd()): Promise<VisibilitySessionState | null> {
+  const { session_path: sessionPath } = getVisibilityPaths(startDir);
 
   try {
     const content = await fs.readFile(sessionPath, 'utf-8');
@@ -383,8 +383,8 @@ export async function recordVisibilityEvent(options: {
   }
 }
 
-export async function readVisibilityEvents(): Promise<VisibilityEventRecord[]> {
-  const { events_path: eventsPath } = getVisibilityPaths();
+export async function readVisibilityEvents(startDir = process.cwd()): Promise<VisibilityEventRecord[]> {
+  const { events_path: eventsPath } = getVisibilityPaths(startDir);
 
   try {
     const content = await fs.readFile(eventsPath, 'utf-8');

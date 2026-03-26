@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { spawn } from 'node:child_process';
 import { readInstallMetadata } from './install-metadata';
+import { readVisibilityEvents } from './visibility-runtime';
 
 type OverlayCompanionSource = 'env' | 'install_metadata' | null;
 
@@ -10,6 +11,7 @@ export type OverlayCompanionIssue =
   | 'install_path_missing'
   | 'executable_missing'
   | 'launch_failed'
+  | 'launch_suppressed'
   | 'not_requested';
 
 export interface OverlayCompanionStatus {
@@ -38,6 +40,9 @@ interface RunningProcessEntry {
   pid: number;
   command: string;
 }
+
+const LAUNCH_FAILURE_SUPPRESSION_WINDOW_MS = 60_000;
+const LAUNCH_RESULT_WAIT_MS = process.platform === 'linux' ? 300 : 50;
 
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
@@ -143,6 +148,49 @@ function commandMatchesWorkspacePath(commandLine: string, workspacePath: string)
     || commandLine.endsWith(`--workspace ${workspacePath}`)
     || commandLine.includes(` --workspace=${workspacePath}`)
     || commandLine.endsWith(`--workspace=${workspacePath}`);
+}
+
+async function waitForLaunchResult(child: ReturnType<typeof spawn>): Promise<{ ok: true } | { ok: false; message: string }> {
+  return await new Promise(resolve => {
+    let settled = false;
+
+    const finish = (result: { ok: true } | { ok: false; message: string }) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      child.removeListener('error', onError);
+      child.removeListener('exit', onExit);
+      clearTimeout(timer);
+      resolve(result);
+    };
+
+    const onError = (error: Error & { message?: string }) => {
+      finish({
+        ok: false,
+        message: error?.message || 'Failed to launch overlay companion.',
+      });
+    };
+
+    const onExit = (code: number | null) => {
+      if (process.platform !== 'linux' || code === null) {
+        return;
+      }
+
+      finish({
+        ok: false,
+        message: `Overlay companion exited immediately (exit code ${code}). On Linux, ensure FUSE is installed: sudo apt install fuse libfuse2`,
+      });
+    };
+
+    const timer = setTimeout(() => {
+      finish({ ok: true });
+    }, LAUNCH_RESULT_WAIT_MS);
+
+    child.once('error', onError);
+    child.once('exit', onExit);
+  });
 }
 
 async function readProcessCommandLines(): Promise<string[] | null> {
@@ -438,6 +486,18 @@ export async function launchInstalledOverlayCompanion(
   }
 
   try {
+    const recentLaunchFailure = await findRecentLaunchFailure(resolvedWorkspacePath);
+    if (recentLaunchFailure) {
+      return {
+        ...companionStatus,
+        attempted: false,
+        launched: false,
+        workspace_path: resolvedWorkspacePath,
+        reason: 'launch_suppressed',
+        message: recentLaunchFailure,
+      };
+    }
+
     // Bug #10 fix: make ONE ps call and reuse the result for both the dedup
     // check and the macOS bundle launch plan.  The original code made two
     // separate ps spawns (readRunningProcessEntries + readProcessCommandLines)
@@ -509,22 +569,16 @@ export async function launchInstalledOverlayCompanion(
 
     const child = spawn(launchPlan.command, launchPlan.args, commonSpawnOptions);
     child.unref();
-
-    // Bug #14 fix: on Linux (AppImage), verify the process didn't exit
-    // immediately due to missing FUSE or broken AppImage permissions.
-    // A 300ms wait catches the vast majority of immediate exits.
-    if (process.platform === 'linux') {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      if (child.exitCode !== null) {
-        return {
-          ...companionStatus,
-          attempted: true,
-          launched: false,
-          workspace_path: resolvedWorkspacePath,
-          reason: 'launch_failed',
-          message: `Overlay companion exited immediately (exit code ${child.exitCode}). On Linux, ensure FUSE is installed: sudo apt install fuse libfuse2`,
-        };
-      }
+    const launchResult = await waitForLaunchResult(child);
+    if (!launchResult.ok) {
+      return {
+        ...companionStatus,
+        attempted: true,
+        launched: false,
+        workspace_path: resolvedWorkspacePath,
+        reason: 'launch_failed',
+        message: launchResult.message,
+      };
     }
 
     return {
@@ -570,4 +624,24 @@ export async function terminateInstalledOverlayCompanion(workspacePath?: string)
   for (const processEntry of matchingProcesses) {
     await terminateProcess(processEntry.pid);
   }
+}
+
+async function findRecentLaunchFailure(workspacePath: string): Promise<string | null> {
+  const events = await readVisibilityEvents(workspacePath);
+  const cutoff = Date.now() - LAUNCH_FAILURE_SUPPRESSION_WINDOW_MS;
+  const recentFailure = [...events]
+    .reverse()
+    .find(event =>
+      event.type === 'overlay.ensure'
+      && event.outcome === 'error'
+      && event.detail_code === 'launch_failed'
+      && event.ts >= cutoff,
+    );
+
+  if (!recentFailure) {
+    return null;
+  }
+
+  const elapsedMs = Math.max(Date.now() - recentFailure.ts, 0);
+  return `Recent overlay launch failure detected ${elapsedMs}ms ago; suppressing immediate retry.`;
 }

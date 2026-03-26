@@ -84,6 +84,12 @@ Default priority task
   assert.deepEqual(statusPayload.data.in_review, []);
   assert.deepEqual(statusPayload.data.blocked, []);
   assert.deepEqual(statusPayload.data.needs_feedback, []);
+  assert.deepEqual(statusPayload.data.counts, {
+    ready: 3,
+    in_review: 0,
+    blocked: 0,
+    needs_feedback: 0,
+  });
   assert.equal(statusPayload.data.next_action.type, 'command');
   assert.equal(statusPayload.data.next_action.command, 'superplan run --json');
   assert.equal(statusPayload.error, null);
@@ -210,6 +216,12 @@ Lifecycle task
   assert.deepEqual(blockedStatusPayload.data.in_review, []);
   assert.deepEqual(blockedStatusPayload.data.blocked, ['demo/T-200']);
   assert.deepEqual(blockedStatusPayload.data.needs_feedback, []);
+  assert.deepEqual(blockedStatusPayload.data.counts, {
+    ready: 0,
+    in_review: 0,
+    blocked: 1,
+    needs_feedback: 0,
+  });
   assert.equal(blockedStatusPayload.data.next_action.type, 'stop');
 
   const resumePayload = parseCliJson(await runCli(['run', 'demo/T-200', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
@@ -226,6 +238,12 @@ Lifecycle task
   assert.deepEqual(feedbackStatusPayload.data.in_review, []);
   assert.deepEqual(feedbackStatusPayload.data.blocked, []);
   assert.deepEqual(feedbackStatusPayload.data.needs_feedback, ['demo/T-200']);
+  assert.deepEqual(feedbackStatusPayload.data.counts, {
+    ready: 0,
+    in_review: 0,
+    blocked: 0,
+    needs_feedback: 1,
+  });
   assert.equal(feedbackStatusPayload.data.next_action.type, 'wait_for_user');
 
   const resetPayload = parseCliJson(await runCli(['task', 'repair', 'reset', 'demo/T-200', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
@@ -327,6 +345,12 @@ Complete me
   assert.deepEqual(reopenedStatusPayload.data.in_review, []);
   assert.deepEqual(reopenedStatusPayload.data.blocked, []);
   assert.deepEqual(reopenedStatusPayload.data.needs_feedback, []);
+  assert.deepEqual(reopenedStatusPayload.data.counts, {
+    ready: 0,
+    in_review: 0,
+    blocked: 0,
+    needs_feedback: 0,
+  });
   assert.equal(reopenedStatusPayload.data.next_action.type, 'command');
   assert.equal(reopenedStatusPayload.data.next_action.command, 'superplan run demo/T-300 --json');
 

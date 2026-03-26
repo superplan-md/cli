@@ -11,6 +11,12 @@ export type StatusResult =
         in_review: string[];
         blocked: string[];
         needs_feedback: string[];
+        counts: {
+          ready: number;
+          in_review: number;
+          blocked: number;
+          needs_feedback: number;
+        };
         next_action: NextAction;
       };
     }
@@ -35,19 +41,28 @@ export async function status(): Promise<StatusResult> {
   const inReviewTasks = tasks.filter(taskItem => taskItem.status === 'in_review').map(taskItem => getTaskRef(taskItem));
   const blockedTasks = tasks.filter(taskItem => taskItem.status === 'blocked').map(taskItem => getTaskRef(taskItem));
   const needsFeedbackTasks = tasks.filter(taskItem => taskItem.status === 'needs_feedback').map(taskItem => getTaskRef(taskItem));
+  const sortedInReviewTasks = sortTaskIds(inReviewTasks);
+  const sortedBlockedTasks = sortTaskIds(blockedTasks);
+  const sortedNeedsFeedbackTasks = sortTaskIds(needsFeedbackTasks);
 
   const data = {
     active: activeTask ? getTaskRef(activeTask) : null,
     ready: readyTasks,
-    in_review: sortTaskIds(inReviewTasks),
-    blocked: sortTaskIds(blockedTasks),
-    needs_feedback: sortTaskIds(needsFeedbackTasks),
+    in_review: sortedInReviewTasks,
+    blocked: sortedBlockedTasks,
+    needs_feedback: sortedNeedsFeedbackTasks,
+    counts: {
+      ready: readyTasks.length,
+      in_review: sortedInReviewTasks.length,
+      blocked: sortedBlockedTasks.length,
+      needs_feedback: sortedNeedsFeedbackTasks.length,
+    },
     next_action: getQueueNextAction({
       active: activeTask ? getTaskRef(activeTask) : null,
       ready: readyTasks,
-      in_review: sortTaskIds(inReviewTasks),
-      blocked: sortTaskIds(blockedTasks),
-      needs_feedback: sortTaskIds(needsFeedbackTasks),
+      in_review: sortedInReviewTasks,
+      blocked: sortedBlockedTasks,
+      needs_feedback: sortedNeedsFeedbackTasks,
     }),
   };
 

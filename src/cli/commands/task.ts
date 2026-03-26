@@ -32,6 +32,7 @@ import {
   type ScaffoldPriority,
 } from './scaffold';
 import { recordVisibilityEvent } from '../visibility-runtime';
+import { syncChangeMetrics } from '../change-metrics';
 
 interface AcceptanceCriterion {
   text: string;
@@ -347,7 +348,10 @@ async function appendOverlayEvent(options: {
   const detailCode = visibility.enabled
     ? visibility.companion.reason ?? (visibility.applied_action === 'hide' ? 'hidden' : 'shown')
     : 'disabled';
-  const outcome = options.requestedAction === 'hide' || !visibility.enabled || visibility.companion.launched
+  const outcome = options.requestedAction === 'hide'
+    || !visibility.enabled
+    || visibility.companion.launched
+    || visibility.companion.reason === 'launch_suppressed'
     ? 'success'
     : 'error';
 
@@ -1458,6 +1462,9 @@ async function startTask(taskId: string, command = 'task start'): Promise<TaskCo
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.started', taskRef, { command });
+  if (matchedTask.change_id) {
+    await syncChangeMetrics(matchedTask.change_id);
+  }
   const overlayVisibility = await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
   await appendOverlayEvent({
     command,
@@ -1570,6 +1577,9 @@ async function resumeTask(taskId: string, command = 'task resume'): Promise<Task
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.resumed', taskRef, { command });
+  if (matchedTask.change_id) {
+    await syncChangeMetrics(matchedTask.change_id);
+  }
   const overlayVisibility = await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
   await appendOverlayEvent({
     command,
@@ -2146,6 +2156,7 @@ async function createTask(changeSlug: string, taskId: string | undefined, rawPri
     priority,
     description: graphTask.title,
   }), 'utf-8');
+  await syncChangeMetrics(changeSlug);
   const overlayVisibility = await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
   await appendOverlayEvent({
     command: 'task scaffold new',
@@ -2305,6 +2316,8 @@ async function createTaskBatchFromPayload(
       path: path.relative(process.cwd(), taskPath) || taskPath,
     });
   }
+
+  await syncChangeMetrics(changeSlug);
 
   const parsedTasksResult = await getParsedTasks();
   const createdTasks = parsedTasksResult.tasks

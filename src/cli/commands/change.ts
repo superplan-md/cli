@@ -9,13 +9,17 @@ import {
 } from '../overlay-visibility';
 import {
   buildChangeTasksIndex,
+  buildSingleTaskChangeIndex,
+  buildTaskContract,
   formatTitleFromSlug,
   getChangePaths,
   isValidChangeSlug,
   pathExists,
+  type ScaffoldPriority,
 } from './scaffold';
 import { ensureChangeArtifacts } from '../workspace-artifacts';
-import { stopNextAction, type NextAction } from '../next-action';
+import { syncChangeMetrics } from '../change-metrics';
+import { commandNextAction, stopNextAction, type NextAction } from '../next-action';
 
 export type ChangeResult =
   | {
@@ -33,6 +37,18 @@ export type ChangeResult =
 const CHANGE_SUBCOMMANDS = new Set([
   'new',
 ]);
+
+function parsePriority(rawPriority: string | undefined): ScaffoldPriority | null {
+  if (rawPriority === undefined) {
+    return 'medium';
+  }
+
+  if (rawPriority === 'high' || rawPriority === 'medium' || rawPriority === 'low') {
+    return rawPriority;
+  }
+
+  return null;
+}
 
 function getOptionValue(args: string[], optionName: string): string | undefined {
   const optionIndex = args.indexOf(optionName);
@@ -58,7 +74,7 @@ function getPositionalArgs(args: string[]): string[] {
       continue;
     }
 
-    if (arg === '--title') {
+    if (arg === '--title' || arg === '--single-task' || arg === '--priority') {
       index += 1;
       continue;
     }
@@ -88,9 +104,15 @@ export function getChangeCommandHelpMessage(options: {
     'Change commands:',
     '  new <slug>                  Create a new tracked change',
     '',
+    'Options:',
+    '  --title <title>             Set the tracked change title',
+    '  --single-task <title>       Create a one-task change and scaffold T-001 immediately',
+    '  --priority <level>          Set the single-task priority (high, medium, low)',
+    '',
     'Examples:',
     '  superplan change new improve-task-authoring --json',
     '  superplan change new improve-task-authoring --title "Improve Task Authoring" --json',
+    '  superplan change new fix-status --title "Fix Status" --single-task "Add status counts" --priority high --json',
   ].join('\n');
 }
 
@@ -108,7 +130,11 @@ function getInvalidChangeCommandError(options: {
   };
 }
 
-async function createChange(changeSlug: string, title?: string): Promise<ChangeResult> {
+async function createChange(changeSlug: string, options: {
+  title?: string;
+  singleTaskTitle?: string;
+  priority?: string;
+}): Promise<ChangeResult> {
   if (!isValidChangeSlug(changeSlug)) {
     return {
       ok: false,
@@ -144,13 +170,39 @@ async function createChange(changeSlug: string, title?: string): Promise<ChangeR
   }
 
   await fs.mkdir(changePaths.tasksDir, { recursive: true });
-  const normalizedTitle = title?.trim() || formatTitleFromSlug(changeSlug);
+  const normalizedTitle = options.title?.trim() || formatTitleFromSlug(changeSlug);
+  const normalizedSingleTaskTitle = options.singleTaskTitle?.trim();
+  const singleTaskPriority = parsePriority(options.priority);
+  if (options.priority !== undefined && !singleTaskPriority) {
+    return {
+      ok: false,
+      error: {
+        code: 'INVALID_PRIORITY',
+        message: 'Priority must be one of: high, medium, low',
+        retryable: false,
+      },
+    };
+  }
   await fs.writeFile(
     changePaths.tasksIndexPath,
-    buildChangeTasksIndex(changeSlug, normalizedTitle),
+    normalizedSingleTaskTitle
+      ? buildSingleTaskChangeIndex(changeSlug, normalizedTitle, normalizedSingleTaskTitle)
+      : buildChangeTasksIndex(changeSlug, normalizedTitle),
     'utf-8',
   );
+  let taskFilePath: string | null = null;
+  if (normalizedSingleTaskTitle) {
+    taskFilePath = path.join(changePaths.tasksDir, 'T-001.md');
+    await fs.writeFile(taskFilePath, buildTaskContract({
+      taskId: 'T-001',
+      changeId: changeSlug,
+      title: normalizedSingleTaskTitle,
+      priority: singleTaskPriority ?? 'medium',
+      description: normalizedSingleTaskTitle,
+    }), 'utf-8');
+  }
   const extraFiles = await ensureChangeArtifacts(changePaths.changeRoot, changeSlug, normalizedTitle);
+  const metricsPath = await syncChangeMetrics(changeSlug);
   const overlay = await refreshChangeOverlay();
 
   return {
@@ -162,11 +214,18 @@ async function createChange(changeSlug: string, title?: string): Promise<ChangeR
           path.relative(process.cwd(), changePaths.tasksIndexPath) || changePaths.tasksIndexPath,
           path.relative(process.cwd(), changePaths.tasksDir) || changePaths.tasksDir,
           ...extraFiles.map(filePath => path.relative(process.cwd(), filePath) || filePath),
+          ...(taskFilePath ? [path.relative(process.cwd(), taskFilePath) || taskFilePath] : []),
+          ...(metricsPath ? [path.relative(process.cwd(), metricsPath) || metricsPath] : []),
         ],
-        next_action: stopNextAction(
-          `Author ${path.relative(process.cwd(), changePaths.tasksIndexPath) || changePaths.tasksIndexPath} as the graph truth for this change before scaffolding tasks.`,
-          'The change scaffold exists now; the next step is to define the task graph before validation or task scaffolding.',
-        ),
+        next_action: normalizedSingleTaskTitle
+          ? commandNextAction(
+              `superplan run ${changeSlug}/T-001 --json`,
+              'The single-task change is scaffolded and ready to start immediately.',
+            )
+          : stopNextAction(
+              `Author ${path.relative(process.cwd(), changePaths.tasksIndexPath) || changePaths.tasksIndexPath} as the graph truth for this change before scaffolding tasks.`,
+              'The change scaffold exists now; the next step is to define the task graph before validation or task scaffolding.',
+            ),
         ...(overlay ? { overlay } : {}),
       },
     };
@@ -188,6 +247,8 @@ export async function change(args: string[]): Promise<ChangeResult> {
   const subcommand = positionalArgs[0];
   const changeSlug = positionalArgs[1];
   const title = getOptionValue(args, '--title');
+  const singleTaskTitle = getOptionValue(args, '--single-task');
+  const priority = getOptionValue(args, '--priority');
 
   if (!subcommand || !CHANGE_SUBCOMMANDS.has(subcommand)) {
     return getInvalidChangeCommandError({ subcommand });
@@ -201,7 +262,11 @@ export async function change(args: string[]): Promise<ChangeResult> {
       });
     }
 
-    return createChange(changeSlug, title);
+    return createChange(changeSlug, {
+      title,
+      singleTaskTitle,
+      priority,
+    });
   }
 
   return getInvalidChangeCommandError({ subcommand });
