@@ -162,56 +162,6 @@ test('init --yes --json honors a repo Claude preference from root CLAUDE.md and 
   assert.match(localHookPayload.hookSpecificOutput.additionalContext, /superplan-entry/);
 });
 
-test('init --yes --json honors a repo Claude preference from root CLAUDE.md and creates local Claude skills', async () => {
-  const sandbox = await makeSandbox('superplan-init-claude-root-');
-
-  await runCli(['install', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
-  await fs.writeFile(path.join(sandbox.cwd, 'CLAUDE.md'), '# repo claude prefs\n');
-  await fs.mkdir(path.join(sandbox.cwd, '.claude'), { recursive: true });
-  await fs.writeFile(
-    path.join(sandbox.cwd, '.claude', 'settings.local.json'),
-    `${JSON.stringify({
-      permissions: {
-        allow: ['Bash(superplan init:*)'],
-      },
-      hooks: {
-        sessionStart: [
-          {
-            command: './session-start',
-          },
-        ],
-      },
-    }, null, 2)}\n`,
-  );
-
-  const initResult = await runCli(['init', '--yes', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
-  const payload = parseCliJson(initResult);
-
-  assert.equal(initResult.code, 0);
-  assert.equal(payload.ok, true);
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-entry', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.claude', 'CLAUDE.md')));
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.claude', 'hooks.json')), false);
-
-  const localSettings = JSON.parse(await fs.readFile(path.join(sandbox.cwd, '.claude', 'settings.local.json'), 'utf-8'));
-  assert.deepEqual(localSettings.permissions, {
-    allow: ['Bash(superplan init:*)'],
-  });
-  assert.equal(localSettings.hooks.SessionStart[0].hooks[0].command, './run-hook.cmd session-start');
-  assert.equal(localSettings.hooks.sessionStart, undefined);
-
-  const localHookRun = await runCommand('bash', ['./run-hook.cmd', 'session-start'], {
-    cwd: path.join(sandbox.cwd, '.claude'),
-    env: {
-      ...sandbox.env,
-      CLAUDE_PLUGIN_ROOT: '1',
-    },
-  });
-  assert.equal(localHookRun.code, 0, localHookRun.stderr || localHookRun.stdout);
-  const localHookPayload = JSON.parse(localHookRun.stdout);
-  assert.match(localHookPayload.hookSpecificOutput.additionalContext, /superplan-entry/);
-});
-
 test('init from a nested repo directory creates scaffolding at the repo root', async () => {
   const sandbox = await makeSandbox('superplan-init-nested-');
   const nestedCwd = path.join(sandbox.cwd, 'apps', 'overlay-desktop');
