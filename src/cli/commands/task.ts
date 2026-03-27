@@ -2128,7 +2128,7 @@ async function completeTasks(taskIds: string[], command = 'task review complete'
       };
     }
 
-    const existingTaskState = runtimeState.tasks[taskRef];
+    const existingTaskState = getRuntimeTaskState(runtimeState, taskRef);
     if (existingTaskState?.status !== 'in_progress') {
       return {
         ok: false,
@@ -2159,16 +2159,17 @@ async function completeTasks(taskIds: string[], command = 'task review complete'
   const completedTasks: ParsedTask[] = [];
 
   for (const { task, taskRef } of tasksToComplete) {
-    const existingTaskState = runtimeState.tasks[taskRef];
-    runtimeState.tasks[taskRef] = {
+    const existingTaskState = getRuntimeTaskState(runtimeState, taskRef);
+    const nextTaskState: RuntimeTaskState = {
       ...existingTaskState,
       status: 'done',
       completed_at: timestamp,
       updated_at: timestamp,
     };
+    setRuntimeTaskState(runtimeState, taskRef, nextTaskState);
 
     await appendEvent(runtimePaths.eventsPath, 'task.approved', taskRef, { command, workflowPhase: 'review' });
-    completedTasks.push(buildRuntimeTaskSnapshot(task, runtimeState.tasks[taskRef]));
+    completedTasks.push(buildRuntimeTaskSnapshot(task, getRuntimeTaskState(runtimeState, taskRef)!));
   }
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
