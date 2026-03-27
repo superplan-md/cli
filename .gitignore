@@ -4,6 +4,7 @@ dist/
 .DS_Store
 *.log
 npm-debug.log*
+AGENTS.MD
 .superplan
 changes
 .agents
@@ -13,3 +14,6 @@ changes
 .amazonq
 .claude
 .gemini
+.cursor
+.opencode
+.github
