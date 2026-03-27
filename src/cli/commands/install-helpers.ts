@@ -129,7 +129,8 @@ All Superplan workflow skills are installed globally on this machine.
 Before making ANY code changes or proposing any plan:
 - Run \`superplan status --json\` to check current state.
 - If a \`.superplan\` directory exists, you ARE in a structured workflow.
-- Claim work with \`superplan run --json\` before editing code.
+- Do not edit repo files until \`superplan run --json\` or \`superplan run <task_id> --json\` returns an active task for this turn.
+- Treat the returned active-task context as the edit gate. If \`run\` fails, do not proceed into implementation.
 - Use the CLI for all lifecycle transitions (block, feedback, complete).
 - Never hand-edit \`.superplan/runtime/\` files.
 
@@ -219,19 +220,24 @@ Task creation rule:
 - Do not treat "this is small" or "this is obvious" as a reason to skip task creation.
 - For tiny work, one \`direct\`-depth task is enough; for multi-step work, shape a full task graph.
 - Task creation happens before the first file edit, not after.
+- Non-trivial edits require a concrete task contract, not just a vague intent to work on something.
+- Multi-file refactors should happen only when the task graph already declares that work.
 
 Canonical loop when Superplan is active:
 1. Run \`superplan status --json\`.
 2. If no active task exists for the current work, shape and scaffold one now before proceeding.
 3. Claim or resume work with \`superplan run --json\` or \`superplan run <task_id> --json\`.
-4. Continue through the owning Superplan phase instead of improvising a parallel workflow.
-5. Use lifecycle commands such as \`superplan task runtime block\`, \`superplan task runtime request-feedback\`, and \`superplan task review complete\`; never hand-edit \`.superplan/runtime/\`.
+4. Do not edit repo files until that run command has returned an active task for this turn.
+5. Continue through the owning Superplan phase instead of improvising a parallel workflow.
+6. Use lifecycle commands such as \`superplan task runtime block\`, \`superplan task runtime request-feedback\`, and \`superplan task review complete\`; never hand-edit \`.superplan/runtime/\`.
 
 Decision guardrails:
 - If readiness is missing, give the concrete missing-layer guidance and stop.
 - If work is already shaped, resume the owning execution or review phase instead of routing from scratch.
 - If the request is large, ambiguous, or multi-workstream, route before implementing.
 - If the agent is about to edit a file without a tracked task, stop and create the task first.
+- If \`superplan run\`, \`status\`, or task activation returns an unexpected lifecycle or runtime error, the next action must be another Superplan command, not implementation.
+- If \`superplan run\` fails, do not proceed until the task is blocked, reopened, repaired, or clarified through Superplan.
 ${MANAGED_ENTRY_INSTRUCTIONS_BLOCK_END}`;
 }
 
@@ -249,6 +255,8 @@ Non-negotiable requirements:
 - For packed, ambiguous, or multi-constraint requests, route through Superplan first and do not begin implementation directly.
 - For any repo work that changes files or state, create a tracked Superplan task before acting — even small work.
 - Task creation is user visibility, not ceremony; users cannot see what the agent is doing without it.
+- Do not edit repo files until \`superplan run --json\` or \`superplan run <task_id> --json\` returns an active task for this turn.
+- If \`run\` or a lifecycle command fails unexpectedly, the next move must stay inside Superplan until runtime state is repaired or clarified.
 
 Embedded \`superplan-entry\` rule for reinforcement:
 
@@ -657,14 +665,15 @@ Common commands:
 Execution loop:
 1. Check \`superplan status --json\`
 2. Claim work with \`superplan run --json\`
-3. Use the task returned by \`superplan run --json\` before editing code; use \`superplan run <task_id> --json\` when one known ready or paused task should become active; reach for \`superplan task inspect show <task_id> --json\` only when you need one task's full details and readiness reasons
-4. Update runtime state with block, feedback, complete, or fix commands instead of editing markdown state by hand
-5. After implementation proof passes, do not end the turn with the task still effectively pending or in progress; move it through \`superplan task review complete <task_id> --json\` and the appropriate review path, or state the exact blocker
-6. Use \`superplan context bootstrap --json\` when durable workspace context entrypoints are missing, then keep \`.superplan\/context\/\`, \`.superplan\/decisions.md\`, \`.superplan\/gotchas.md\`, and \`.superplan\/plan.md\` honest instead of inventing ad hoc files
-7. When shaping tracked work, author the graph in \`.superplan\/changes\/<change-slug>\/tasks.md\` first, run \`superplan validate <change-slug> --json\`, then scaffold contracts by graph-declared task id instead of hand-creating \`tasks\/T-xxx.md\`
-8. When the request is large, ambiguous, or multi-workstream, do not jump straight from the raw request into task scaffolding; clarify expectations, capture spec or plan truth when needed, then finalize the graph
-9. If overlay support is enabled for this workspace and a launchable companion is installed, \`superplan task scaffold new\`, \`superplan task scaffold batch\`, \`superplan run\`, \`superplan run <task_id>\`, and \`superplan task review reopen\` can auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with \`superplan doctor --json\` and \`superplan overlay ensure --json\` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use \`superplan overlay hide --json\` when it becomes idle or empty
-10. After overlay-triggering commands, inspect the returned \`overlay\` payload; if \`overlay.companion.launched\` is false, surface \`overlay.companion.reason\` instead of assuming the overlay appeared
+3. Do not edit repo files until \`superplan run --json\` or \`superplan run <task_id> --json\` has returned an active task context for this turn; use that payload as the edit gate
+4. If \`run\`, \`status\`, or task activation returns an unexpected lifecycle or runtime error, stay inside Superplan and repair, block, reopen, or inspect before attempting implementation
+5. Update runtime state with block, feedback, complete, or fix commands instead of editing markdown state by hand
+6. After implementation proof passes, do not end the turn with the task still effectively pending or in progress; move it through \`superplan task review complete <task_id> --json\` and the appropriate review path, or state the exact blocker
+7. Use \`superplan context bootstrap --json\` when durable workspace context entrypoints are missing, then keep \`.superplan\/context\/\`, \`.superplan\/decisions.md\`, \`.superplan\/gotchas.md\`, and \`.superplan\/plan.md\` honest instead of inventing ad hoc files
+8. When shaping tracked work, author the graph in \`.superplan\/changes\/<change-slug>\/tasks.md\` first, run \`superplan validate <change-slug> --json\`, then scaffold contracts by graph-declared task id instead of hand-creating \`tasks\/T-xxx.md\`
+9. When the request is large, ambiguous, or multi-workstream, do not jump straight from the raw request into task scaffolding; clarify expectations, capture spec or plan truth when needed, then finalize the graph
+10. If overlay support is enabled for this workspace and a launchable companion is installed, \`superplan task scaffold new\`, \`superplan task scaffold batch\`, \`superplan run\`, \`superplan run <task_id>\`, and \`superplan task review reopen\` can auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with \`superplan doctor --json\` and \`superplan overlay ensure --json\` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use \`superplan overlay hide --json\` when it becomes idle or empty
+11. After overlay-triggering commands, inspect the returned \`overlay\` payload; if \`overlay.companion.launched\` is false, surface \`overlay.companion.reason\` instead of assuming the overlay appeared
 
 Authoring rule:
 - Use \`superplan context bootstrap --json\` to create missing workspace context entrypoints instead of hand-writing them from scratch

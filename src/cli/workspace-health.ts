@@ -1,8 +1,12 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { execFile as execFileCallback } from 'node:child_process';
+import { promisify } from 'node:util';
 import { parse, type ParseDiagnostic, type ParsedTask } from './commands/parse';
 import { getTaskRef } from './task-identity';
 import { getWorkspaceArtifactPaths } from './workspace-artifacts';
+
+const execFile = promisify(execFileCallback);
 
 export interface WorkspaceHealthIssue {
   code: string;
@@ -15,8 +19,19 @@ interface RuntimeTaskState {
   status: string;
 }
 
+interface RuntimeChangeState {
+  active_task_ref?: string | null;
+  tasks?: Record<string, RuntimeTaskState>;
+}
+
 interface RuntimeState {
-  tasks: Record<string, RuntimeTaskState>;
+  changes?: Record<string, RuntimeChangeState>;
+  tasks?: Record<string, RuntimeTaskState>;
+}
+
+interface NormalizedRuntimeState {
+  tasksByRef: Map<string, RuntimeTaskState>;
+  activeTaskRef: string | null;
 }
 
 async function pathExists(targetPath: string): Promise<boolean> {
@@ -31,12 +46,9 @@ async function pathExists(targetPath: string): Promise<boolean> {
 async function readRuntimeState(runtimeFilePath: string): Promise<RuntimeState> {
   try {
     const content = await fs.readFile(runtimeFilePath, 'utf-8');
-    const parsedContent = JSON.parse(content) as Partial<RuntimeState>;
-    return {
-      tasks: parsedContent.tasks ?? {},
-    };
+    return JSON.parse(content) as RuntimeState;
   } catch {
-    return { tasks: {} };
+    return {};
   }
 }
 
@@ -50,6 +62,53 @@ async function getChangeDirs(changesRoot: string): Promise<string[]> {
     .filter(entry => entry.isDirectory())
     .map(entry => path.join(changesRoot, entry.name))
     .sort((left, right) => left.localeCompare(right));
+}
+
+function normalizeRuntimeState(rawState: RuntimeState, tasks: ParsedTask[]): NormalizedRuntimeState {
+  const tasksByRef = new Map<string, RuntimeTaskState>();
+  const taskRefsByLocalId = new Map<string, string[]>();
+
+  for (const task of tasks) {
+    const taskRef = getTaskRef(task);
+    const matches = taskRefsByLocalId.get(task.task_id) ?? [];
+    matches.push(taskRef);
+    taskRefsByLocalId.set(task.task_id, matches);
+  }
+
+  let activeTaskRef: string | null = null;
+
+  if (rawState.changes) {
+    for (const [changeId, changeState] of Object.entries(rawState.changes)) {
+      for (const [taskId, runtimeTask] of Object.entries(changeState.tasks ?? {})) {
+        const taskRef = `${changeId}/${taskId}`;
+        tasksByRef.set(taskRef, runtimeTask);
+        if (runtimeTask.status === 'in_progress' && !activeTaskRef) {
+          activeTaskRef = changeState.active_task_ref === taskRef ? taskRef : taskRef;
+        }
+      }
+    }
+
+    return { tasksByRef, activeTaskRef };
+  }
+
+  for (const [rawTaskId, runtimeTask] of Object.entries(rawState.tasks ?? {})) {
+    let taskRef = rawTaskId;
+
+    if (!rawTaskId.includes('/')) {
+      const matches = taskRefsByLocalId.get(rawTaskId) ?? [];
+      if (matches.length !== 1) {
+        continue;
+      }
+      [taskRef] = matches;
+    }
+
+    tasksByRef.set(taskRef, runtimeTask);
+    if (runtimeTask.status === 'in_progress' && !activeTaskRef) {
+      activeTaskRef = taskRef;
+    }
+  }
+
+  return { tasksByRef, activeTaskRef };
 }
 
 function taskStateIssues(task: ParsedTask, runtimeTask: RuntimeTaskState | undefined): WorkspaceHealthIssue[] {
@@ -91,6 +150,103 @@ function taskStateIssues(task: ParsedTask, runtimeTask: RuntimeTaskState | undef
   return issues;
 }
 
+async function getGitChangedFiles(workspaceRoot: string): Promise<string[]> {
+  try {
+    const { stdout } = await execFile('git', ['-C', workspaceRoot, 'status', '--porcelain=v1', '--untracked-files=all'], {
+      cwd: workspaceRoot,
+    });
+
+    return stdout
+      .split('\n')
+      .map(line => line.trimEnd())
+      .filter(Boolean)
+      .map(line => {
+        const rawPath = line.slice(3);
+        const renameSeparator = rawPath.indexOf(' -> ');
+        return renameSeparator === -1 ? rawPath : rawPath.slice(renameSeparator + 4);
+      })
+      .map(filePath => filePath.replace(/\\/g, '/'))
+      .filter(filePath => filePath && !filePath.startsWith('.superplan/runtime/'));
+  } catch {
+    return [];
+  }
+}
+
+function normalizeScopePath(workspaceRoot: string, scopePath: string): string {
+  const absolutePath = path.isAbsolute(scopePath)
+    ? scopePath
+    : path.resolve(workspaceRoot, scopePath);
+  return path.relative(workspaceRoot, absolutePath).replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+function fileMatchesScope(filePath: string, scopePath: string): boolean {
+  return filePath === scopePath || filePath.startsWith(`${scopePath}/`);
+}
+
+function buildEditDriftIssues(
+  workspaceRoot: string,
+  tasks: ParsedTask[],
+  runtimeState: NormalizedRuntimeState,
+  changedFiles: string[],
+): WorkspaceHealthIssue[] {
+  if (changedFiles.length === 0) {
+    return [];
+  }
+
+  const activeTask = runtimeState.activeTaskRef
+    ? tasks.find(task => getTaskRef(task) === runtimeState.activeTaskRef)
+    : undefined;
+
+  if (!activeTask) {
+    return [{
+      code: 'WORKSPACE_EDITS_WITHOUT_ACTIVE_TASK',
+      message: `Workspace has ${changedFiles.length} changed file${changedFiles.length === 1 ? '' : 's'} but no active claimed task.`,
+      fix: 'Run superplan run --json to claim work before editing, or clean up the existing diff intentionally.',
+    }];
+  }
+
+  const scopePaths = activeTask.task_recipe.scope_paths
+    .map(scopePath => normalizeScopePath(workspaceRoot, scopePath))
+    .filter(Boolean);
+
+  if (scopePaths.length === 0) {
+    return [];
+  }
+
+  const allowedPaths = new Set<string>();
+  if (activeTask.task_file_path) {
+    allowedPaths.add(normalizeScopePath(workspaceRoot, activeTask.task_file_path));
+  }
+  for (const scopePath of scopePaths) {
+    allowedPaths.add(scopePath);
+  }
+
+  const outOfScopeFiles = changedFiles.filter(filePath => {
+    if (filePath.startsWith('.superplan/changes/')) {
+      return false;
+    }
+
+    for (const allowedPath of allowedPaths) {
+      if (fileMatchesScope(filePath, allowedPath)) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  if (outOfScopeFiles.length === 0) {
+    return [];
+  }
+
+  return [{
+    code: 'WORKSPACE_EDIT_SCOPE_DRIFT',
+    message: `Active task ${activeTask.task_id} has scoped edits, but changed files fall outside that scope: ${outOfScopeFiles.join(', ')}`,
+    fix: `Update ${activeTask.task_id} scope bullets or move the drifted edits into the correct tracked task before continuing.`,
+    task_id: activeTask.task_id,
+  }];
+}
+
 export async function collectWorkspaceHealthIssues(workspaceRoot: string): Promise<WorkspaceHealthIssue[]> {
   const superplanRoot = path.join(workspaceRoot, '.superplan');
   if (!await pathExists(superplanRoot)) {
@@ -119,8 +275,8 @@ export async function collectWorkspaceHealthIssues(workspaceRoot: string): Promi
     });
   }
 
-  const runtimeState = await readRuntimeState(path.join(superplanRoot, 'runtime', 'tasks.json'));
   const changeDirs = await getChangeDirs(path.join(superplanRoot, 'changes'));
+  const parsedTasks: ParsedTask[] = [];
 
   for (const changeDir of changeDirs) {
     const parsedResult = await parse([changeDir], { json: true });
@@ -142,10 +298,24 @@ export async function collectWorkspaceHealthIssues(workspaceRoot: string): Promi
       });
     }
 
-    for (const task of parsedResult.data.tasks) {
-      issues.push(...taskStateIssues(task, runtimeState.tasks[getTaskRef(task)]));
-    }
+    parsedTasks.push(...parsedResult.data.tasks);
   }
+
+  const runtimeState = normalizeRuntimeState(
+    await readRuntimeState(path.join(superplanRoot, 'runtime', 'tasks.json')),
+    parsedTasks,
+  );
+
+  for (const task of parsedTasks) {
+    issues.push(...taskStateIssues(task, runtimeState.tasksByRef.get(getTaskRef(task))));
+  }
+
+  issues.push(...buildEditDriftIssues(
+    workspaceRoot,
+    parsedTasks,
+    runtimeState,
+    await getGitChangedFiles(workspaceRoot),
+  ));
 
   return issues;
 }

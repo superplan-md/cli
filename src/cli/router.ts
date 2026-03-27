@@ -168,6 +168,13 @@ function inferErrorNextAction(command: string | undefined, error: { code: string
     );
   }
 
+  if (error.code === 'INVALID_STATE_MULTIPLE_IN_PROGRESS' || error.code === 'RUNTIME_CONFLICT_AMBIGUOUS_LEGACY_TASK_ID') {
+    return commandNextAction(
+      'superplan task repair fix --json',
+      'Runtime state is inconsistent, so the deterministic next step is repair rather than more lifecycle transitions.',
+    );
+  }
+
   if (error.code === 'TASK_NOT_IN_PROGRESS' || error.code === 'TASK_NOT_STARTED' || error.code === 'TASK_NOT_READY') {
     return commandNextAction(
       'superplan status --json',

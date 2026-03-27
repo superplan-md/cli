@@ -12,8 +12,9 @@ interface SyncDiagnostic {
 
 interface SyncFixAction {
   task_id: string;
-  action: 'reset' | 'block';
+  action: 'reset' | 'block' | 'migrate';
   reason?: string;
+  to_task_id?: string;
 }
 
 interface SyncDeps {

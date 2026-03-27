@@ -2,6 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs/promises');
+const { execFile } = require('node:child_process');
+const { promisify } = require('node:util');
+
+const execFileAsync = promisify(execFile);
 
 const {
   loadDistModule,
@@ -10,6 +14,7 @@ const {
   pathExists,
   runCli,
   withSandboxEnv,
+  writeChangeGraph,
   writeFile,
 } = require('./helpers.cjs');
 
@@ -92,6 +97,73 @@ Close the workflow gap.
   assert(issueCodes.has('WORKSPACE_CONTEXT_README_MISSING'));
   assert(issueCodes.has('WORKSPACE_PLAN_MISSING'));
   assert(issueCodes.has('TASK_STATE_DRIFT_PENDING_WITH_COMPLETED_ACCEPTANCE'));
+});
+
+test('doctor reports changed files when no active task is claimed', async () => {
+  const sandbox = await makeSandbox('superplan-doctor-unclaimed-diff-');
+
+  await execFileAsync('git', ['init'], { cwd: sandbox.cwd });
+  await runCli(['init', '--yes', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+  await execFileAsync('git', ['add', '-A'], { cwd: sandbox.cwd });
+  await execFileAsync('git', ['-c', 'user.name=Test User', '-c', 'user.email=test@example.com', 'commit', '-m', 'baseline'], {
+    cwd: sandbox.cwd,
+  });
+
+  await writeFile(path.join(sandbox.cwd, 'README.md'), 'drift\n');
+
+  const doctorPayload = parseCliJson(await runCli(['doctor', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  const issueCodes = new Set(doctorPayload.data.issues.map(issue => issue.code));
+
+  assert.equal(doctorPayload.ok, true);
+  assert(issueCodes.has('WORKSPACE_EDITS_WITHOUT_ACTIVE_TASK'));
+});
+
+test('doctor reports edit scope drift for an active scoped task', async () => {
+  const sandbox = await makeSandbox('superplan-doctor-scope-drift-');
+
+  await execFileAsync('git', ['init'], { cwd: sandbox.cwd });
+  await runCli(['init', '--yes', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+
+  await writeChangeGraph(sandbox.cwd, 'demo', {
+    title: 'Demo',
+    entries: [
+      { task_id: 'T-001', title: 'Scoped work' },
+    ],
+  });
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), `---
+task_id: T-001
+status: pending
+priority: high
+---
+
+## Description
+Scoped work
+
+## Acceptance Criteria
+- [ ] Stay within the declared scope.
+
+## Execution
+- scope: src/allowed
+`);
+  await writeFile(path.join(sandbox.cwd, 'src', 'allowed', 'inside.ts'), 'export const inside = true;\n');
+
+  await execFileAsync('git', ['add', '-A'], { cwd: sandbox.cwd });
+  await execFileAsync('git', ['-c', 'user.name=Test User', '-c', 'user.email=test@example.com', 'commit', '-m', 'baseline'], {
+    cwd: sandbox.cwd,
+  });
+
+  const runPayload = parseCliJson(await runCli(['run', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  assert.equal(runPayload.ok, true);
+  assert.equal(runPayload.data.task_id, 'demo/T-001');
+
+  await writeFile(path.join(sandbox.cwd, 'src', 'outside.ts'), 'export const outside = true;\n');
+
+  const doctorPayload = parseCliJson(await runCli(['doctor', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  const driftIssue = doctorPayload.data.issues.find(issue => issue.code === 'WORKSPACE_EDIT_SCOPE_DRIFT');
+
+  assert.equal(doctorPayload.ok, true);
+  assert.ok(driftIssue);
+  assert.match(driftIssue.message, /src\/outside\.ts/);
 });
 
 test('context bootstrap creates the durable workspace context entrypoints', async () => {

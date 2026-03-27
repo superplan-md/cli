@@ -1,4 +1,3 @@
-const DONE_ACK_WINDOW_MS = 5 * 60 * 1000;
 const ALERT_SOUND_WINDOW_MS = 15 * 1000;
 const ALERT_SOUND_EVENT_KINDS = new Set(['needs_feedback', 'all_tasks_done']);
 
@@ -139,19 +138,6 @@ function parseTimestamp(value) {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-function getLatestDoneEventTimestamp(snapshot) {
-  const matchingEvents = (snapshot.events ?? [])
-    .filter(event => event.kind === 'all_tasks_done')
-    .map(event => parseTimestamp(event.created_at))
-    .filter(timestamp => timestamp !== null);
-
-  if (matchingEvents.length > 0) {
-    return Math.max(...matchingEvents);
-  }
-
-  return parseTimestamp(snapshot.updated_at);
-}
-
 function getLatestAlertEvent(snapshot) {
   if (!snapshot) {
     return null;
@@ -213,12 +199,7 @@ export function hasRenderableSnapshotContent(snapshot, nowMs = Date.now()) {
   }
 
   if (snapshot.attention_state === 'all_tasks_done') {
-    const latestDoneTimestamp = getLatestDoneEventTimestamp(snapshot);
-    if (latestDoneTimestamp === null) {
-      return false;
-    }
-
-    return nowMs - latestDoneTimestamp <= DONE_ACK_WINDOW_MS;
+    return true;
   }
 
   return false;

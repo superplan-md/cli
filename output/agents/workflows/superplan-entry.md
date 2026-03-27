@@ -176,11 +176,14 @@ Execution default:
 
 1. check `superplan status --json`
 2. claim work with `superplan run --json`
-3. use the task returned by `superplan run --json`; use `superplan run <task_id> --json` when one specific task should become active; only call `superplan task inspect show <task_id> --json` when you need one task's full details and readiness reasons
-4. execute through the workflow spine, especially `superplan-execute`, instead of ad hoc task mutation
-5. block, request feedback, or complete through the runtime commands rather than editing markdown state by hand
-6. if overlay support is enabled for the workspace and a launchable companion is installed, expect `superplan task scaffold new`, `superplan task scaffold batch`, `superplan run`, `superplan run <task_id>`, and `superplan task review reopen` to auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle again
-7. after overlay-triggering commands, inspect the returned overlay payload; if `overlay.companion.launched` is false, surface `overlay.companion.reason` instead of assuming the overlay appeared
+3. do not edit repo files until `superplan run --json` or `superplan run <task_id> --json` has returned an active task for this turn
+4. treat the returned active-task context as the edit gate; if no active task context was returned, implementation does not begin
+5. use the task returned by `superplan run`; only call `superplan task inspect show <task_id> --json` when you need one task's full details and readiness reasons
+6. if `run`, `status`, or task activation returns an unexpected lifecycle or runtime error, the next action must be another Superplan command, not code edits
+7. execute through the workflow spine, especially `superplan-execute`, instead of ad hoc task mutation
+8. block, request feedback, repair, reopen, or complete through the runtime commands rather than editing markdown state by hand
+9. if overlay support is enabled for the workspace and a launchable companion is installed, expect `superplan task scaffold new`, `superplan task scaffold batch`, `superplan run`, `superplan run <task_id>`, and `superplan task review reopen` to auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle again
+10. after overlay-triggering commands, inspect the returned overlay payload; if `overlay.companion.launched` is false, surface `overlay.companion.reason` instead of assuming the overlay appeared
 
 Authoring default:
 

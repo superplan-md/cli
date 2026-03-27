@@ -31,7 +31,7 @@ After install, Superplan asks whether you want to run `superplan init` immediate
 Windows PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.ps1 | iex
+curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd; if ($LASTEXITCODE -eq 0) { .\install-superplan.cmd }
 ```
 
 Windows Command Prompt:
@@ -120,7 +120,7 @@ That uses a stable installer URL and resolves the latest published GitHub releas
 For Windows PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.ps1 | iex
+curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd; if ($LASTEXITCODE -eq 0) { .\install-superplan.cmd }
 ```
 
 For Windows Command Prompt:
@@ -132,6 +132,12 @@ curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superp
 The Windows installer resolves the latest published GitHub release tag for the CLI source when `SUPERPLAN_REF` is not pinned, and it installs the Windows overlay companion when the matching release artifact is available.
 After install, Superplan asks whether you want to run `superplan init` immediately in the directory you launched from.
 
+If you want the direct PowerShell installer instead, this still works:
+
+```powershell
+irm https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.ps1 | iex
+```
+
 **Note on Overlay:** The Superplan Overlay desktop companion is experimental and disabled by default. It may cause system instability or crashes on some machines. Only enable it if you need the visual interface.
 
 If you want to pin a specific release instead, keep the same installer URL and set `SUPERPLAN_REF` explicitly:
@@ -141,7 +147,7 @@ curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/
 ```
 
 ```powershell
-$env:SUPERPLAN_REF='<version-tag>'; irm https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.ps1 | iex
+$env:SUPERPLAN_REF='<version-tag>'; curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd; if ($LASTEXITCODE -eq 0) { .\install-superplan.cmd }
 ```
 
 ```bat

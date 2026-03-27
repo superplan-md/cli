@@ -90,7 +90,7 @@ test('snapshot task progress falls back to board completion counts when task che
   });
 });
 
-test('renderable snapshot helper hides stale all-tasks-done acknowledgement snapshots', async () => {
+test('renderable snapshot helper keeps all-tasks-done snapshots visible until explicitly hidden', async () => {
   const { hasRenderableSnapshotContent } = await loadRuntimeHelpersModule();
 
   const staleDoneSnapshot = {
@@ -119,7 +119,7 @@ test('renderable snapshot helper hides stale all-tasks-done acknowledgement snap
 
   assert.equal(
     hasRenderableSnapshotContent(staleDoneSnapshot, Date.parse('2026-03-20T00:10:00.000Z')),
-    false,
+    true,
   );
 
   assert.equal(

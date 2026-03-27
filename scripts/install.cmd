@@ -16,5 +16,16 @@ if exist "%LOCAL_PS1%" (
   exit /b %ERRORLEVEL%
 )
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-Expression (Invoke-RestMethod '%REMOTE_PS1%')"
-exit /b %ERRORLEVEL%
+set "TEMP_PS1=%TEMP%\superplan-install-%RANDOM%%RANDOM%.ps1"
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -UseBasicParsing '%REMOTE_PS1%' -OutFile '%TEMP_PS1%'"
+if errorlevel 1 (
+  echo error: failed to download installer from %REMOTE_PS1% 1>&2
+  if exist "%TEMP_PS1%" del /f /q "%TEMP_PS1%" >nul 2>nul
+  exit /b 1
+)
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%TEMP_PS1%"
+set "EXIT_CODE=%ERRORLEVEL%"
+if exist "%TEMP_PS1%" del /f /q "%TEMP_PS1%" >nul 2>nul
+exit /b %EXIT_CODE%

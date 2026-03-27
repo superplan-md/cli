@@ -16,6 +16,17 @@ const {
   writeJson,
 } = require('./helpers.cjs');
 
+function getRuntimeTask(runtimeState, taskRef) {
+  const separatorIndex = taskRef.indexOf('/');
+  if (separatorIndex === -1) {
+    return undefined;
+  }
+
+  const changeId = taskRef.slice(0, separatorIndex);
+  const taskId = taskRef.slice(separatorIndex + 1);
+  return runtimeState.changes?.[changeId]?.tasks?.[taskId];
+}
+
 test('task selector returns the selected task contract and status reflects priority-aware ready selection', async () => {
   const sandbox = await makeSandbox('superplan-task-priority-');
   const { selectNextTask } = loadDistModule('cli/commands/task.js');
@@ -118,6 +129,15 @@ Run me
 - [ ] A
 `);
 
+  await writeFile(path.join(sandbox.cwd, '.codex', 'skills', 'plan-work', 'SKILL.md'), '# plan');
+  await writeFile(path.join(sandbox.cwd, '.codex', 'skills', 'verify-ui', 'SKILL.md'), '# verify');
+  await writeFile(path.join(sandbox.cwd, 'package.json'), JSON.stringify({
+    scripts: {
+      start: 'node dist/cli/main.js',
+      test: 'node --test',
+    },
+  }, null, 2));
+
   const firstRunResult = await runCli(['run', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const firstRunPayload = parseCliJson(firstRunResult);
   assert.equal(firstRunPayload.ok, true);
@@ -127,11 +147,25 @@ Run me
   assert.equal(firstRunPayload.data.task.task_id, 'T-100');
   assert.equal(firstRunPayload.data.task.status, 'in_progress');
   assert.equal(firstRunPayload.data.task.description, 'Run me');
+  assert.equal(firstRunPayload.data.active_task_context.task_ref, 'demo/T-100');
+  assert.equal(firstRunPayload.data.active_task_context.task_id, 'T-100');
+  assert.equal(firstRunPayload.data.active_task_context.change_id, 'demo');
+  assert.equal(firstRunPayload.data.active_task_context.task_contract_present, true);
+  assert.equal(firstRunPayload.data.active_task_context.environment.SUPERPLAN_ACTIVE_TASK, 'demo/T-100');
+  assert.equal(firstRunPayload.data.active_task_context.environment.SUPERPLAN_ACTIVE_CHANGE, 'demo');
+  assert.equal(firstRunPayload.data.active_task_context.edit_gate.claimed, true);
+  assert.equal(firstRunPayload.data.active_task_context.edit_gate.can_edit, true);
+  assert.equal(firstRunPayload.data.active_task_context.execution_handoff.planning_authority, 'repo_harness_first');
+  assert.equal(firstRunPayload.data.active_task_context.execution_handoff.execution_authority, 'superplan');
+  assert.equal(firstRunPayload.data.active_task_context.execution_handoff.verification_authority, 'repo_harness_first');
+  assert.equal(firstRunPayload.data.active_task_context.execution_handoff.workflow_surfaces.planning_surfaces.includes('codex skill: plan-work'), true);
+  assert.equal(firstRunPayload.data.active_task_context.execution_handoff.workflow_surfaces.verification_surfaces.includes('codex skill: verify-ui'), true);
+  assert.equal(firstRunPayload.data.active_task_context.execution_handoff.workflow_surfaces.verification_surfaces.includes('package script: npm test'), true);
   assert.equal(firstRunPayload.error, null);
 
   const runtimeState = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'));
-  assert.equal(runtimeState.tasks['demo/T-100'].status, 'in_progress');
-  assert.ok(runtimeState.tasks['demo/T-100'].started_at);
+  assert.equal(getRuntimeTask(runtimeState, 'demo/T-100').status, 'in_progress');
+  assert.ok(getRuntimeTask(runtimeState, 'demo/T-100').started_at);
 
   const secondRunResult = await runCli(['run', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const secondRunPayload = parseCliJson(secondRunResult);
@@ -141,6 +175,7 @@ Run me
   assert.equal(secondRunPayload.data.reason, 'Task is currently in progress');
   assert.equal(secondRunPayload.data.task.task_id, 'T-100');
   assert.equal(secondRunPayload.data.task.status, 'in_progress');
+  assert.equal(secondRunPayload.data.active_task_context.environment.SUPERPLAN_ACTIVE_TASK, 'demo/T-100');
   assert.equal(secondRunPayload.error, null);
 });
 
@@ -176,8 +211,173 @@ Start from nested cwd
 
   assert.equal(startPayload.data.action, 'start');
   assert.equal(startPayload.data.status, 'in_progress');
-  assert.equal((await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'))).tasks['demo/T-150'].status, 'in_progress');
+  assert.equal(getRuntimeTask(await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json')), 'demo/T-150').status, 'in_progress');
   assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
+});
+
+test('qualified task refs remain runnable when multiple changes reuse the same local task id', async () => {
+  const sandbox = await makeSandbox('superplan-qualified-task-refs-');
+
+  await writeChangeGraph(sandbox.cwd, 'alpha', {
+    title: 'Alpha',
+    entries: [
+      { task_id: 'T-001', title: 'Alpha task' },
+    ],
+  });
+  await writeChangeGraph(sandbox.cwd, 'beta', {
+    title: 'Beta',
+    entries: [
+      { task_id: 'T-001', title: 'Beta task' },
+    ],
+  });
+
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'alpha', 'tasks', 'T-001.md'), `---
+task_id: T-001
+status: pending
+priority: high
+---
+
+## Description
+Alpha task
+
+## Acceptance Criteria
+- [ ] A
+`);
+
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'beta', 'tasks', 'T-001.md'), `---
+task_id: T-001
+status: pending
+priority: high
+---
+
+## Description
+Beta task
+
+## Acceptance Criteria
+- [ ] B
+`);
+
+  const qualifiedRunPayload = parseCliJson(await runCli(['run', 'alpha/T-001', '--json'], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+  assert.equal(qualifiedRunPayload.ok, true);
+  assert.equal(qualifiedRunPayload.data.task_id, 'alpha/T-001');
+  assert.equal(getRuntimeTask(await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json')), 'alpha/T-001').status, 'in_progress');
+
+  const ambiguousRunPayload = parseCliJson(await runCli(['run', 'T-001', '--json'], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+  assert.equal(ambiguousRunPayload.ok, false);
+  assert.equal(ambiguousRunPayload.error.code, 'TASK_ID_AMBIGUOUS');
+});
+
+test('runtime auto-migrates a uniquely resolvable legacy bare runtime id on first runtime command', async () => {
+  const sandbox = await makeSandbox('superplan-repair-legacy-runtime-');
+
+  await writeChangeGraph(sandbox.cwd, 'demo', {
+    title: 'Demo',
+    entries: [
+      { task_id: 'T-100', title: 'Repair me' },
+    ],
+  });
+
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-100.md'), `---
+task_id: T-100
+status: pending
+priority: high
+---
+
+## Description
+Repair me
+
+## Acceptance Criteria
+- [ ] A
+`);
+
+  await writeJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'), {
+    tasks: {
+      'T-100': {
+        status: 'in_progress',
+        started_at: '2026-03-27T10:00:00.000Z',
+        updated_at: '2026-03-27T10:00:00.000Z',
+      },
+    },
+  });
+
+  const statusPayload = parseCliJson(await runCli(['status', '--json'], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+  assert.equal(statusPayload.ok, true);
+
+  const runtimeState = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'));
+  assert.equal(getRuntimeTask(runtimeState, 'demo/T-100').status, 'in_progress');
+});
+
+test('ambiguous legacy bare runtime ids do not shadow qualified change-scoped execution', async () => {
+  const sandbox = await makeSandbox('superplan-reset-legacy-runtime-');
+
+  await writeChangeGraph(sandbox.cwd, 'alpha', {
+    title: 'Alpha',
+    entries: [
+      { task_id: 'T-001', title: 'Alpha task' },
+    ],
+  });
+  await writeChangeGraph(sandbox.cwd, 'beta', {
+    title: 'Beta',
+    entries: [
+      { task_id: 'T-001', title: 'Beta task' },
+    ],
+  });
+
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'alpha', 'tasks', 'T-001.md'), `---
+task_id: T-001
+status: pending
+priority: high
+---
+
+## Description
+Alpha task
+
+## Acceptance Criteria
+- [ ] A
+`);
+
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'beta', 'tasks', 'T-001.md'), `---
+task_id: T-001
+status: pending
+priority: high
+---
+
+## Description
+Beta task
+
+## Acceptance Criteria
+- [ ] B
+`);
+
+  await writeJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'), {
+    tasks: {
+      'T-001': {
+        status: 'in_progress',
+        started_at: '2026-03-27T10:00:00.000Z',
+        updated_at: '2026-03-27T10:00:00.000Z',
+      },
+    },
+  });
+
+  const runPayload = parseCliJson(await runCli(['run', 'alpha/T-001', '--json'], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+  assert.equal(runPayload.ok, true);
+  assert.equal(runPayload.data.task_id, 'alpha/T-001');
+
+  const runtimeState = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'));
+  assert.equal(getRuntimeTask(runtimeState, 'alpha/T-001').status, 'in_progress');
+  assert.equal(getRuntimeTask(runtimeState, 'beta/T-001'), undefined);
 });
 
 test('task inspect show surfaces authored execution and verification recipes', async () => {
@@ -352,7 +552,7 @@ Lifecycle task
   assert.equal(resetPayload.error, null);
 
   const eventsContent = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'));
-  assert.deepEqual(eventsContent, { tasks: {} });
+  assert.deepEqual(eventsContent, { changes: {} });
 
   const eventsFile = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'runtime', 'events.ndjson'), 'utf-8');
   const eventTypes = eventsFile
@@ -583,25 +783,94 @@ Broken dependency task
     },
   ]);
   assert.equal(fixPayload.data.next_action.type, 'command');
-  assert.equal(fixPayload.data.next_action.command, 'superplan status --json');
+  assert.equal(fixPayload.data.next_action.command, 'superplan run --json');
   assert.equal(fixPayload.error, null);
 
   const runtimeState = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'));
   assert.deepEqual(runtimeState, {
-    tasks: {
-      'demo/T-402': {
-        status: 'blocked',
-        started_at: '2026-03-19T11:00:00.000Z',
-        reason: 'Dependency not satisfied',
-        updated_at: runtimeState.tasks['demo/T-402'].updated_at,
+    changes: {
+      demo: {
+        active_task_ref: null,
+        updated_at: runtimeState.changes.demo.updated_at,
+        tasks: {
+          'T-402': {
+            status: 'blocked',
+            started_at: '2026-03-19T11:00:00.000Z',
+            reason: 'Dependency not satisfied',
+            updated_at: runtimeState.changes.demo.tasks['T-402'].updated_at,
+          },
+        },
       },
     },
   });
-  assert.ok(runtimeState.tasks['demo/T-402'].updated_at);
+  assert.ok(runtimeState.changes.demo.tasks['T-402'].updated_at);
 
   const deepDoctorAfter = parseCliJson(await runCli(['doctor', '--deep', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   const doctorCodesAfter = new Set(deepDoctorAfter.data.issues.map(issue => issue.code));
   assert(doctorCodesAfter.has('BROKEN_DEPENDENCY'));
   assert(!doctorCodesAfter.has('RUNTIME_CONFLICT_MULTIPLE_IN_PROGRESS'));
   assert(!doctorCodesAfter.has('RUNTIME_CONFLICT_DEPENDENCY_NOT_SATISFIED'));
+});
+
+test('status and run route inconsistent runtime state to repair fix', async () => {
+  const sandbox = await makeSandbox('superplan-runtime-repair-routing-');
+
+  await writeChangeGraph(sandbox.cwd, 'demo', {
+    title: 'Demo',
+    entries: [
+      { task_id: 'T-401', title: 'First task' },
+      { task_id: 'T-402', title: 'Second task' },
+    ],
+  });
+
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-401.md'), `---
+task_id: T-401
+status: pending
+priority: high
+---
+
+## Description
+First task
+
+## Acceptance Criteria
+- [ ] A
+`);
+
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-402.md'), `---
+task_id: T-402
+status: pending
+priority: high
+---
+
+## Description
+Second task
+
+## Acceptance Criteria
+- [ ] B
+`);
+
+  await writeJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'), {
+    tasks: {
+      'demo/T-401': {
+        status: 'in_progress',
+        started_at: '2026-03-19T10:00:00.000Z',
+      },
+      'demo/T-402': {
+        status: 'in_progress',
+        started_at: '2026-03-19T11:00:00.000Z',
+      },
+    },
+  });
+
+  const statusPayload = parseCliJson(await runCli(['status', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  assert.equal(statusPayload.ok, false);
+  assert.equal(statusPayload.error.code, 'INVALID_STATE_MULTIPLE_IN_PROGRESS');
+  assert.equal(statusPayload.error.next_action.type, 'command');
+  assert.equal(statusPayload.error.next_action.command, 'superplan task repair fix --json');
+
+  const runPayload = parseCliJson(await runCli(['run', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  assert.equal(runPayload.ok, false);
+  assert.equal(runPayload.error.code, 'INVALID_STATE_MULTIPLE_IN_PROGRESS');
+  assert.equal(runPayload.error.next_action.type, 'command');
+  assert.equal(runPayload.error.next_action.command, 'superplan task repair fix --json');
 });

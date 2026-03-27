@@ -1,12 +1,11 @@
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import { resolveWorkspaceRoot } from './workspace-root';
+import { detectWorkflowSurfaces } from './workflow-surfaces';
 
 export interface TaskRecipeConfig {
   run_commands: string[];
   verify_commands: string[];
   evidence: string[];
   notes: string[];
+  scope_paths: string[];
 }
 
 export interface ResolvedTaskRecipe extends TaskRecipeConfig {
@@ -18,10 +17,6 @@ export interface TaskRecipeResolutionInput {
   description: string;
   acceptance_criteria: Array<{ text: string }>;
   task_recipe?: TaskRecipeConfig;
-}
-
-interface RepoScripts {
-  [scriptName: string]: string;
 }
 
 function normalizeKey(value: string): string {
@@ -39,6 +34,7 @@ function parseRecipeBullet(lines: string[] | undefined, section: 'execution' | '
       verify_commands: [],
       evidence: [],
       notes: [],
+      scope_paths: [],
     };
   }
 
@@ -47,6 +43,7 @@ function parseRecipeBullet(lines: string[] | undefined, section: 'execution' | '
     verify_commands: [],
     evidence: [],
     notes: [],
+    scope_paths: [],
   };
 
   for (const rawLine of lines) {
@@ -77,6 +74,11 @@ function parseRecipeBullet(lines: string[] | undefined, section: 'execution' | '
         recipe.run_commands.push(value);
         continue;
       }
+
+      if (key === 'scope' || key === 'scopes' || key === 'path' || key === 'paths' || key === 'file' || key === 'files') {
+        recipe.scope_paths.push(value);
+        continue;
+      }
     } else {
       if (key === 'verify' || key === 'check' || key === 'command') {
         recipe.verify_commands.push(value);
@@ -96,6 +98,7 @@ function parseRecipeBullet(lines: string[] | undefined, section: 'execution' | '
   recipe.verify_commands = unique(recipe.verify_commands);
   recipe.evidence = unique(recipe.evidence);
   recipe.notes = unique(recipe.notes);
+  recipe.scope_paths = unique(recipe.scope_paths);
   return recipe;
 }
 
@@ -111,6 +114,7 @@ export function parseTaskRecipeSections(sections: Record<string, string[]>): Tas
       ...execution.notes,
       ...verification.notes,
     ]),
+    scope_paths: execution.scope_paths,
   };
 }
 
@@ -126,24 +130,12 @@ function scriptToCommand(scriptName: string): string {
   return `npm run ${scriptName}`;
 }
 
-async function readRepoScripts(cwd: string): Promise<RepoScripts> {
-  const workspaceRoot = resolveWorkspaceRoot(cwd);
-  const packageJsonPath = path.join(workspaceRoot, 'package.json');
-
-  try {
-    const content = await fs.readFile(packageJsonPath, 'utf-8');
-    const parsed = JSON.parse(content) as { scripts?: Record<string, string> };
-    return parsed.scripts ?? {};
-  } catch {
-    return {};
-  }
-}
-
 async function inferRecipeFromRepo(
   input: TaskRecipeResolutionInput,
   cwd: string,
 ): Promise<TaskRecipeConfig> {
-  const scripts = await readRepoScripts(cwd);
+  const workflowSurfaces = await detectWorkflowSurfaces(cwd);
+  const scripts = workflowSurfaces.package_scripts.scripts;
   const text = [
     input.title ?? '',
     input.description,
@@ -181,6 +173,14 @@ async function inferRecipeFromRepo(
     verifyCommands.push(scriptToCommand('test'));
   }
 
+  verifyCommands.push(...workflowSurfaces.package_scripts.verify_commands);
+
+  if (workflowSurfaces.verification_surfaces.length > 0) {
+    notes.push(
+      `Repo-native verification surfaces: ${workflowSurfaces.verification_surfaces.slice(0, 6).join('; ')}${workflowSurfaces.verification_surfaces.length > 6 ? '; ...' : ''}`,
+    );
+  }
+
   if (Object.keys(scripts).length > 0) {
     notes.push(
       'Add `## Execution` / `## Verification` bullets to the task contract to override these repo-default commands with a tighter task recipe.',
@@ -192,6 +192,7 @@ async function inferRecipeFromRepo(
     verify_commands: unique(verifyCommands),
     evidence: [],
     notes: unique(notes),
+    scope_paths: [],
   };
 }
 
@@ -204,6 +205,7 @@ export async function resolveTaskRecipe(
     verify_commands: [],
     evidence: [],
     notes: [],
+    scope_paths: [],
   };
   const inferred = await inferRecipeFromRepo(input, cwd);
 
@@ -234,5 +236,6 @@ export async function resolveTaskRecipe(
       ...authored.notes,
       ...(usedInferred ? inferred.notes : []),
     ]),
+    scope_paths: authored.scope_paths,
   };
 }
