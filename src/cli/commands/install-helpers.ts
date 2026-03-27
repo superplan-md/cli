@@ -193,9 +193,22 @@ export function upsertManagedBlock(existingContent: string, block: string, start
 
 export function getManagedEntryInstructionsBlock(targetPath: string, globalSkillsDir: string): string {
   const entryPath = path.join(globalSkillsDir, 'superplan-entry', 'SKILL.md');
-  const agentLinks = [
-    `- \`${entryPath}\``
-  ].join('\n');
+  const entryCandidates = new Set<string>();
+  const targetDir = path.dirname(targetPath);
+
+  if (path.basename(targetPath) === 'CLAUDE.md') {
+    const localClaudeDir = path.basename(targetDir) === '.claude'
+      ? targetDir
+      : path.join(targetDir, '.claude');
+    entryCandidates.add(path.join(localClaudeDir, 'skills', 'superplan-entry', 'SKILL.md'));
+    entryCandidates.add(path.join(os.homedir(), '.claude', 'skills', 'superplan-entry', 'SKILL.md'));
+  } else {
+    entryCandidates.add(entryPath);
+  }
+
+  const agentLinks = [...entryCandidates]
+    .map(candidate => `- \`${candidate}\``)
+    .join('\n');
 
   return `${MANAGED_ENTRY_INSTRUCTIONS_BLOCK_START}
 # Superplan Operating Contract
@@ -369,17 +382,54 @@ export async function installAmazonQMemoryBank(skillsDir: string, rulesDir: stri
   }
 }
 
+const CLAUDE_SESSION_START_HOOK = {
+  matcher: 'startup|clear|compact',
+  hooks: [
+    {
+      type: 'command',
+      command: './run-hook.cmd session-start',
+      async: false,
+    },
+  ],
+};
+
+async function installClaudeSettingsHooks(settingsPath: string): Promise<void> {
+  await fs.mkdir(path.dirname(settingsPath), { recursive: true });
+
+  let existing: Record<string, any> = {};
+  try {
+    existing = JSON.parse(await fs.readFile(settingsPath, 'utf-8'));
+  } catch (error: any) {
+    if (error?.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+
+  const hooks = typeof existing.hooks === 'object' && existing.hooks !== null
+    ? { ...existing.hooks }
+    : {};
+
+  delete hooks.sessionStart;
+  hooks.SessionStart = [CLAUDE_SESSION_START_HOOK];
+
+  const nextSettings = {
+    ...existing,
+    hooks,
+  };
+
+  await fs.writeFile(settingsPath, `${JSON.stringify(nextSettings, null, 2)}\n`, 'utf-8');
+}
+
 export async function installAgentSkills(skillsDir: string, agents: ExtendedAgentEnvironment[]): Promise<void> {
   // We need to copy templates from the CLI's installation package output/ dir, not the user's config dir.
-  const sourceOutputDir = path.resolve(__dirname, '../../../output');  for (const agent of agents) {
+  const sourceOutputDir = path.resolve(__dirname, '../../../output');
+  for (const agent of agents) {
     await copyAgentBaseFiles(sourceOutputDir, agent);
     const globalSkillsDir = agent.global_skills_dir ?? path.join(os.homedir(), '.config', 'superplan', 'skills');
 
     if (agent.install_kind && agent.install_path) {
       if (agent.install_kind === 'skills_namespace') {
-        // SSoT: We stop physical mirroring into agent.install_path
-        // and instead verify the agent directory exists.
-        await fs.mkdir(path.dirname(agent.install_path), { recursive: true });
+        await installSkillsNamespace(globalSkillsDir, agent.install_path);
       } else if (agent.install_kind === 'toml_command') {
         await fs.mkdir(path.dirname(agent.install_path), { recursive: true });
         await fs.writeFile(agent.install_path, getGeminiCommandContent(), 'utf-8');
@@ -396,6 +446,10 @@ export async function installAgentSkills(skillsDir: string, agents: ExtendedAgen
       }
     } else if (!agent.install_kind && agent.name === 'gemini') {
       // Legacy fallback for Gemini if needed, but project-level Gemini has install_kind
+    }
+
+    if (agent.name === 'claude' && agent.settings_path) {
+      await installClaudeSettingsHooks(agent.settings_path);
     }
 
     // Agent-specific cleanup of legacy files if defined
@@ -439,10 +493,15 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
         name: 'claude',
         path: path.join(baseDir, '.claude'),
         source_subdirs: ['claude', 'claude-plugin', 'hooks'],
+        install_path: path.join(baseDir, '.claude', 'skills'),
+        settings_path: path.join(baseDir, '.claude', 'settings.local.json'),
+        install_kind: 'skills_namespace',
         bootstrap_strength: 'skills_only',
         cleanup_paths: [
           path.join(baseDir, '.claude', 'commands', 'superplan.md'),
-          path.join(baseDir, '.claude', 'skills')
+          path.join(baseDir, '.claude', 'hooks.json'),
+          path.join(baseDir, '.claude', 'hooks-cursor.json'),
+          path.join(baseDir, '.claude', 'plugin.json'),
         ],
       },
       {
@@ -519,10 +578,15 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       name: 'claude',
       path: path.join(baseDir, '.claude'),
       source_subdirs: ['claude', 'claude-plugin', 'hooks'],
+      install_path: path.join(baseDir, '.claude', 'skills'),
+      settings_path: path.join(baseDir, '.claude', 'settings.json'),
+      install_kind: 'skills_namespace',
       bootstrap_strength: 'skills_only',
       cleanup_paths: [
         path.join(baseDir, '.claude', 'commands', 'superplan.md'),
-        path.join(baseDir, '.claude', 'skills')
+        path.join(baseDir, '.claude', 'hooks.json'),
+        path.join(baseDir, '.claude', 'hooks-cursor.json'),
+        path.join(baseDir, '.claude', 'plugin.json'),
       ],
     },
     {
@@ -605,6 +669,26 @@ export async function detectVSCodeExtensions(): Promise<Set<string>> {
   return detected;
 }
 
+async function hasClaudePreferenceMarker(baseDir: string, scope: AgentScope): Promise<boolean> {
+  const candidatePaths = scope === 'global'
+    ? [
+        path.join(baseDir, 'CLAUDE.md'),
+        path.join(baseDir, '.claude'),
+      ]
+    : [
+        path.join(baseDir, 'CLAUDE.md'),
+        path.join(baseDir, '.claude'),
+      ];
+
+  for (const candidatePath of candidatePaths) {
+    if (await pathExists(candidatePath)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export async function detectAgents(baseDir: string, scope: AgentScope): Promise<ExtendedAgentEnvironment[]> {
   const definitions = getAgentDefinitions(baseDir, scope);
   const extensions = await detectVSCodeExtensions();
@@ -612,7 +696,10 @@ export async function detectAgents(baseDir: string, scope: AgentScope): Promise<
   for (const agent of definitions) {
     const hasConfigDir = await pathExists(agent.path);
     const hasExtension = extensions.has(agent.name);
-    agent.detected = hasConfigDir || hasExtension;
+    const hasPreferenceMarker = agent.name === 'claude'
+      ? await hasClaudePreferenceMarker(baseDir, scope)
+      : false;
+    agent.detected = hasConfigDir || hasExtension || hasPreferenceMarker;
   }
   
   return definitions;

@@ -48,6 +48,10 @@ function printSetupBanner(): void {
   console.log(SETUP_BANNER);
 }
 
+function hasAgent(agents: ExtendedAgentEnvironment[], name: ExtendedAgentEnvironment['name']): boolean {
+  return agents.some(agent => agent.name === name);
+}
+
 async function ensureGlobalConfig(configPath: string): Promise<void> {
   const initialConfig = `version = "0.1"\n\n[agents]\ninstalled = []\n\n[overlay]\nenabled = true\n`;
   await fs.writeFile(configPath, initialConfig, 'utf-8');
@@ -154,10 +158,6 @@ export async function ensureGlobalSetup(
   if (await pathExists(path.join(homeDir, '.codex'))) {
     await installManagedInstructionsFile(path.join(homeDir, '.codex', 'AGENTS.md'), skillsDir);
   }
-
-  if (await pathExists(path.join(homeDir, '.claude'))) {
-    await installManagedInstructionsFile(path.join(homeDir, '.claude', 'CLAUDE.md'), skillsDir);
-  }
 }
 
 async function verifyGlobalSetup(paths: {
@@ -229,6 +229,10 @@ export async function install(options: InstallOptions = {}): Promise<InstallResu
         console.log(`\nFound and auto-installed global AI agents: ${names}`);
       }
       await installAgentSkills(globalSkillsDir, homeAgents);
+      if (hasAgent(homeAgents, 'claude')) {
+        await installManagedInstructionsFile(path.join(homeDir, 'CLAUDE.md'), globalSkillsDir);
+        await installManagedInstructionsFile(path.join(homeDir, '.claude', 'CLAUDE.md'), globalSkillsDir);
+      }
     } else if (!options.quiet && !options.json) {
       console.log('\nNo machine-level AI agents detected.');
     }

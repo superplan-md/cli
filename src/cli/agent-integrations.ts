@@ -20,6 +20,7 @@ export interface AgentEnvironment {
   name: AgentName;
   path: string;
   install_path?: string;
+  settings_path?: string;
   install_kind?: AgentInstallKind;
   bootstrap_strength: AgentBootstrapStrength;
   cleanup_paths?: string[];

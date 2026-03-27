@@ -54,6 +54,10 @@ function formatDetectedAgentInstructions(agents: ExtendedAgentEnvironment[]): st
   return `\n! Found: ${foundAgentNames}\n! Space = select, Enter = continue`;
 }
 
+function hasAgent(agents: ExtendedAgentEnvironment[], name: ExtendedAgentEnvironment['name']): boolean {
+  return agents.some(agent => agent.name === name);
+}
+
 async function verifyLocalSetup(paths: {
   superplanRoot: string;
   projectAgents: ExtendedAgentEnvironment[];
@@ -171,7 +175,8 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
 
     // Common repo-level managed instruction files
     await installManagedInstructionsFile(path.join(cwd, 'AGENTS.md'), globalSkillsDir);
-    if (await pathExists(path.join(cwd, '.claude'))) {
+    if (hasAgent(projectAgentsToInstall, 'claude')) {
+      await installManagedInstructionsFile(path.join(cwd, 'CLAUDE.md'), globalSkillsDir);
       await installManagedInstructionsFile(path.join(cwd, '.claude', 'CLAUDE.md'), globalSkillsDir);
     }
 
