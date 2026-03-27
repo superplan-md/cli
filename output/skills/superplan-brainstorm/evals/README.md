@@ -31,5 +31,5 @@ Use these scenarios to test whether `superplan-brainstorm` restores the stronger
 - asks multiple shallow questions before checking the workspace
 - jumps from ambiguity straight to tasks or execution
 - presents one preferred approach as if no alternatives exist
-- forces `.superplan/specs/` for tiny or already-clear work
+- forces a change-scoped spec for tiny or already-clear work
 - authors graph depth, autonomy policy, or execution sequencing that belongs to `superplan-shape` or `superplan-plan`

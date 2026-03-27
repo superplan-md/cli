@@ -260,7 +260,6 @@ export async function collectWorkspaceHealthIssues(workspaceRoot: string): Promi
     { code: 'WORKSPACE_CONTEXT_INDEX_MISSING', filePath: artifactPaths.contextIndexPath, fix: 'Run superplan context bootstrap --json' },
     { code: 'WORKSPACE_DECISIONS_LOG_MISSING', filePath: artifactPaths.decisionsPath, fix: 'Run superplan context bootstrap --json' },
     { code: 'WORKSPACE_GOTCHAS_LOG_MISSING', filePath: artifactPaths.gotchasPath, fix: 'Run superplan context bootstrap --json' },
-    { code: 'WORKSPACE_PLAN_MISSING', filePath: artifactPaths.planPath, fix: 'Run superplan context bootstrap --json' },
   ];
 
   for (const artifact of requiredArtifacts) {

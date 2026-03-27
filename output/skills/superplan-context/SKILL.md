@@ -60,6 +60,8 @@ See `references/context-indexing.md` and `references/durable-context-rules.md`.
 - update stale context when important drift is found
 - summarize what changed in context
 - keep the context layer proportionate and reusable
+- use `superplan context doc set <doc-slug> --stdin --json` to write context docs
+- use `superplan context log add --kind <decision|gotcha> --content "..." --json` to append workspace logs
 
 ## Forbidden Behavior
 
@@ -67,6 +69,7 @@ See `references/context-indexing.md` and `references/durable-context-rules.md`.
 - rewriting the whole context layer casually
 - turning every observation into context
 - hijacking active task shaping or execution responsibilities
+- editing files under `.superplan/` directly when a CLI command can own the write
 
 ## Decision And Gotcha Rules
 
@@ -99,8 +102,10 @@ Likely handoffs:
 
 - `superplan context bootstrap --json`
 - `superplan context status --json`
+- `superplan context doc set <doc-slug> --stdin --json`
+- `superplan context log add --kind <decision|gotcha> --content "..." --json`
 
-Use the command surface that exists today instead of treating context bootstrap as a manual convention.
+Use the command surface that exists today instead of editing `.superplan/context/`, `decisions.md`, or `gotchas.md` by hand. It is faster and it keeps placement correct.
 
 ## Validation Cases
 

@@ -9,7 +9,7 @@ description: Use when the target is understood and Superplan needs an implementa
 
 Turn an understood target into the current execution path.
 
-In Superplan, this usually means writing or updating `.superplan/plan.md`, while keeping graph truth, spec truth, and task-contract truth distinct.
+In Superplan, this means writing or updating the current change plan through the CLI, while keeping graph truth, spec truth, and task-contract truth distinct.
 
 ## Trigger
 
@@ -22,7 +22,7 @@ Use when:
 ## Core Rules
 
 - write the current path, not a fake immutable master plan
-- use `.superplan/plan.md` for sequencing, dependency logic, and execution strategy
+- use `superplan change plan set <change-slug> --stdin --json` for sequencing, dependency logic, and execution strategy
 - derive tasks only as far as they are honestly shapeable now
 - keep plans bite-sized and execution-oriented
 - use exact artifact targets, verification paths, and handoffs rather than vague prose
@@ -57,7 +57,7 @@ If a step bundles multiple edits, multiple checks, and multiple decisions, it is
 
 ## Execution-Path Detail
 
-When writing `.superplan/plan.md`, encode enough detail that execution can proceed without guesswork:
+When writing a change plan through `superplan change plan set`, encode enough detail that execution can proceed without guesswork:
 
 - exact artifact targets
 - exact verification commands or proof paths when known
@@ -84,14 +84,11 @@ When the proof path is known, write it in explicit command style:
 
 When the plan includes task scaffolding, be explicit:
 
-- do not hand-create individual `tasks/T-xxx.md` files in the plan or handoff
-- do not propose shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > ...`, `printf > ...`, or here-docs for task-file creation; shell is fine only when used to pipe JSON into `superplan task scaffold batch --stdin --json`
-- author `.superplan/changes/<change-slug>/tasks.md` first and include explicit `task_id` ownership there before proposing task scaffolding
-- run `superplan validate <change-slug> --json` before task scaffolding so graph errors fail fast
-- use `superplan task scaffold new <change-slug> --task-id <task_id> --json` only when one graph-declared task contract should be created now
-- use `superplan task scaffold batch --stdin --json` when two or more graph-declared task contracts are already clear enough to author in one pass
-- when a graph and dependencies are already clear for multiple tasks, prefer one batch authoring step over repeated single-task creation
-- prefer stdin over temporary files in agent-driven task authoring
+- do not hand-create anything under `.superplan/`
+- use `superplan change new <change-slug> --single-task "..." --json` for the one-task fast path
+- use `superplan change task add <change-slug> --title "..." ... --json` to define tracked work and let the CLI place graph and task-contract artifacts correctly
+- use `superplan change plan set <change-slug> --stdin --json` to write the plan itself instead of editing `plan.md` directly
+- prefer the CLI path because it is faster, keeps placement correct, and prevents the model from learning bad file-editing habits
 
 ## Forbidden Behavior
 

@@ -6,7 +6,7 @@ User request:
 
 > "Define the contract for how task completion evidence should work across planning, execution, and review."
 
-The resulting design is substantial enough to require a real spec in `.superplan/specs/`.
+The resulting design is substantial enough to require a real change-scoped spec written through the CLI.
 
 ## Expected Behavior
 

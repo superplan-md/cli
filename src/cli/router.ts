@@ -100,14 +100,14 @@ function inferErrorNextAction(command: string | undefined, error: { code: string
 
   if (error.code === 'INVALID_CHANGE_COMMAND') {
     return stopNextAction(
-      'The change command is invalid. The only supported change action is `superplan change new <slug> --json`.',
+      'The change command is invalid. Use `superplan change new`, `superplan change plan set`, `superplan change spec set`, or `superplan change task add`.',
       'Invalid change invocations should terminate with one explicit surface description.',
     );
   }
 
   if (error.code === 'INVALID_CONTEXT_COMMAND') {
     return stopNextAction(
-      'The context command is invalid. Use `superplan context bootstrap --json` or `superplan context status --json`.',
+      'The context command is invalid. Use `superplan context bootstrap`, `superplan context status`, `superplan context doc set`, or `superplan context log add`.',
       'Invalid context invocations should terminate with the exact supported commands.',
     );
   }

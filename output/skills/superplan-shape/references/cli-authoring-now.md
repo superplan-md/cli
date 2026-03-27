@@ -20,6 +20,9 @@ Today, the executable surface is:
 
 - `superplan init --scope local --yes --json` creates `.superplan/`, `.superplan/context/`, `.superplan/runtime/`, and `.superplan/changes/`
 - `superplan change new <change-slug> --json` scaffolds a tracked change root
+- `superplan change plan set <change-slug> --stdin --json` writes the change plan
+- `superplan change spec set <change-slug> --name <spec-slug> --stdin --json` writes a change-scoped spec
+- `superplan change task add <change-slug> --title "..." --json` adds a tracked task and scaffolds its contract
 - `superplan validate <change-slug> --json` validates `tasks.md`, graph diagnostics, and graph/task-contract consistency
 - `superplan task scaffold new <change-slug> --task-id <task_id> --json` scaffolds one graph-declared task contract without mutating `tasks.md`
 - `superplan task scaffold batch <change-slug> --stdin --json` scaffolds multiple graph-declared task contracts from JSON stdin without mutating `tasks.md`
@@ -29,11 +32,11 @@ Today, the executable surface is:
 
 So shape work like this:
 
-- author `tasks.md` as the canonical graph whenever tracked work exists
-- manual creation of individual `tasks/T-xxx.md` files is off limits
-- once the graph in `tasks.md` is ready, run `superplan validate <slug> --json`
-- use `superplan task scaffold new` for one task or `superplan task scaffold batch` for multiple tasks to mint the `T-xxx.md` task contracts by explicit `task_id`
-- keep task contracts in `.superplan/changes/<slug>/tasks/T-xxx.md`
+- do not hand-edit anything under `.superplan/`
+- use `superplan change new --single-task` or `superplan change task add` to define tracked work
+- use `superplan change plan set` and `superplan change spec set` to write change-scoped artifacts
+- run `superplan validate <slug> --json` when graph validation matters
+- keep task contracts in `.superplan/changes/<slug>/tasks/T-xxx.md`, but let the CLI create them
 - use `superplan parse` for contract parsing and `superplan validate` for graph plus cross-artifact checks
 - inspect readiness with `superplan status --json`, `superplan run --json`, and `superplan task inspect show <task_id> --json` as needed
 - do not split dependency ownership back into task-file frontmatter
@@ -42,14 +45,11 @@ So shape work like this:
 
 1. Run `superplan init --scope local --yes --json` if the repo is not initialized.
 2. Run `superplan change new <slug> --json` to create `.superplan/changes/<slug>/` and `.superplan/changes/<slug>/tasks/`.
-3. Create or refine `.superplan/changes/<slug>/tasks.md` as graph truth with explicit task ids and dependency edges.
-4. Run `superplan validate <slug> --json`.
-5. Use `superplan task scaffold new <slug> --task-id <task_id> --json` when exactly one graph-declared task contract is ready.
-6. Use `superplan task scaffold batch <slug> --stdin --json` when two or more graph-declared task contracts are ready and can be scaffolded together.
-7. Use the returned payload from `task scaffold new` or `task scaffold batch` directly instead of immediately calling `task inspect show`.
-8. Run `superplan validate <slug> --json` again after scaffolding.
-9. Use `superplan status --json` to confirm the ready frontier and `superplan task inspect show <task_id> --json` when one task needs deeper inspection.
-10. Hand off to execution with the exact validation commands already named.
+3. Use `superplan change plan set`, `superplan change spec set`, and `superplan change task add` to place change-scoped artifacts through the CLI.
+4. Run `superplan validate <slug> --json` when graph validation matters.
+5. Use the returned payload from CLI authoring directly instead of immediately calling `task inspect show`.
+6. Use `superplan status --json` to confirm the ready frontier and `superplan task inspect show <task_id> --json` when one task needs deeper inspection.
+7. Hand off to execution with the exact validation commands already named.
 
 For agent-first flows, prefer stdin over temporary files. `--file <path>` remains available only as a fallback when the batch spec itself should persist.
 

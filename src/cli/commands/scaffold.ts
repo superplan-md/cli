@@ -25,6 +25,10 @@ export function isValidChangeSlug(slug: string): boolean {
   return /^[a-z0-9][a-z0-9-]*$/.test(slug);
 }
 
+export function isValidTaskId(taskId: string): boolean {
+  return /^T-[A-Za-z0-9]+$/.test(taskId);
+}
+
 export function getChangePaths(changeSlug: string, cwd = process.cwd()): ChangePaths {
   const superplanRoot = resolveSuperplanRoot(cwd);
   const changesRoot = path.join(superplanRoot, 'changes');
@@ -198,26 +202,37 @@ export async function appendTaskEntryToIndex(
   changeSlug: string,
   taskId: string,
   summary: string,
+  dependsOnAll: string[] = [],
+  dependsOnAny: string[] = [],
 ): Promise<void> {
   const fallbackIndex = buildChangeTasksIndex(changeSlug, formatTitleFromSlug(changeSlug));
   const currentContent = await fs.readFile(tasksIndexPath, 'utf-8').catch(() => fallbackIndex);
   const taskLine = `- \`${taskId}\` ${summary}`;
+  const taskBlock = [
+    taskLine,
+    `  - depends_on_all: [${dependsOnAll.join(', ')}]`,
+    `  - depends_on_any: [${dependsOnAny.join(', ')}]`,
+  ].join('\n');
 
-  if (currentContent.includes(taskLine) || currentContent.includes(`\`${taskId}\``)) {
+  if (currentContent.includes(taskLine)) {
     return;
   }
 
   const sectionMarker = '## Graph Layout';
   const sectionIndex = currentContent.indexOf(sectionMarker);
   if (sectionIndex === -1) {
-    await fs.writeFile(tasksIndexPath, `${currentContent.trimEnd()}\n${taskLine}\n`, 'utf-8');
+    await fs.writeFile(tasksIndexPath, `${currentContent.trimEnd()}\n${taskBlock}\n`, 'utf-8');
     return;
   }
 
-  const insertionPoint = currentContent.indexOf('## Notes', sectionIndex);
+  const remainingContent = currentContent.slice(sectionIndex + sectionMarker.length);
+  const nextSectionOffset = remainingContent.search(/\n##\s+/);
+  const insertionPoint = nextSectionOffset === -1
+    ? -1
+    : sectionIndex + sectionMarker.length + nextSectionOffset + 1;
   const graphLayoutBlock = insertionPoint === -1
-    ? `${currentContent.trimEnd()}\n${taskLine}\n`
-    : `${currentContent.slice(0, insertionPoint).trimEnd()}\n${taskLine}\n\n${currentContent.slice(insertionPoint)}`;
+    ? `${currentContent.trimEnd()}\n${taskBlock}\n`
+    : `${currentContent.slice(0, insertionPoint).trimEnd()}\n${taskBlock}\n\n${currentContent.slice(insertionPoint)}`;
 
   await fs.writeFile(tasksIndexPath, graphLayoutBlock, 'utf-8');
 }

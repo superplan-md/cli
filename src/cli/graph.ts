@@ -138,6 +138,7 @@ function parseGraphLayout(
 ): GraphTaskEntry[] {
   const tasks: GraphTaskEntry[] = [];
   let currentTask: GraphTaskEntry | null = null;
+  let insideCommentBlock = false;
 
   const flushCurrentTask = () => {
     if (currentTask) {
@@ -149,9 +150,23 @@ function parseGraphLayout(
   for (const rawLine of lines) {
     const line = rawLine.trimEnd();
     const trimmedLine = line.trim();
-    
+
+    if (insideCommentBlock) {
+      if (trimmedLine.includes('-->')) {
+        insideCommentBlock = false;
+      }
+      continue;
+    }
+
     // Skip empty lines and comments
-    if (!trimmedLine || trimmedLine.startsWith('<!--')) {
+    if (!trimmedLine) {
+      continue;
+    }
+
+    if (trimmedLine.startsWith('<!--')) {
+      if (!trimmedLine.includes('-->')) {
+        insideCommentBlock = true;
+      }
       continue;
     }
 

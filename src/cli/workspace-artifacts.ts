@@ -11,13 +11,13 @@ export interface WorkspaceArtifactPaths {
   contextIndexPath: string;
   decisionsPath: string;
   gotchasPath: string;
-  planPath: string;
 }
 
 export interface ChangeArtifactPaths {
   changeRoot: string;
   tasksDir: string;
   tasksIndexPath: string;
+  planPath: string;
   specsDir: string;
   specReadmePath: string;
 }
@@ -53,7 +53,6 @@ export function getWorkspaceArtifactPaths(superplanRoot: string): WorkspaceArtif
     contextIndexPath: path.join(contextDir, 'INDEX.md'),
     decisionsPath: path.join(superplanRoot, 'decisions.md'),
     gotchasPath: path.join(superplanRoot, 'gotchas.md'),
-    planPath: path.join(superplanRoot, 'plan.md'),
   };
 }
 
@@ -63,6 +62,7 @@ export function getChangeArtifactPaths(changeRoot: string): ChangeArtifactPaths 
     changeRoot,
     tasksDir: path.join(changeRoot, 'tasks'),
     tasksIndexPath: path.join(changeRoot, 'tasks.md'),
+    planPath: path.join(changeRoot, 'plan.md'),
     specsDir,
     specReadmePath: path.join(specsDir, 'README.md'),
   };
@@ -106,13 +106,13 @@ export function buildGotchasLog(): string {
   ].join('\n');
 }
 
-export function buildWorkspacePlan(): string {
+export function buildChangePlan(changeSlug: string, title: string): string {
   return [
-    '# Workspace Plan',
+    '# Change Plan',
     '',
     '## Goal',
     '',
-    'Describe the current execution target here when trajectory, sequencing, or handoff structure matters.',
+    `Describe the execution target for \`${changeSlug}\` here when trajectory, sequencing, or handoff structure matters.`,
     '',
     '## Execution Path',
     '',
@@ -150,10 +150,6 @@ export async function ensureWorkspaceArtifacts(superplanRoot: string): Promise<s
     created.push(paths.gotchasPath);
   }
 
-  if (await ensureFile(paths.planPath, buildWorkspacePlan())) {
-    created.push(paths.planPath);
-  }
-
   return created;
 }
 
@@ -175,10 +171,12 @@ export async function ensureChangeArtifacts(changeRoot: string, changeSlug: stri
   await fs.mkdir(paths.specsDir, { recursive: true });
 
   const created: string[] = [];
+  if (await ensureFile(paths.planPath, buildChangePlan(changeSlug, title))) {
+    created.push(paths.planPath);
+  }
   if (await ensureFile(paths.specReadmePath, buildChangeSpecReadme(changeSlug, title))) {
     created.push(paths.specReadmePath);
   }
 
   return created;
 }
-

@@ -156,6 +156,11 @@ Common commands:
 - `superplan context bootstrap --json` to create missing durable workspace context entrypoints
 - `superplan context status --json` to inspect missing durable workspace context entrypoints
 - `superplan change new <change-slug> --json` to create one tracked change root
+- `superplan change plan set <change-slug> --stdin --json` to write change-scoped plan content
+- `superplan change spec set <change-slug> --name <spec-slug> --stdin --json` to write change-scoped spec content
+- `superplan change task add <change-slug> --title "..." --json` to add tracked work without manual graph editing
+- `superplan context doc set <doc-slug> --stdin --json` to write durable context docs
+- `superplan context log add --kind <decision|gotcha> --content "..." --json` to append workspace log entries
 - `superplan validate <change-slug> --json` to validate `tasks.md` graph structure and task-contract consistency
 - `superplan task scaffold new <change-slug> --task-id <task_id> --json` to scaffold exactly one graph-declared task contract
 - `superplan task scaffold batch <change-slug> --stdin --json` to create two or more new task contracts in one pass
@@ -170,7 +175,7 @@ Common commands:
 - `superplan doctor --json` to verify setup, overlay launchability, and workspace health when readiness is unclear
 - `superplan overlay ensure --json` to explicitly reveal or resync the overlay when overlay support is enabled
 - `superplan overlay hide --json` to close the overlay when the workspace is idle or empty
-- when shaping tracked work, author `.superplan/changes/<slug>/tasks.md` first, validate it, then use `superplan task scaffold new` or `superplan task scaffold batch` by graph-declared `task_id` instead of hand-creating `tasks/T-xxx.md`
+- when shaping tracked work, route all `.superplan/` writes through CLI commands instead of editing files directly
 
 Execution default:
 
@@ -188,16 +193,14 @@ Execution default:
 Authoring default:
 
 1. create the tracked change once with `superplan change new <change-slug> --json`
-2. manual creation of individual `tasks/T-xxx.md` files is off limits; agents should shape the graph and dependencies first, validate them, then use the CLI to mint task contracts
-3. author the root `.superplan/changes/<change-slug>/tasks.md` manually as graph truth; the shell-loop prohibition applies to task-contract generation and bulk graph rewrites, not to normal manual graph authoring
-4. do not use shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > ...`, `printf > ...`, or here-docs to mass-write task contracts or bulk-rewrite graph artifacts; shell is only acceptable as stdin transport into `superplan task scaffold batch --stdin --json`
-5. when the request is large, ambiguous, or multi-workstream, do not jump straight from the raw request into task scaffolding; route through clarification, spec, or plan work first, then finalize the graph
-6. author `.superplan/changes/<change-slug>/tasks.md` manually as graph truth, then run `superplan validate <change-slug> --json`
-7. use `superplan task scaffold new <change-slug> --task-id <task_id> --json` only when exactly one graph-declared task should be scaffolded now
-8. use `superplan task scaffold batch <change-slug> --stdin --json` when two or more graph-declared tasks are clear enough to scaffold in one pass
-9. when multiple tasks are ready together, prefer one batch call so the graph edges and batch-local dependencies are captured in one authoring step
-10. prefer stdin over temporary files for batch task authoring in agent flows
-11. use the returned task payloads directly after authoring instead of immediately calling `superplan task inspect show`
+2. do not edit files under `.superplan/` directly when the CLI can own the write
+3. use `superplan change new --single-task` for the fastest tracked one-task path
+4. use `superplan change task add` to define additional tracked work and let the CLI place graph and task-contract artifacts correctly
+5. use `superplan change plan set` and `superplan change spec set` for change-scoped plan/spec truth
+6. use `superplan context doc set` and `superplan context log add` for workspace-owned memory
+7. when the request is large, ambiguous, or multi-workstream, do not jump straight into task creation; route through clarification, spec, or plan work first, then define tracked tasks through the CLI
+8. prefer stdin over ad hoc temp files in agent flows
+9. use the returned task payloads directly after CLI authoring instead of immediately calling `superplan task inspect show`
 
 Canonical command rule:
 

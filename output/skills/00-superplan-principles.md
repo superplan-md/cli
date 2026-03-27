@@ -62,8 +62,8 @@ Once `superplan-entry` has decided Superplan should engage:
 
 - use the Superplan CLI as the control plane
 - do not hand-edit `.superplan/runtime/`
-- do not hand-create `tasks/T-xxx.md` task contracts
-- author the root graph in `.superplan/changes/<change-slug>/tasks.md` only in the shaping phase that owns that work
+- do not hand-create anything under `.superplan/`
+- route plans, specs, graph tasks, task contracts, and workspace logs through the CLI so placement stays correct
 - use `superplan run`, `superplan task runtime block`, `superplan task runtime request-feedback`, `superplan task review complete`, and related lifecycle commands only after engagement is already settled
 
 ## 6. Overlay And User Communication

@@ -56,7 +56,6 @@ test('doctor reports missing workspace artifacts and task-state drift', async ()
   
   // Explicitly remove artifacts that init now creates by default,
   // so that we can test that doctor correctly identifies them as missing.
-  await fs.rm(path.join(sandbox.cwd, '.superplan', 'plan.md'), { force: true });
   await fs.rm(path.join(sandbox.cwd, '.superplan', 'context', 'README.md'), { force: true });
   await fs.rm(path.join(sandbox.cwd, '.superplan', 'context', 'INDEX.md'), { force: true });
   await fs.rm(path.join(sandbox.cwd, '.superplan', 'decisions.md'), { force: true });
@@ -95,7 +94,6 @@ Close the workflow gap.
   assert.equal(doctorPayload.ok, true);
   assert.equal(doctorPayload.data.valid, false);
   assert(issueCodes.has('WORKSPACE_CONTEXT_README_MISSING'));
-  assert(issueCodes.has('WORKSPACE_PLAN_MISSING'));
   assert(issueCodes.has('TASK_STATE_DRIFT_PENDING_WITH_COMPLETED_ACCEPTANCE'));
 });
 
@@ -182,5 +180,51 @@ test('context bootstrap creates the durable workspace context entrypoints', asyn
   assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'context', 'INDEX.md')), true);
   assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'decisions.md')), true);
   assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'gotchas.md')), true);
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')), true);
+  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')), false);
+});
+
+test('context doc set writes a context document through the CLI', async () => {
+  const sandbox = await makeSandbox('superplan-context-doc-set-');
+  await runCli(['init', '--yes', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+
+  const payload = parseCliJson(await runCli([
+    'context',
+    'doc',
+    'set',
+    'architecture/auth',
+    '--content',
+    '# Auth\n\nContext body\n',
+    '--json',
+  ], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+
+  assert.equal(payload.ok, true);
+  assert.equal(await fs.readFile(path.join(sandbox.cwd, '.superplan', 'context', 'architecture', 'auth.md'), 'utf-8'), '# Auth\n\nContext body\n');
+  const indexContent = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'context', 'INDEX.md'), 'utf-8');
+  assert.match(indexContent, /\[architecture\/auth\]\(\.\/architecture\/auth\.md\)/);
+});
+
+test('context log add appends decisions through the CLI', async () => {
+  const sandbox = await makeSandbox('superplan-context-log-add-');
+  await runCli(['init', '--yes', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+
+  const payload = parseCliJson(await runCli([
+    'context',
+    'log',
+    'add',
+    '--kind',
+    'decision',
+    '--content',
+    'Choose change-scoped plans',
+    '--json',
+  ], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+
+  assert.equal(payload.ok, true);
+  const decisionsContent = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'decisions.md'), 'utf-8');
+  assert.match(decisionsContent, /Choose change-scoped plans/);
 });

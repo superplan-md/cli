@@ -28,6 +28,7 @@ test('change new creates a canonical change skeleton', async () => {
   assert.deepEqual(payload.data.files, [
     '.superplan/changes/improve-planning/tasks.md',
     '.superplan/changes/improve-planning/tasks',
+    '.superplan/changes/improve-planning/plan.md',
     '.superplan/changes/improve-planning/specs/README.md',
     '.superplan/changes/improve-planning/metrics.json',
   ]);
@@ -37,6 +38,7 @@ test('change new creates a canonical change skeleton', async () => {
   const tasksIndexPath = path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks.md');
   assert.equal(await pathExists(tasksIndexPath), true);
   assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks')), true);
+  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'plan.md')), true);
   assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'specs', 'README.md')), true);
   assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'metrics.json')), true);
 
@@ -75,12 +77,14 @@ test('change new from a nested repo directory uses the repo-root superplan works
   assert.deepEqual(payload.data.files, [
     path.relative(nestedCwd, path.join(changeRoot, 'tasks.md')) || path.join(changeRoot, 'tasks.md'),
     path.relative(nestedCwd, path.join(changeRoot, 'tasks')) || path.join(changeRoot, 'tasks'),
+    path.relative(nestedCwd, path.join(changeRoot, 'plan.md')) || path.join(changeRoot, 'plan.md'),
     path.relative(nestedCwd, path.join(changeRoot, 'specs', 'README.md')) || path.join(changeRoot, 'specs', 'README.md'),
     path.relative(nestedCwd, path.join(changeRoot, 'metrics.json')) || path.join(changeRoot, 'metrics.json'),
   ]);
   assert.equal(payload.data.next_action.type, 'stop');
   assert.equal(payload.error, null);
   assert.equal(await pathExists(path.join(changeRoot, 'tasks.md')), true);
+  assert.equal(await pathExists(path.join(changeRoot, 'plan.md')), true);
   assert.equal(await pathExists(path.join(changeRoot, 'specs', 'README.md')), true);
   assert.equal(await pathExists(path.join(changeRoot, 'metrics.json')), true);
   assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
@@ -111,6 +115,7 @@ test('change new can scaffold a single-task change in one invocation', async () 
   assert.deepEqual(payload.data.files, [
     '.superplan/changes/fix-status/tasks.md',
     '.superplan/changes/fix-status/tasks',
+    '.superplan/changes/fix-status/plan.md',
     '.superplan/changes/fix-status/specs/README.md',
     '.superplan/changes/fix-status/tasks/T-001.md',
     '.superplan/changes/fix-status/metrics.json',
@@ -129,6 +134,141 @@ test('change new can scaffold a single-task change in one invocation', async () 
   assert.match(taskContent, /Use bullets like `- run: npm start`\./);
   assert.match(taskContent, /## Verification/);
   assert.match(taskContent, /Use bullets like `- verify: npm test` and `- evidence: capture the failing command output`\./);
+});
+
+test('change plan set writes change-scoped plan content through the CLI', async () => {
+  const sandbox = await makeSandbox('superplan-change-plan-set-');
+  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+
+  parseCliJson(await runCli(['change', 'new', 'improve-planning', '--json'], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+
+  const payload = parseCliJson(await runCli([
+    'change',
+    'plan',
+    'set',
+    'improve-planning',
+    '--content',
+    '# Change Plan\n\nPlan body\n',
+    '--json',
+  ], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+
+  assert.equal(payload.ok, true);
+  assert.equal(await fs.readFile(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'plan.md'), 'utf-8'), '# Change Plan\n\nPlan body\n');
+});
+
+test('change spec set writes change-scoped spec content through the CLI', async () => {
+  const sandbox = await makeSandbox('superplan-change-spec-set-');
+  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+
+  parseCliJson(await runCli(['change', 'new', 'improve-planning', '--json'], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+
+  const payload = parseCliJson(await runCli([
+    'change',
+    'spec',
+    'set',
+    'improve-planning',
+    '--name',
+    'design/api-shape',
+    '--content',
+    '# API Shape\n\nSpec body\n',
+    '--json',
+  ], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+
+  assert.equal(payload.ok, true);
+  assert.equal(await fs.readFile(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'specs', 'design', 'api-shape.md'), 'utf-8'), '# API Shape\n\nSpec body\n');
+});
+
+test('change task add updates the graph and scaffolds the task contract through the CLI', async () => {
+  const sandbox = await makeSandbox('superplan-change-task-add-');
+  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+
+  parseCliJson(await runCli(['change', 'new', 'improve-planning', '--json'], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+
+  const payload = parseCliJson(await runCli([
+    'change',
+    'task',
+    'add',
+    'improve-planning',
+    '--title',
+    'Add CLI graph authoring',
+    '--acceptance-criterion',
+    'The CLI can add tracked tasks without manual graph edits',
+    '--json',
+  ], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+
+  assert.equal(payload.ok, true);
+
+  const tasksIndexContent = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks.md'), 'utf-8');
+  assert.match(tasksIndexContent, /Add CLI graph authoring/);
+  assert.match(tasksIndexContent, /depends_on_all: \[\]/);
+
+  const files = await fs.readdir(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks'));
+  const generatedTaskFile = files[0];
+  assert.ok(generatedTaskFile);
+  assert.equal(generatedTaskFile, 'T-001.md');
+  const taskContent = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks', generatedTaskFile), 'utf-8');
+  assert.match(taskContent, /Add CLI graph authoring/);
+  assert.match(taskContent, /The CLI can add tracked tasks without manual graph edits/);
+});
+
+test('change task add keeps new tasks inside Graph Layout when workstreams exist', async () => {
+  const sandbox = await makeSandbox('superplan-change-task-add-workstreams-');
+  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+
+  await writeChangeGraph(sandbox.cwd, 'improve-planning', {
+    title: 'Improve Planning',
+    entries: [
+      {
+        task_id: 'T-001',
+        title: 'Existing graph task',
+        workstream: 'cli',
+      },
+    ],
+    workstreams: [
+      { id: 'cli', title: 'CLI workstream' },
+    ],
+  });
+
+  const payload = parseCliJson(await runCli([
+    'change',
+    'task',
+    'add',
+    'improve-planning',
+    '--title',
+    'Add follow-up graph task',
+    '--json',
+  ], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+
+  assert.equal(payload.ok, true);
+
+  const tasksIndexContent = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks.md'), 'utf-8');
+  const newTaskIndex = tasksIndexContent.indexOf('- `T-002` Add follow-up graph task');
+  const workstreamsIndex = tasksIndexContent.indexOf('## Workstreams');
+  assert.notEqual(newTaskIndex, -1);
+  assert.notEqual(workstreamsIndex, -1);
+  assert.ok(newTaskIndex < workstreamsIndex);
+  assert.match(tasksIndexContent, /- `cli` CLI workstream/);
 });
 
 test('task scaffold new scaffolds a contract for a graph-declared task id without mutating tasks.md', async () => {

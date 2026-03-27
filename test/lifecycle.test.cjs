@@ -94,7 +94,7 @@ test('init installs local artifacts and auto-runs install if global config is mi
   assert.equal(initResult.code, 0);
   assert.equal(payload.ok, true);
   assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'config.toml')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')));
+  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')), false);
 });
 
 test('init --yes --json creates repository scaffolding without prompting', async () => {
@@ -109,7 +109,7 @@ test('init --yes --json creates repository scaffolding without prompting', async
   assert.equal(initResult.code, 0);
   assert.equal(payload.ok, true);
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')));
+  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')), false);
 });
 
 test('init --yes --json honors a repo Claude preference from root CLAUDE.md and creates local Claude skills', async () => {
@@ -176,7 +176,7 @@ test('init from a nested repo directory creates scaffolding at the repo root', a
 
   assert.equal(initResult.code, 0);
   assert.equal(payload.ok, true);
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')));
+  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')), false);
   assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
 });
 

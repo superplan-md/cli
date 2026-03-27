@@ -119,9 +119,9 @@ Conversation is not durable enough by itself when future shaping or execution de
 
 Write the minimum durable artifact that preserves the approved truth:
 
-- use `.superplan/specs/` when target behavior, interface expectations, or acceptance intent need durable capture
-- use `.superplan/plan.md` when the main clarified output is trajectory, sequencing, or execution path
-- use `.superplan/decisions.md` when the durable fact is an approved trade-off, preference, or boundary choice
+- use `superplan change spec set <change-slug> --name <spec-slug> --stdin --json` when target behavior, interface expectations, or acceptance intent need durable capture
+- use `superplan change plan set <change-slug> --stdin --json` when the main clarified output is trajectory, sequencing, or execution path
+- use `superplan context log add --kind decision --content "..." --json` when the durable fact is an approved trade-off, preference, or boundary choice
 
 Do not force a spec file for tiny or obvious work.
 Do not skip the design-write step just because the conversation already contains the reasoning.

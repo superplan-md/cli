@@ -99,10 +99,13 @@ Product target:
 
 Current CLI reality:
 
-- `superplan init --scope local --yes --json` creates `.superplan/`, `.superplan/context/`, `.superplan/runtime/`, `.superplan/changes/`, `.superplan/decisions.md`, `.superplan/gotchas.md`, and `.superplan/plan.md`
+- `superplan init --scope local --yes --json` creates `.superplan/`, `.superplan/context/`, `.superplan/runtime/`, `.superplan/changes/`, `.superplan/decisions.md`, and `.superplan/gotchas.md`
 - `superplan context bootstrap --json` creates missing durable workspace context entrypoints
 - `superplan context status --json` reports missing durable workspace context entrypoints
-- `superplan change new <change-slug> --json` scaffolds a tracked change root plus spec surfaces
+- `superplan change new <change-slug> --json` scaffolds a tracked change root plus change-scoped plan/spec surfaces
+- `superplan change plan set <change-slug> --stdin --json` writes the change plan
+- `superplan change spec set <change-slug> --name <spec-slug> --stdin --json` writes a change-scoped spec
+- `superplan change task add <change-slug> --title "..." --json` adds graph truth and scaffolds the task contract in one CLI-owned write
 - `superplan validate <change-slug> --json` validates `tasks.md`, graph diagnostics, and graph/task-contract consistency
 - `superplan task scaffold new <change-slug> --task-id <task_id> --json` scaffolds one graph-declared task contract without mutating `tasks.md`
 - `superplan task scaffold batch <change-slug> --stdin --json` scaffolds multiple graph-declared task contracts from JSON stdin without mutating `tasks.md`
@@ -113,11 +116,11 @@ Current CLI reality:
 
 Therefore:
 
-- for tracked work, author root `tasks.md` according to the hard contract and validate it before scaffolding contracts
+- for tracked work, define plans, specs, graph tasks, and workspace memory through CLI commands instead of editing `.superplan/` files directly
 - when Superplan is staying out, do not create graph artifacts
-- manual creation of individual `tasks/T-xxx.md` task contracts is off limits
-- once the root graph is ready, use `superplan task scaffold new` or `superplan task scaffold batch` by explicit `task_id` instead of hand-creating new `tasks/T-xxx.md` files
-- keep dependency truth in `tasks.md` and task-contract truth in the task files
+- manual creation of anything under `.superplan/changes/<slug>/` is off limits
+- use `superplan change new --single-task` or repeated `superplan change task add` calls to define tracked work quickly and correctly
+- keep dependency truth in the CLI-owned change graph and task-contract truth in the CLI-owned task files
 - choose current CLI validation commands explicitly during shaping
 - distinguish current CLI commands from future CLI hooks
 
@@ -125,19 +128,16 @@ See `references/cli-authoring-now.md`.
 
 ## Task Authoring Rule
 
-Manual creation of individual `tasks/T-xxx.md` files is off limits.
+Manual creation of files under `.superplan/changes/<slug>/` is off limits.
 
-Agents should spend their shaping effort on the graph and dependency structure in `tasks.md`, then mint canonical task contracts through the CLI.
+Agents should spend their shaping effort deciding what tracked work exists, then use CLI commands that place artifacts correctly:
 
-Authoring the root `tasks.md` manually is expected. Do not use shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > ...`, `printf > ...`, or here-docs to mass-write task contracts or bulk-rewrite graph artifacts. Shell is only acceptable here as stdin transport into `superplan task scaffold batch --stdin --json`.
+- `superplan change new <change-slug> --single-task "..." --json` for the one-task fast path
+- `superplan change task add <change-slug> --title "..." ... --json` for additional tracked tasks
+- `superplan change plan set <change-slug> --stdin --json` for change plans
+- `superplan change spec set <change-slug> --name <spec-slug> --stdin --json` for change specs
 
-When shaping produces exactly one new task contract, `superplan task scaffold new <change-slug> --task-id <task_id> --json` is the default scaffold path.
-
-When shaping produces two or more new task contracts that are clear enough to author now, use one `superplan task scaffold batch <change-slug> --stdin --json` call over repeated `superplan task scaffold new` calls.
-
-For agent-first flows, prefer stdin over temporary files. Use `--file <path>` only when the batch spec itself must persist as a repo artifact.
-
-Use repeated single-task creation only when the remaining tasks are not honestly shapeable yet.
+Prefer these commands because they are the fastest way to stay helpful without teaching the model bad `.superplan` editing habits.
 
 ## Current Contract Gap
 

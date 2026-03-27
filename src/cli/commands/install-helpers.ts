@@ -734,6 +734,11 @@ Common commands:
 - \`superplan context bootstrap --json\`
 - \`superplan context status --json\`
 - \`superplan change new <change-slug> --json\`
+- \`superplan change plan set <change-slug> --stdin --json\`
+- \`superplan change spec set <change-slug> --name <spec-slug> --stdin --json\`
+- \`superplan change task add <change-slug> --title "..." --json\`
+- \`superplan context doc set <doc-slug> --stdin --json\`
+- \`superplan context log add --kind <decision|gotcha> --content "..." --json\`
 - \`superplan validate <change-slug> --json\`
 - \`superplan task scaffold new <change-slug> --task-id <task_id> --json\`
 - \`superplan task scaffold batch <change-slug> --stdin --json\`
@@ -756,8 +761,8 @@ Execution loop:
 4. If \`run\`, \`status\`, or task activation returns an unexpected lifecycle or runtime error, stay inside Superplan and repair, block, reopen, or inspect before attempting implementation
 5. Update runtime state with block, feedback, complete, or fix commands instead of editing markdown state by hand
 6. After implementation proof passes, do not end the turn with the task still effectively pending or in progress; move it through \`superplan task review complete <task_id> --json\` and the appropriate review path, or state the exact blocker
-7. Use \`superplan context bootstrap --json\` when durable workspace context entrypoints are missing, then keep \`.superplan\/context\/\`, \`.superplan\/decisions.md\`, \`.superplan\/gotchas.md\`, and \`.superplan\/plan.md\` honest instead of inventing ad hoc files
-8. When shaping tracked work, author the graph in \`.superplan\/changes\/<change-slug>\/tasks.md\` first, run \`superplan validate <change-slug> --json\`, then scaffold contracts by graph-declared task id instead of hand-creating \`tasks\/T-xxx.md\`
+7. Use \`superplan context bootstrap --json\` when durable workspace context entrypoints are missing, then use CLI commands to keep context docs, decisions, gotchas, change plans, change specs, and tracked tasks honest instead of inventing ad hoc files
+8. When shaping tracked work, use \`superplan change new --single-task\`, \`superplan change task add\`, \`superplan change plan set\`, and \`superplan change spec set\` instead of editing anything under \`.superplan\/\` directly
 9. When the request is large, ambiguous, or multi-workstream, do not jump straight from the raw request into task scaffolding; clarify expectations, capture spec or plan truth when needed, then finalize the graph
 10. If overlay support is enabled for this workspace and a launchable companion is installed, \`superplan task scaffold new\`, \`superplan task scaffold batch\`, \`superplan run\`, \`superplan run <task_id>\`, and \`superplan task review reopen\` can auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with \`superplan doctor --json\` and \`superplan overlay ensure --json\` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use \`superplan overlay hide --json\` when it becomes idle or empty
 11. After overlay-triggering commands, inspect the returned \`overlay\` payload; if \`overlay.companion.launched\` is false, surface \`overlay.companion.reason\` instead of assuming the overlay appeared
@@ -765,15 +770,13 @@ Execution loop:
 Authoring rule:
 - Use \`superplan context bootstrap --json\` to create missing workspace context entrypoints instead of hand-writing them from scratch
 - Use \`superplan change new <change-slug> --json\` once per tracked change
-- Let \`superplan change new\` scaffold the tracked change root, including spec surfaces, before filling in graph truth
-- Author the root \`.superplan\/changes\/<change-slug>\/tasks.md\` manually as graph truth; the shell-loop prohibition applies to task-contract generation and bulk graph rewrites, not to normal manual graph authoring
-- Never create or edit \`.superplan\/changes\/<change-slug>\/tasks\/T-xxx.md\` task contracts with shell loops or direct file-edit rewrites such as \`for\`, \`sed\`, \`cat > ...\`, \`printf > ...\`, here-docs, or ad hoc batch rewrites; shell is only acceptable here as stdin transport into \`superplan task scaffold batch --stdin --json\`
-- When the request is large, ambiguous, or multi-workstream, do not jump straight from the raw request into task scaffolding; capture clarification, spec, or plan truth first, then finalize the graph
-- Author \`.superplan\/changes\/<change-slug>\/tasks.md\` manually as graph truth, then run \`superplan validate <change-slug> --json\` before scaffolding task contracts
-- Use \`superplan task scaffold new <change-slug> --task-id <task_id> --json\` only when exactly one graph-declared task contract should be created now
-- Use \`superplan task scaffold batch --stdin --json\` when two or more graph-declared task contracts are ready to be scaffolded in one pass
+- Use \`superplan change new --single-task\` for the one-task fast path
+- Use \`superplan change task add\` to define tracked work and let the CLI place graph and task-contract artifacts correctly
+- Use \`superplan change plan set\` and \`superplan change spec set\` for change-scoped plan/spec truth
+- Use \`superplan context doc set\` and \`superplan context log add\` for workspace-owned durable memory
+- Do not edit anything under \`.superplan\/\` directly when a CLI command can own the write
 - Prefer stdin over temp files in agent flows
-- Use the returned task payloads directly after authoring instead of immediately calling \`superplan task inspect show\`
+- Use the returned task payloads directly after CLI authoring instead of immediately calling \`superplan task inspect show\`
 
 Canonical selection rule:
 - Prefer the one canonical command for the intent instead of choosing among overlapping alternatives
