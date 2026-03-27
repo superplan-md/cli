@@ -77,6 +77,25 @@ export function buildChangeTasksIndex(changeSlug: string, title: string): string
   ].join('\n');
 }
 
+export function buildSingleTaskChangeIndex(changeSlug: string, title: string, taskTitle: string): string {
+  return [
+    '# Task Graph',
+    '',
+    '## Graph Metadata',
+    `- Change ID: \`${changeSlug}\``,
+    `- Title: ${title}`,
+    '',
+    '## Graph Layout',
+    `- \`T-001\` ${taskTitle}`,
+    '  - depends_on_all: []',
+    '  - depends_on_any: []',
+    '',
+    '## Notes',
+    '- This change was created through the single-task fast path.',
+    '',
+  ].join('\n');
+}
+
 export function buildTaskContract(options: {
   taskId: string;
   changeId: string;
@@ -111,6 +130,14 @@ export function buildTaskContract(options: {
     '',
     '## Acceptance Criteria',
     ...normalizedAcceptanceCriteria.map(criterion => `- [ ] ${criterion}`),
+    '',
+    '## Execution',
+    'Add task-specific repo-native commands here when this task needs an explicit launch or setup path.',
+    'Use bullets like `- run: npm start`.',
+    '',
+    '## Verification',
+    'Add the smallest proof commands and reviewer evidence here when this task needs tighter checks than the repo defaults.',
+    'Use bullets like `- verify: npm test` and `- evidence: capture the failing command output`.',
     '',
   ].join('\n');
 }

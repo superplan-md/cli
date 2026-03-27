@@ -19,8 +19,8 @@ export type AgentBootstrapStrength = 'context_bootstrap' | 'rule_bootstrap' | 's
 export interface AgentEnvironment {
   name: AgentName;
   path: string;
-  install_path: string;
-  install_kind: AgentInstallKind;
+  install_path?: string;
+  install_kind?: AgentInstallKind;
   bootstrap_strength: AgentBootstrapStrength;
   cleanup_paths?: string[];
 }

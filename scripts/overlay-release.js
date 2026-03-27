@@ -18,12 +18,16 @@ const DEFAULT_BUNDLE_ROOT = path.join(
 const DEFAULT_OUTPUT_DIR = path.join(REPO_ROOT, 'dist', 'release', 'overlay');
 
 function normalizePlatform(rawPlatform) {
-  if (rawPlatform === 'darwin' || rawPlatform === 'linux') {
+  if (rawPlatform === 'darwin' || rawPlatform === 'linux' || rawPlatform === 'windows') {
     return rawPlatform;
   }
 
   if (rawPlatform === 'macos') {
     return 'darwin';
+  }
+
+  if (rawPlatform === 'win32') {
+    return 'windows';
   }
 
   throw new Error(`Unsupported overlay release platform: ${rawPlatform}`);
@@ -60,6 +64,18 @@ function getOverlayReleaseTarget(rawPlatform = process.platform, rawArch = proce
     };
   }
 
+  if (platform === 'windows') {
+    return {
+      platform,
+      arch,
+      artifactName: `superplan-overlay-${platform}-${arch}.exe`,
+      artifactKind: 'file',
+      bundleDirectory: null,
+      bundleExtension: '.exe',
+      binaryName: 'superplan-overlay-desktop.exe',
+    };
+  }
+
   return {
     platform,
     arch,
@@ -80,6 +96,15 @@ async function pathExists(targetPath) {
 }
 
 async function findBundleInput(bundleRoot, target) {
+  if (target.platform === 'windows') {
+    const binaryPath = path.join(bundleRoot, '..', target.binaryName);
+    if (!await pathExists(binaryPath)) {
+      throw new Error(`Expected Windows overlay binary is missing: ${binaryPath}`);
+    }
+
+    return binaryPath;
+  }
+
   const platformBundleDir = path.join(bundleRoot, target.bundleDirectory);
   if (!await pathExists(platformBundleDir)) {
     throw new Error(`Expected overlay bundle directory is missing: ${platformBundleDir}`);

@@ -36,7 +36,6 @@ test('cli without a command shows the main Superplan command list', async () => 
   assert.match(result.stdout, /Admin:/);
   assert.match(result.stdout, /update\s+Update an installed Superplan CLI and refresh skills/);
   assert.match(result.stdout, /remove\s+Remove Superplan installation or state/);
-  assert.doesNotMatch(result.stdout, /server\s+Start the local dummy server/);
   assert.doesNotMatch(result.stdout, /popup\s+Open or refocus the current task popup/);
   assert.doesNotMatch(result.stdout, /\bpurge\b/);
 });
@@ -103,22 +102,24 @@ test('task --help explains task subcommands explicitly', async () => {
 
   assert.equal(result.code, 0);
   assert.match(result.stdout, /Task lifecycle:/);
-  assert.match(result.stdout, /run -> complete -> approve/);
-  assert.match(result.stdout, /complete moves finished implementation into review; approve is final signoff that marks the task done\./);
+  assert.match(result.stdout, /run -> complete/);
+  assert.match(result.stdout, /complete verifies acceptance criteria and marks routine work done/);
   assert.match(result.stdout, /Inspect:/);
   assert.match(result.stdout, /Scaffold:/);
   assert.match(result.stdout, /Review:/);
   assert.match(result.stdout, /Runtime:/);
   assert.match(result.stdout, /Repair:/);
-  assert.match(result.stdout, /inspect show <task_id>\s+Show one task and its readiness details/);
+  assert.match(result.stdout, /inspect show <task_id>\s+Show one task, its readiness details, and its execution recipe/);
   assert.match(result.stdout, /scaffold new <change-slug>\s+Scaffold one graph-declared task contract/);
   assert.match(result.stdout, /scaffold batch <change-slug> --stdin\s+Scaffold multiple graph-declared task contracts from JSON stdin/);
-  assert.match(result.stdout, /review complete <task_id>\s+Finish implementation and send the task to review/);
-  assert.match(result.stdout, /review approve <task_id>\s+Approve an in-review task and mark it done/);
+  assert.match(result.stdout, /review complete <task_id>\s+Finish implementation and mark the task done when acceptance criteria pass/);
+  assert.match(result.stdout, /review approve <task_id>\s+Approve an in-review task and mark it done when strict review is required/);
   assert.match(result.stdout, /review reopen <task_id>\s+Move a review or done task back into implementation/);
   assert.match(result.stdout, /runtime block <task_id> --reason\s+Pause a task because something external is blocking it/);
   assert.match(result.stdout, /For a fast start:\s+superplan run --json/);
   assert.match(result.stdout, /shape changes\/<slug>\/tasks\.md first, validate it, then scaffold task contracts from graph-declared ids/i);
+  assert.match(result.stdout, /## Execution/);
+  assert.match(result.stdout, /## Verification/);
   assert.doesNotMatch(result.stdout, /\bstart <task_id>\b/);
   assert.doesNotMatch(result.stdout, /\bresume <task_id>\b/);
   assert.doesNotMatch(result.stdout, /\bcurrent\b/);

@@ -27,6 +27,18 @@ curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/
 
 That uses a stable installer URL and resolves the latest published GitHub release tag automatically before installing the CLI and matching overlay artifact.
 
+Windows:
+
+```powershell
+irm https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.ps1 | iex
+```
+
+```bat
+curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && install-superplan.cmd
+```
+
+The Windows installer now installs the CLI and the packaged overlay companion when a matching Windows release artifact is available.
+
 ## How it works
 
 Superplan sits inside your repo and takes control of execution.
@@ -102,10 +114,32 @@ curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/
 
 That uses a stable installer URL and resolves the latest published GitHub release tag automatically before installing the CLI and matching overlay artifact.
 
+For Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.ps1 | iex
+```
+
+For Windows Command Prompt:
+
+```bat
+curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && install-superplan.cmd
+```
+
+The Windows installer resolves the latest published GitHub release tag for the CLI source when `SUPERPLAN_REF` is not pinned, and it installs the Windows overlay companion when the matching release artifact is available.
+
 If you want to pin a specific release instead, keep the same installer URL and set `SUPERPLAN_REF` explicitly:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.sh | SUPERPLAN_REF=<version-tag> sh
+```
+
+```powershell
+$env:SUPERPLAN_REF='<version-tag>'; irm https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.ps1 | iex
+```
+
+```bat
+set SUPERPLAN_REF=<version-tag> && curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && install-superplan.cmd
 ```
 
 ### 2. Initialize

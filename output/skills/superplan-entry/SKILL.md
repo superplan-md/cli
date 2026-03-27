@@ -99,13 +99,16 @@ For dense requirement dumps, packed queries, JTBD lists, or multi-constraint bri
 
 ## Stay Out
 
-Stay conversational when:
+Stay conversational and skip task creation entirely when:
 
 - the user wants a simple explanation or answer
 - no durable artifact would help
 - no visibility or supervision value would be created
 - no reusable context would be captured
 - the request is casual, ephemeral, or already fully satisfied
+- the work touches exactly one file and requires no decisions — a single-file edit that is verifiable by inspection (e.g. fix a typo, bump a version number) is the only repo-work exception to the task creation mandate
+
+The one-file/no-decisions carve-out is narrow and intentional. If there is any doubt about whether a decision is involved, assume task creation is required.
 
 If Superplan stays out, answer directly and do not create workflow artifacts.
 
@@ -289,7 +292,8 @@ See `references/routing-boundaries.md`.
 - bypassing the owning workflow phase just because a support skill feels relevant
 - sending already shaped work back to `superplan-route` by reflex
 - forcing engagement when Superplan adds no value
-- turning every request into tracked work
+- acting on repo work without a tracked task when the one-file/no-decisions carve-out does not apply
+- starting execution for work with 3 or more distinct steps without a complete task graph
 - using entry routing as cover for CLI command-surface exploration once the next workflow owner is already clear
 - calling `--help`, neighboring subcommands, or repeated `status`/`task inspect show`/`doctor` checks without a concrete routing need
 

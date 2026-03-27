@@ -24,7 +24,7 @@ test('install quiet installs bundled global assets into the configured home dire
   assert.equal(payload.error, null);
   assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'config.toml')));
   assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-entry', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-entry', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'CLAUDE.md')));
 });
 
 test('init installs local artifacts and auto-runs install if global config is missing', async () => {

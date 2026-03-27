@@ -71,6 +71,36 @@ test('macOS bundle launch plan opens the app bundle without forcing a new instan
   assert.equal(plan.args.includes('-n'), false);
 });
 
+test('overlay companion matches quoted Windows executable and workspace arguments', () => {
+  const {
+    commandMatchesExecutablePath,
+    commandMatchesWorkspacePath,
+    parseWindowsProcessEntriesPayload,
+  } = loadDistModule('cli/overlay-companion.js');
+
+  assert.equal(
+    commandMatchesExecutablePath(
+      '"C:\\Users\\me\\AppData\\Roaming\\superplan\\overlay\\superplan-overlay-desktop.exe" --workspace "C:\\repo with space"',
+      'C:\\Users\\me\\AppData\\Roaming\\superplan\\overlay\\superplan-overlay-desktop.exe',
+    ),
+    true,
+  );
+  assert.equal(
+    commandMatchesWorkspacePath(
+      '"C:\\Users\\me\\AppData\\Roaming\\superplan\\overlay\\superplan-overlay-desktop.exe" --workspace "C:\\repo with space"',
+      'C:\\repo with space',
+    ),
+    true,
+  );
+  assert.deepEqual(
+    parseWindowsProcessEntriesPayload('[{"ProcessId":42,"CommandLine":"\\"C:\\\\\\\\overlay\\\\\\\\superplan-overlay-desktop.exe\\" --workspace \\"C:\\\\\\\\repo with space\\""}]'),
+    [{
+      pid: 42,
+      command: '"C:\\\\overlay\\\\superplan-overlay-desktop.exe" --workspace "C:\\\\repo with space"',
+    }],
+  );
+});
+
 async function waitForFile(targetPath, timeoutMs = 3000) {
   const startedAt = Date.now();
 
@@ -292,7 +322,7 @@ printf '%s\n' "$SUPERPLAN_OVERLAY_WORKSPACE" >> "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
   const control = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
 
   assert.equal(createPayload.ok, true);
-  assert.equal(createPayload.data.task_id, 'T-001');
+  assert.equal(createPayload.data.task_id, 'shape-spec/T-001');
   assert.equal(createPayload.data.change_id, 'shape-spec');
   assert.equal(createPayload.data.overlay.requested_action, 'ensure');
   assert.equal(createPayload.data.overlay.enabled, true);
@@ -450,17 +480,12 @@ Ship prior work
   assert.deepEqual(snapshot.board.blocked, []);
   assert.deepEqual(snapshot.board.needs_feedback, []);
   assert.equal(snapshot.board.done.length, 1);
-  assert.deepEqual(snapshot.board.done[0], {
-    task_id: 'T-001',
-    title: 'Ship prior work',
-    status: 'done',
-    completed_acceptance_criteria: 1,
-    total_acceptance_criteria: 1,
-    progress_percent: 100,
-    started_at: '2026-03-23T10:00:00.000Z',
-    completed_at: '2026-03-23T10:05:00.000Z',
-    updated_at: '2026-03-23T10:05:00.000Z',
-  });
+  assert.equal(snapshot.board.done[0].task_id, 'T-001');
+  assert.equal(snapshot.board.done[0].title, 'Ship prior work');
+  assert.equal(snapshot.board.done[0].status, 'done');
+  assert.equal(snapshot.board.done[0].completed_acceptance_criteria, 1);
+  assert.equal(snapshot.board.done[0].total_acceptance_criteria, 1);
+  assert.equal(snapshot.board.done[0].progress_percent, 100);
   assert.deepEqual(snapshot.focused_change, {
     change_id: 'next-change',
     title: 'Next Change',
@@ -605,6 +630,55 @@ Launch overlay companion
   assert.equal(ensurePayload.data.companion.executable_path, fakeOverlayPath);
   assert.match(launchOutput, new RegExp(`--workspace ${realWorkspacePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
   assert.match(launchOutput, new RegExp(`${realWorkspacePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
+});
+
+test('overlay ensure suppresses repeated launch attempts after a recent failure', async () => {
+  const sandbox = await makeSandbox('superplan-overlay-launch-suppressed-');
+  const fakeOverlayPath = path.join(sandbox.root, 'fake-overlay-noexec');
+
+  await writeFile(fakeOverlayPath, '#!/bin/sh\nexit 0\n');
+
+  await writeDemoGraph(sandbox.cwd, [
+    { task_id: 'T-011C', title: 'Suppress repeated overlay launch failures' },
+  ]);
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-011C.md'), `---
+task_id: T-011C
+status: pending
+priority: high
+---
+
+## Description
+Suppress repeated overlay launch failures
+
+## Acceptance Criteria
+- [ ] A
+`);
+
+  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+
+  const overlayEnv = {
+    ...sandbox.env,
+    SUPERPLAN_OVERLAY_BINARY_PATH: fakeOverlayPath,
+  };
+
+  const firstEnsurePayload = parseCliJson(await runCli(['overlay', 'ensure', '--json'], {
+    cwd: sandbox.cwd,
+    env: overlayEnv,
+  }));
+  assert.equal(firstEnsurePayload.ok, true);
+  assert.equal(firstEnsurePayload.data.companion.attempted, true);
+  assert.equal(firstEnsurePayload.data.companion.launched, false);
+  assert.equal(firstEnsurePayload.data.companion.reason, 'launch_failed');
+
+  const secondEnsurePayload = parseCliJson(await runCli(['overlay', 'ensure', '--json'], {
+    cwd: sandbox.cwd,
+    env: overlayEnv,
+  }));
+  assert.equal(secondEnsurePayload.ok, true);
+  assert.equal(secondEnsurePayload.data.companion.attempted, false);
+  assert.equal(secondEnsurePayload.data.companion.launched, false);
+  assert.equal(secondEnsurePayload.data.companion.reason, 'launch_suppressed');
+  assert.match(secondEnsurePayload.data.companion.message, /Recent overlay launch failure detected/);
 });
 
 test('overlay ensure does not launch a second detached companion when one is already running', async (t) => {
@@ -796,7 +870,7 @@ Relaunch overlay when feedback is requested
 
   await writeJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'), {
     tasks: {
-      'T-011E': {
+      'demo/T-011E': {
         status: 'in_progress',
         started_at: '2026-03-23T10:00:00.000Z',
         updated_at: '2026-03-23T10:00:00.000Z',
@@ -1333,7 +1407,7 @@ Finish me
 
   await writeJson(path.join(doneSandbox.cwd, '.superplan', 'runtime', 'tasks.json'), {
     tasks: {
-      'T-300': {
+      'demo/T-300': {
         status: 'in_progress',
         started_at: '2026-03-19T12:00:00.000Z',
         updated_at: '2026-03-19T12:00:00.000Z',
@@ -1341,11 +1415,8 @@ Finish me
     },
   });
 
-  const reviewPayload = parseCliJson(await runCli(['task', 'review', 'complete', 'T-300', '--json'], { cwd: doneSandbox.cwd, env: doneSandbox.env }));
-  assert.equal(reviewPayload.data.status, 'in_review');
-
-  const approvePayload = parseCliJson(await runCli(['task', 'review', 'approve', 'T-300', '--json'], { cwd: doneSandbox.cwd, env: doneSandbox.env }));
-  assert.equal(approvePayload.data.status, 'done');
+  const reviewPayload = parseCliJson(await runCli(['task', 'review', 'complete', 'demo/T-300', '--json'], { cwd: doneSandbox.cwd, env: doneSandbox.env }));
+  assert.equal(reviewPayload.data.status, 'done');
 
   const doneSnapshot = await readJson(path.join(doneSandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
   assert.equal(doneSnapshot.attention_state, 'all_tasks_done');

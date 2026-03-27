@@ -16,6 +16,7 @@ import {
   type OverlayTaskSummary,
 } from '../shared/overlay';
 import { loadChangeGraph } from './graph';
+import { getTaskRef, toQualifiedTaskId } from './task-identity';
 import { formatTitleFromSlug } from './commands/scaffold';
 import { resolveWorkspaceRoot } from './workspace-root';
 
@@ -23,6 +24,8 @@ type TaskPriority = 'high' | 'medium' | 'low';
 
 export interface OverlayTaskSource {
   task_id: string;
+  change_id?: string;
+  task_ref?: string;
   description: string;
   status: string;
   priority: TaskPriority;
@@ -281,7 +284,7 @@ async function collectTrackedChanges(
     return [];
   }
 
-  const taskMap = new Map(tasks.map(task => [task.task_id, task]));
+  const taskMap = new Map(tasks.map(task => [getTaskRef(task), task]));
   const trackedChanges: OverlayTrackedChange[] = [];
 
   for (const entry of changeEntries) {
@@ -295,7 +298,7 @@ async function collectTrackedChanges(
       getTrackedChangeTaskIds(changeDir),
     ]);
     const matchedTasks = taskIds
-      .map(taskId => taskMap.get(taskId))
+      .map(taskId => taskMap.get(toQualifiedTaskId(entry.name, taskId)))
       .filter((task): task is OverlayTaskSource => task !== undefined);
     const taskTotal = taskIds.length;
     const taskDone = matchedTasks.filter(task => task.status === 'done').length;

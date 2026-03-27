@@ -65,7 +65,7 @@ async function verifyLocalSetup(paths: {
   }
 
   for (const agent of paths.projectAgents) {
-    if (!await pathExists(agent.install_path)) {
+    if (agent.install_path && !await pathExists(agent.install_path)) {
       issues.push(`Local ${agent.name} integration was not installed correctly.`);
     }
   }
@@ -135,12 +135,10 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
 
     const workspaceRoot = resolveWorkspaceRoot(process.cwd());
     const cwd = workspaceRoot;
-    const sourceSkillsDir = path.resolve(__dirname, '../../../output/skills');
     const superplanRoot = path.join(workspaceRoot, '.superplan');
-    const localSkillsDir = path.join(superplanRoot, 'skills');
+    const globalSkillsDir = path.join(homeDir, '.config', 'superplan', 'skills');
 
     await fs.mkdir(superplanRoot, { recursive: true });
-    await installSkills(sourceSkillsDir, localSkillsDir);
 
     const workspaceArtifacts = await ensureWorkspaceArtifacts(superplanRoot);
 
@@ -167,13 +165,14 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
         const names = projectAgentsToInstall.map(a => getAgentDisplayName(a)).join(', ');
         console.log(`\nIntegrating with AI agents: ${names}`);
       }
-      await installAgentSkills(localSkillsDir, projectAgentsToInstall);
+      // Pass empty skillsDir string since we're using globalSkillsDir internally in installAgentSkills
+      await installAgentSkills('', projectAgentsToInstall);
     }
 
     // Common repo-level managed instruction files
-    await installManagedInstructionsFile(path.join(cwd, 'AGENTS.md'));
+    await installManagedInstructionsFile(path.join(cwd, 'AGENTS.md'), globalSkillsDir);
     if (await pathExists(path.join(cwd, '.claude'))) {
-      await installManagedInstructionsFile(path.join(cwd, '.claude', 'CLAUDE.md'));
+      await installManagedInstructionsFile(path.join(cwd, '.claude', 'CLAUDE.md'), globalSkillsDir);
     }
 
     // Save local overlay preference

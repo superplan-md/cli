@@ -1,13 +1,7 @@
-# 00 - GLOBAL RULE: Start With `superplan-entry`
+# 00 - GLOBAL RULE: Superplan Operating Contract
 
-As an AI agent working in this repository, treat `superplan-entry` as the mandatory first gate for repo work.
-
-This file does not replace `superplan-entry`.
-It exists to force the right order:
-
-1. load `superplan-entry`
-2. let `superplan-entry` decide whether Superplan should engage
-3. only then enter shaping, execution, review, or stay-out behavior
+As an AI agent working in this repository, this file is the fallback contract.
+Read it first. Follow it even if you misread or skip the full skill chain.
 
 ## 1. Mandatory First Contact
 
@@ -32,7 +26,25 @@ If `superplan-entry` says stay out:
 - create no Superplan artifacts
 - do not force the user through `init`, task creation, or lifecycle commands
 
-## 3. Fastest Path For Missing Repo Init
+## 3. Task Creation Before Acting
+
+Once Superplan is engaged, task creation is how users see what the agent is doing. It is not ceremony.
+
+**The rule:** Any repo work that touches files or runs commands requires a tracked Superplan task before acting.
+
+**The only exception — one-file/no-decisions carve-out:** A single-file edit that requires no decisions and is verifiable by inspection (e.g. fix a typo, bump a version number) may skip task creation entirely. This carve-out is narrow. If there is any doubt about whether a decision is involved, create a task.
+
+**The multi-step rule:** Work with 3 or more distinct steps requires a complete task graph before execution begins. Do not start executing multi-step work from a single task or no task.
+
+Rationalizations that mean stop and create a task first:
+
+- "This is just a small fix."
+- "I'll create the task after."
+- "It's only two steps."
+- "The user just wants the code."
+- "This doesn't need structure."
+
+## 4. Fastest Path For Missing Repo Init
 
 Missing repo init is not a blocker by itself.
 
@@ -44,7 +56,7 @@ If the `superplan` CLI is available and the repo should use Superplan:
 
 Prefer the fewest user-visible steps that preserve correct workflow state.
 
-## 4. CLI Discipline After Engagement
+## 5. CLI Discipline After Engagement
 
 Once `superplan-entry` has decided Superplan should engage:
 
@@ -54,7 +66,7 @@ Once `superplan-entry` has decided Superplan should engage:
 - author the root graph in `.superplan/changes/<change-slug>/tasks.md` only in the shaping phase that owns that work
 - use `superplan run`, `superplan task runtime block`, `superplan task runtime request-feedback`, `superplan task review complete`, and related lifecycle commands only after engagement is already settled
 
-## 5. Overlay And User Communication
+## 6. Overlay And User Communication
 
 - do not assume overlay visibility unless the current workflow phase has verified it
 - keep workflow routing internal

@@ -93,6 +93,17 @@ async function installOverlayCompanion(globalConfigDir: string): Promise<void> {
         targetBundleName = 'superplan-overlay.AppImage';
       }
     }
+  } else if (platform === 'win32') {
+    sourceBundlePath = path.join(
+      repoRoot,
+      'apps',
+      'overlay-desktop',
+      'src-tauri',
+      'target',
+      'release',
+      'superplan-overlay-desktop.exe',
+    );
+    targetBundleName = 'superplan-overlay-desktop.exe';
   }
 
   if (sourceBundlePath && await pathExists(sourceBundlePath)) {
@@ -141,11 +152,11 @@ export async function ensureGlobalSetup(
   await installSkills(sourceSkillsDir, skillsDir);
   
   if (await pathExists(path.join(homeDir, '.codex'))) {
-    await installManagedInstructionsFile(path.join(homeDir, '.codex', 'AGENTS.md'));
+    await installManagedInstructionsFile(path.join(homeDir, '.codex', 'AGENTS.md'), skillsDir);
   }
 
   if (await pathExists(path.join(homeDir, '.claude'))) {
-    await installManagedInstructionsFile(path.join(homeDir, '.claude', 'CLAUDE.md'));
+    await installManagedInstructionsFile(path.join(homeDir, '.claude', 'CLAUDE.md'), skillsDir);
   }
 }
 
@@ -167,7 +178,7 @@ async function verifyGlobalSetup(paths: {
   }
 
   for (const agent of paths.homeAgents) {
-    if (!await pathExists(agent.install_path)) {
+    if (agent.install_path && !await pathExists(agent.install_path)) {
       issues.push(`Global ${agent.name} integration was not installed correctly.`);
     }
   }

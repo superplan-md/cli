@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { spawn } from 'node:child_process';
 import { readInstallMetadata } from './install-metadata';
+import { readVisibilityEvents } from './visibility-runtime';
 
 type OverlayCompanionSource = 'env' | 'install_metadata' | null;
 
@@ -10,6 +11,7 @@ export type OverlayCompanionIssue =
   | 'install_path_missing'
   | 'executable_missing'
   | 'launch_failed'
+  | 'launch_suppressed'
   | 'not_requested';
 
 export interface OverlayCompanionStatus {
@@ -37,6 +39,13 @@ export interface MacosOverlayBundleLaunchPlan {
 interface RunningProcessEntry {
   pid: number;
   command: string;
+}
+
+const LAUNCH_FAILURE_SUPPRESSION_WINDOW_MS = 60_000;
+const LAUNCH_RESULT_WAIT_MS = process.platform === 'linux' ? 300 : 50;
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function pathExists(targetPath: string): Promise<boolean> {
@@ -112,14 +121,9 @@ function resolveMacosAppBundlePath(
   return null;
 }
 
-function commandMatchesExecutablePath(commandLine: string, executablePath: string): boolean {
-  // Direct path match
-  if (
-    commandLine === executablePath
-    || commandLine.startsWith(`${executablePath} `)
-    || commandLine.includes(` ${executablePath} `)
-    || commandLine.endsWith(` ${executablePath}`)
-  ) {
+export function commandMatchesExecutablePath(commandLine: string, executablePath: string): boolean {
+  const escapedExecutablePath = escapeRegExp(executablePath);
+  if (new RegExp(`(^|\\s)"?${escapedExecutablePath}"?(?=\\s|$)`).test(commandLine)) {
     return true;
   }
 
@@ -138,43 +142,9 @@ function commandMatchesExecutablePath(commandLine: string, executablePath: strin
   );
 }
 
-function commandMatchesWorkspacePath(commandLine: string, workspacePath: string): boolean {
-  return commandLine.includes(` --workspace ${workspacePath}`)
-    || commandLine.endsWith(`--workspace ${workspacePath}`)
-    || commandLine.includes(` --workspace=${workspacePath}`)
-    || commandLine.endsWith(`--workspace=${workspacePath}`);
-}
-
-async function readProcessCommandLines(): Promise<string[] | null> {
-  return await new Promise(resolve => {
-    const child = spawn('/bin/ps', ['-axo', 'command='], {
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-
-    let stdout = '';
-
-    child.stdout.on('data', chunk => {
-      stdout += String(chunk);
-    });
-
-    child.on('error', () => {
-      resolve(null);
-    });
-
-    child.on('close', code => {
-      if (code !== 0) {
-        resolve(null);
-        return;
-      }
-
-      resolve(
-        stdout
-          .split(/\r?\n/)
-          .map(line => line.trim())
-          .filter(Boolean),
-      );
-    });
-  });
+export function commandMatchesWorkspacePath(commandLine: string, workspacePath: string): boolean {
+  const escapedWorkspacePath = escapeRegExp(workspacePath);
+  return new RegExp(`(^|\\s)--workspace(?:\\s+|=)"?${escapedWorkspacePath}"?(?=\\s|$)`).test(commandLine);
 }
 
 function parseRunningProcessEntry(line: string): RunningProcessEntry | null {
@@ -189,7 +159,112 @@ function parseRunningProcessEntry(line: string): RunningProcessEntry | null {
   };
 }
 
+export function parseWindowsProcessEntriesPayload(stdout: string): RunningProcessEntry[] {
+  const trimmed = stdout.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const parsed = JSON.parse(trimmed) as (
+    { ProcessId?: number; CommandLine?: string | null }
+    | Array<{ ProcessId?: number; CommandLine?: string | null }>
+  );
+  const rows = Array.isArray(parsed) ? parsed : [parsed];
+
+  return rows
+    .map(row => {
+      const pid = typeof row.ProcessId === 'number' ? row.ProcessId : null;
+      const command = typeof row.CommandLine === 'string' ? row.CommandLine.trim() : '';
+      if (!pid || !command) {
+        return null;
+      }
+
+      return { pid, command };
+    })
+    .filter((entry): entry is RunningProcessEntry => entry !== null);
+}
+
+
+
+async function waitForLaunchResult(child: ReturnType<typeof spawn>): Promise<{ ok: true } | { ok: false; message: string }> {
+  return await new Promise(resolve => {
+    let settled = false;
+
+    const finish = (result: { ok: true } | { ok: false; message: string }) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      child.removeListener('error', onError);
+      child.removeListener('exit', onExit);
+      clearTimeout(timer);
+      resolve(result);
+    };
+
+    const onError = (error: Error & { message?: string }) => {
+      finish({
+        ok: false,
+        message: error?.message || 'Failed to launch overlay companion.',
+      });
+    };
+
+    const onExit = (code: number | null) => {
+      if (process.platform !== 'linux' || code === null) {
+        return;
+      }
+
+      finish({
+        ok: false,
+        message: `Overlay companion exited immediately (exit code ${code}). On Linux, ensure FUSE is installed: sudo apt install fuse libfuse2`,
+      });
+    };
+
+    const timer = setTimeout(() => {
+      finish({ ok: true });
+    }, LAUNCH_RESULT_WAIT_MS);
+
+    child.once('error', onError);
+    child.once('exit', onExit);
+  });
+}
+
 async function readRunningProcessEntries(): Promise<RunningProcessEntry[] | null> {
+  if (process.platform === 'win32') {
+    return await new Promise(resolve => {
+      const child = spawn('powershell', [
+        '-NoProfile',
+        '-Command',
+        'Get-CimInstance Win32_Process | Select-Object ProcessId, CommandLine | ConvertTo-Json -Compress',
+      ], {
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+
+      let stdout = '';
+
+      child.stdout.on('data', chunk => {
+        stdout += String(chunk);
+      });
+
+      child.on('error', () => {
+        resolve(null);
+      });
+
+      child.on('close', code => {
+        if (code !== 0) {
+          resolve(null);
+          return;
+        }
+
+        try {
+          resolve(parseWindowsProcessEntriesPayload(stdout));
+        } catch {
+          resolve(null);
+        }
+      });
+    });
+  }
+
   return await new Promise(resolve => {
     const child = spawn('/bin/ps', ['-axo', 'pid=,command='], {
       stdio: ['ignore', 'pipe', 'ignore'],
@@ -438,6 +513,18 @@ export async function launchInstalledOverlayCompanion(
   }
 
   try {
+    const recentLaunchFailure = await findRecentLaunchFailure(resolvedWorkspacePath);
+    if (recentLaunchFailure) {
+      return {
+        ...companionStatus,
+        attempted: false,
+        launched: false,
+        workspace_path: resolvedWorkspacePath,
+        reason: 'launch_suppressed',
+        message: recentLaunchFailure,
+      };
+    }
+
     // Bug #10 fix: make ONE ps call and reuse the result for both the dedup
     // check and the macOS bundle launch plan.  The original code made two
     // separate ps spawns (readRunningProcessEntries + readProcessCommandLines)
@@ -509,22 +596,16 @@ export async function launchInstalledOverlayCompanion(
 
     const child = spawn(launchPlan.command, launchPlan.args, commonSpawnOptions);
     child.unref();
-
-    // Bug #14 fix: on Linux (AppImage), verify the process didn't exit
-    // immediately due to missing FUSE or broken AppImage permissions.
-    // A 300ms wait catches the vast majority of immediate exits.
-    if (process.platform === 'linux') {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      if (child.exitCode !== null) {
-        return {
-          ...companionStatus,
-          attempted: true,
-          launched: false,
-          workspace_path: resolvedWorkspacePath,
-          reason: 'launch_failed',
-          message: `Overlay companion exited immediately (exit code ${child.exitCode}). On Linux, ensure FUSE is installed: sudo apt install fuse libfuse2`,
-        };
-      }
+    const launchResult = await waitForLaunchResult(child);
+    if (!launchResult.ok) {
+      return {
+        ...companionStatus,
+        attempted: true,
+        launched: false,
+        workspace_path: resolvedWorkspacePath,
+        reason: 'launch_failed',
+        message: launchResult.message,
+      };
     }
 
     return {
@@ -570,4 +651,24 @@ export async function terminateInstalledOverlayCompanion(workspacePath?: string)
   for (const processEntry of matchingProcesses) {
     await terminateProcess(processEntry.pid);
   }
+}
+
+async function findRecentLaunchFailure(workspacePath: string): Promise<string | null> {
+  const events = await readVisibilityEvents(workspacePath);
+  const cutoff = Date.now() - LAUNCH_FAILURE_SUPPRESSION_WINDOW_MS;
+  const recentFailure = [...events]
+    .reverse()
+    .find(event =>
+      event.type === 'overlay.ensure'
+      && event.outcome === 'error'
+      && event.detail_code === 'launch_failed'
+      && event.ts >= cutoff,
+    );
+
+  if (!recentFailure) {
+    return null;
+  }
+
+  const elapsedMs = Math.max(Date.now() - recentFailure.ts, 0);
+  return `Recent overlay launch failure detected ${elapsedMs}ms ago; suppressing immediate retry.`;
 }

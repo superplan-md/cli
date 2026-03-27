@@ -85,8 +85,25 @@ async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
-function getBundledInstallerPath(): string {
-  return path.resolve(__dirname, '../../../scripts/install.sh');
+function getBundledInstallerPath(platform = process.platform): string {
+  return path.resolve(
+    __dirname,
+    platform === 'win32' ? '../../../scripts/install.ps1' : '../../../scripts/install.sh',
+  );
+}
+
+function getBundledInstallerCommand(platform = process.platform): { command: string; args: string[] } {
+  if (platform === 'win32') {
+    return {
+      command: 'powershell',
+      args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File'],
+    };
+  }
+
+  return {
+    command: 'sh',
+    args: [],
+  };
 }
 
 function buildReleaseBaseUrl(repoUrl: string, tag: string): string {
@@ -177,10 +194,72 @@ async function resolveLatestReleaseFromGitHub(repoUrl: string): Promise<LatestRe
 }
 
 function matchesManagedCommand(command: string, needle: string): boolean {
-  return command === needle || command.startsWith(`${needle} `);
+  const escapedNeedle = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|\\s)"?${escapedNeedle}"?(?=\\s|$)`).test(command);
 }
 
 async function listManagedProcesses(targets: ManagedProcessTargets): Promise<ManagedProcessInfo[]> {
+  if (process.platform === 'win32') {
+    return await new Promise((resolve, reject) => {
+      const child = spawn('powershell', [
+        '-NoProfile',
+        '-Command',
+        'Get-CimInstance Win32_Process | Select-Object ProcessId, CommandLine | ConvertTo-Json -Compress',
+      ], {
+        cwd: process.cwd(),
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', chunk => {
+        stdout += String(chunk);
+      });
+
+      child.stderr.on('data', chunk => {
+        stderr += String(chunk);
+      });
+
+      child.on('error', reject);
+      child.on('close', code => {
+        if (code !== 0) {
+          reject(new Error((stderr || stdout || 'failed to inspect running processes').trim()));
+          return;
+        }
+
+        try {
+          const parsed = JSON.parse(stdout.trim() || '[]');
+          const rows = Array.isArray(parsed) ? parsed : [parsed];
+          const installBinPath = targets.installBinDir ? path.join(targets.installBinDir, 'superplan.cmd') : null;
+          const managedProcesses: ManagedProcessInfo[] = [];
+
+          for (const row of rows) {
+            const pid = Number(row?.ProcessId);
+            const command = typeof row?.CommandLine === 'string' ? row.CommandLine.trim() : '';
+            if (!pid || !command || pid === process.pid) {
+              continue;
+            }
+
+            if (installBinPath && matchesManagedCommand(command, installBinPath)) {
+              managedProcesses.push({ pid, kind: 'cli', command });
+              continue;
+            }
+
+            if (targets.overlayExecutablePath && matchesManagedCommand(command, targets.overlayExecutablePath)) {
+              managedProcesses.push({ pid, kind: 'overlay', command });
+            }
+          }
+
+          resolve(managedProcesses);
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+  }
+
   return await new Promise((resolve, reject) => {
     const child = spawn('ps', ['-axo', 'pid=,command='], {
       cwd: process.cwd(),
@@ -329,6 +408,7 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
   const overlayInstallDir = process.env.SUPERPLAN_OVERLAY_INSTALL_DIR || installMetadata?.overlay?.install_dir || '';
   const runner = deps.runInstaller ?? runCommand;
   const refreshSkills = deps.refreshSkills ?? refreshInstalledSkills;
+  const installerLaunch = getBundledInstallerCommand();
 
   try {
     const latestRelease = installerRefOverride
@@ -352,7 +432,7 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
       installBinDir: installMetadata?.install_bin || (installPrefix ? path.join(installPrefix, 'bin') : null),
       overlayExecutablePath: installMetadata?.overlay?.executable_path || null,
     });
-    const installResult = await runner('sh', [installerPath], {
+    const installResult = await runner(installerLaunch.command, [...installerLaunch.args, installerPath], {
       env: {
         ...process.env,
         SUPERPLAN_REPO_URL: repoUrl,

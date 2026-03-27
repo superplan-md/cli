@@ -49,11 +49,11 @@ Second task
 
   await writeJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'), {
     tasks: {
-      'T-001': {
+      'demo/T-001': {
         status: 'in_progress',
         started_at: '2026-03-19T10:00:00.000Z',
       },
-      'T-002': {
+      'demo/T-002': {
         status: 'in_progress',
         started_at: '2026-03-19T11:00:00.000Z',
       },
@@ -73,19 +73,19 @@ Second task
       runtime_fixed: true,
       actions: [
         {
-          task_id: 'T-001',
+          task_id: 'demo/T-001',
           action: 'reset',
         },
         {
-          task_id: 'T-002',
+          task_id: 'demo/T-002',
           action: 'block',
           reason: 'Dependency not satisfied',
         },
       ],
       active: null,
-      ready: ['T-001'],
+      ready: ['demo/T-001'],
       in_review: [],
-      blocked: ['T-002'],
+      blocked: ['demo/T-002'],
       needs_feedback: [],
       message: 'Sync completed: 2 tasks parsed, 2 runtime fixes applied.',
       next_action: {

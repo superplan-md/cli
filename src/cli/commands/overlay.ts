@@ -132,7 +132,11 @@ async function ensureOverlay(): Promise<OverlayResult> {
     type: 'overlay.ensure',
     command: 'overlay ensure',
     workflowPhase: 'overlay',
-    outcome: visibility.enabled && !visibility.companion.launched ? 'error' : 'success',
+    outcome: visibility.enabled
+      && !visibility.companion.launched
+      && visibility.companion.reason !== 'launch_suppressed'
+      ? 'error'
+      : 'success',
     detailCode: visibility.enabled ? visibility.companion.reason ?? 'shown' : 'disabled',
     startRun: false,
   });

@@ -39,7 +39,7 @@ Examples:
 
 Result:
 
-- usually create `tasks.md` plus one lightweight task contract
+- always create `tasks.md` plus one lightweight task contract — task creation is non-negotiable; the only exception is work that qualifies for Stay Out (one file, no decisions)
 - then hand off for immediate execution
 
 ## `task`
