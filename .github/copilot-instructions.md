@@ -8,7 +8,8 @@ All Superplan workflow skills are installed globally on this machine.
 Before making ANY code changes or proposing any plan:
 - Run `superplan status --json` to check current state.
 - If a `.superplan` directory exists, you ARE in a structured workflow.
-- Claim work with `superplan run --json` before editing code.
+- Do not edit repo files until `superplan run --json` or `superplan run <task_id> --json` returns an active task for this turn.
+- Treat the returned active-task context as the edit gate. If `run` fails, do not proceed into implementation.
 - Use the CLI for all lifecycle transitions (block, feedback, complete).
 - Never hand-edit `.superplan/runtime/` files.
 
