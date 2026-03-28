@@ -185,7 +185,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
       installScope = 'global';
     } else if (options.local) {
       installScope = 'local';
-    } else if (!isQuiet) {
+    } else if (!useDefaults && !isQuiet) {
       const scopeChoice = await select({
         message: 'How would you like to install Superplan?',
         choices: [
@@ -343,6 +343,8 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
         };
       }
     }
+
+    await ensureGlobalWorkspaceArtifacts();
 
     // Detect agents at project level
     const detectedProjectAgents = await detectAgents(workspaceRoot, 'project');

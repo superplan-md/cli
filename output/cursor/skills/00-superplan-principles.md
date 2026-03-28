@@ -50,7 +50,7 @@ Missing repo init is not a blocker by itself.
 
 If the `superplan` CLI is available and the repo should use Superplan:
 
-- run `superplan init --scope local --yes --json`
+- run `superplan init --yes --json`
 - continue in the same turn
 - avoid turning repo init into a separate user chore unless the CLI itself is missing or the command fails
 

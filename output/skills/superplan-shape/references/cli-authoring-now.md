@@ -7,7 +7,7 @@ Use this reference when shaping work against the current CLI implementation.
 March 17 defines the target artifact model as:
 
 ```text
-.superplan/changes/<slug>/
+~/.config/superplan/changes/<slug>/
   tasks.md
   tasks/
     T-001.md
@@ -18,7 +18,7 @@ That remains the product direction.
 
 Today, the executable surface is:
 
-- `superplan init --scope local --yes --json` creates `.superplan/`, `.superplan/context/`, `.superplan/runtime/`, and `.superplan/changes/`
+- `superplan init --yes --json` ensures the global Superplan root exists under `~/.config/superplan/` and installs any needed repo-local agent instructions
 - `superplan change new <change-slug> --json` scaffolds a tracked change root
 - `superplan change plan set <change-slug> --stdin --json` writes the change plan
 - `superplan change spec set <change-slug> --name <spec-slug> --stdin --json` writes a change-scoped spec
@@ -27,28 +27,28 @@ Today, the executable surface is:
 - `superplan task scaffold new <change-slug> --task-id <task_id> --json` scaffolds one graph-declared task contract without mutating `tasks.md`
 - `superplan task scaffold batch <change-slug> --stdin --json` scaffolds multiple graph-declared task contracts from JSON stdin without mutating `tasks.md`
 - `superplan parse [path] --json` parses task contract markdown files and overlays dependency truth from the validated graph
-- `superplan status --json`, `superplan run --json`, `superplan task inspect show <task_id> --json`, and `superplan task review complete --json` operate on parsed task files plus runtime state
+- `superplan status --json`, `superplan run --json`, `superplan task inspect show <task_ref> --json`, and `superplan task review complete --json` operate on parsed task files plus runtime state
 - `superplan doctor --json` checks installation and setup, not shaped work
 
 So shape work like this:
 
-- do not hand-edit anything under `.superplan/`
+- do not hand-edit anything under `~/.config/superplan/`
 - use `superplan change new --single-task` or `superplan change task add` to define tracked work
 - use `superplan change plan set` and `superplan change spec set` to write change-scoped artifacts
 - run `superplan validate <slug> --json` when graph validation matters
-- keep task contracts in `.superplan/changes/<slug>/tasks/T-xxx.md`, but let the CLI create them
+- keep task contracts in `~/.config/superplan/changes/<slug>/tasks/T-xxx.md`, but let the CLI create them
 - use `superplan parse` for contract parsing and `superplan validate` for graph plus cross-artifact checks
-- inspect readiness with `superplan status --json`, `superplan run --json`, and `superplan task inspect show <task_id> --json` as needed
+- inspect readiness with `superplan status --json`, `superplan run --json`, and `superplan task inspect show <task_ref> --json` as needed
 - do not split dependency ownership back into task-file frontmatter
 
 ## Current Authoring Workflow
 
-1. Run `superplan init --scope local --yes --json` if the repo is not initialized.
-2. Run `superplan change new <slug> --json` to create `.superplan/changes/<slug>/` and `.superplan/changes/<slug>/tasks/`.
+1. Run `superplan init --yes --json` if the repo is not initialized.
+2. Run `superplan change new <slug> --json` to create `~/.config/superplan/changes/<slug>/` and `~/.config/superplan/changes/<slug>/tasks/`.
 3. Use `superplan change plan set`, `superplan change spec set`, and `superplan change task add` to place change-scoped artifacts through the CLI.
 4. Run `superplan validate <slug> --json` when graph validation matters.
 5. Use the returned payload from CLI authoring directly instead of immediately calling `task inspect show`.
-6. Use `superplan status --json` to confirm the ready frontier and `superplan task inspect show <task_id> --json` when one task needs deeper inspection.
+6. Use `superplan status --json` to confirm the ready frontier and `superplan task inspect show <task_ref> --json` when one task needs deeper inspection.
 7. Hand off to execution with the exact validation commands already named.
 
 For agent-first flows, prefer stdin over temporary files. `--file <path>` remains available only as a fallback when the batch spec itself should persist.
@@ -218,7 +218,7 @@ Use:
 - `superplan doctor --json` for install/setup readiness
 - `superplan parse --json` for task contract validity
 - `superplan status --json` for the current ready-frontier summary
-- `superplan task inspect show <task_id> --json` for one task plus computed readiness reasons
+- `superplan task inspect show <task_ref> --json` for one task plus computed readiness reasons
 
 Do not use:
 

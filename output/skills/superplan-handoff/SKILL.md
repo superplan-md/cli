@@ -46,4 +46,4 @@ Typical resume path:
 - `superplan status --json`
 - `superplan run --json`
 - use the task returned by `superplan run --json`
-- `superplan task inspect show <task_id> --json` only when the handoff points to a specific task you need to inspect directly
+- `superplan task inspect show <task_ref> --json` only when the handoff points to a specific task you need to inspect directly

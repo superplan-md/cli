@@ -99,7 +99,7 @@ Product target:
 
 Current CLI reality:
 
-- `superplan init --scope local --yes --json` creates `.superplan/`, `.superplan/context/`, `.superplan/runtime/`, `.superplan/changes/`, `.superplan/decisions.md`, and `.superplan/gotchas.md`
+- `superplan init --yes --json` ensures the global Superplan root exists under `~/.config/superplan/` and installs any needed repo-local agent instructions
 - `superplan context bootstrap --json` creates missing durable workspace context entrypoints
 - `superplan context status --json` reports missing durable workspace context entrypoints
 - `superplan change new <change-slug> --json` scaffolds a tracked change root plus change-scoped plan/spec surfaces
@@ -111,14 +111,14 @@ Current CLI reality:
 - `superplan task scaffold batch <change-slug> --stdin --json` scaffolds multiple graph-declared task contracts from JSON stdin without mutating `tasks.md`
 - `superplan parse [path] --json` parses task contract files and overlays dependency truth from the graph
 - `superplan status --json` summarizes the ready frontier from task files plus runtime state
-- `superplan task inspect show <task_id> --json` explains one task's current readiness in detail
+- `superplan task inspect show <task_ref> --json` explains one task's current readiness in detail
 - `superplan doctor --json` checks setup, overlay, and workspace-shape health
 
 Therefore:
 
-- for tracked work, define plans, specs, graph tasks, and workspace memory through CLI commands instead of editing `.superplan/` files directly
+- for tracked work, define plans, specs, graph tasks, and workspace memory through CLI commands instead of editing Superplan state files directly
 - when Superplan is staying out, do not create graph artifacts
-- manual creation of anything under `.superplan/changes/<slug>/` is off limits
+- manual creation of anything under `~/.config/superplan/changes/<slug>/` is off limits
 - use `superplan change new --single-task` or repeated `superplan change task add` calls to define tracked work quickly and correctly
 - keep dependency truth in the CLI-owned change graph and task-contract truth in the CLI-owned task files
 - choose current CLI validation commands explicitly during shaping
@@ -128,7 +128,7 @@ See `references/cli-authoring-now.md`.
 
 ## Task Authoring Rule
 
-Manual creation of files under `.superplan/changes/<slug>/` is off limits.
+Manual creation of files under `~/.config/superplan/changes/<slug>/` is off limits.
 
 Agents should spend their shaping effort deciding what tracked work exists, then use CLI commands that place artifacts correctly:
 
@@ -205,7 +205,7 @@ Shaping is not permission to explore the CLI surface.
 
 - use the current CLI contract already listed in this skill instead of probing adjacent commands
 - do not call `--help` or overlapping authoring or diagnostic commands when `change new`, `task scaffold new`, `task scaffold batch`, `parse`, `status`, `task inspect show`, or `doctor` already cover the need
-- use `superplan parse` for task validity, `superplan status --json` for frontier checks, `superplan task inspect show <task_id> --json` for one task detail, and `superplan doctor --json` when install, workspace artifact, or task-state health is in doubt
+- use `superplan parse` for task validity, `superplan status --json` for frontier checks, `superplan task inspect show <task_ref> --json` for one task detail, and `superplan doctor --json` when install, workspace artifact, or task-state health is in doubt
 - once the needed authoring or validation command is known, run it instead of exploring alternatives
 
 ## User Communication
@@ -250,7 +250,7 @@ Treat the workspace's existing setup as the default operating surface.
   - `superplan doctor --json` for install/setup readiness
   - `superplan parse [path] --json` for task contract validity
   - `superplan status --json` for current ready-frontier inspection
-  - `superplan task inspect show <task_id> --json` for one task's detailed readiness
+  - `superplan task inspect show <task_ref> --json` for one task's detailed readiness
 - choose an autonomy class:
   - `autopilot`
   - `checkpointed autopilot`
@@ -377,7 +377,7 @@ For large graphs, execution handoff should also name the ownership boundary betw
 
 Current CLI:
 
-- `superplan init --scope local --yes --json`
+- `superplan init --yes --json`
 - `superplan change new <change-slug> --json`
 - `superplan validate <change-slug> --json`
 - `superplan task scaffold new <change-slug> --task-id <task_id> --json`
@@ -385,7 +385,7 @@ Current CLI:
 - `superplan doctor --json`
 - `superplan parse [path] --json`
 - `superplan status --json`
-- `superplan task inspect show <task_id> --json`
+- `superplan task inspect show <task_ref> --json`
 
 Future CLI hooks:
 
@@ -435,7 +435,7 @@ Should create investigation or decision-gate tasks:
 Should align honestly to the current CLI:
 
 - `tasks.md` should be authored as graph truth and validated with `superplan validate`
-- ready-frontier checks should name `superplan status --json` and `superplan task inspect show <task_id> --json`
+- ready-frontier checks should name `superplan status --json` and `superplan task inspect show <task_ref> --json`
 - shaping should use `superplan task scaffold new <change-slug> --task-id <task_id> --json` for one task and `superplan task scaffold batch --stdin --json` for two or more tasks
 - shaping should still follow the hard contract even when runtime semantics lag behind structural validation
 

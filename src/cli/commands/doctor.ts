@@ -209,7 +209,7 @@ export async function doctor(args: string[] = []) {
     issues.push({
       code: 'CONFIG_MISSING',
       message: 'Global config not found',
-      fix: 'Run superplan install --quiet --json',
+      fix: 'Run superplan init --yes --json',
     });
   }
 
@@ -218,7 +218,7 @@ export async function doctor(args: string[] = []) {
     issues.push({
       code: 'SKILLS_MISSING',
       message: 'Global skills not installed',
-      fix: 'Run superplan install --quiet --json',
+      fix: 'Run superplan init --yes --json',
     });
   }
 
@@ -237,7 +237,7 @@ export async function doctor(args: string[] = []) {
         issues.push({
           code: 'AGENT_SKILLS_MISSING',
           message: `Superplan skills not installed for ${agent.name} agent`,
-          fix: 'Run superplan install --quiet --json',
+          fix: 'Run superplan init --yes --json',
         });
       }
     }
