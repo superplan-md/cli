@@ -22,3 +22,6 @@ changes
 .agents/
 .amazonq/
 AGENTS.md
+
+# Superplan - AI agent configurations
+.github/skills/

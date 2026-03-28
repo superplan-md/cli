@@ -14,7 +14,7 @@ export type AgentName =
   | 'windsurf';
 
 export type AgentScope = 'global' | 'project';
-export type AgentInstallKind = 'toml_command' | 'skills_namespace' | 'pointer_rule' | 'markdown_rule' | 'managed_global_rule' | 'amazonq_rules' | 'antigravity_workflows';
+export type AgentInstallKind = 'toml_command' | 'skills_namespace' | 'pointer_rule' | 'markdown_rule' | 'managed_global_rule' | 'amazonq_rules' | 'antigravity_workflows' | 'windsurf_rules';
 export type AgentBootstrapStrength = 'context_bootstrap' | 'rule_bootstrap' | 'skills_only';
 
 export interface AgentEnvironment {

@@ -362,6 +362,33 @@ export async function installAmazonQRules(skillsDir: string, targetDir: string):
   }
 }
 
+export async function installWindsurfRules(skillsDir: string, targetDir: string): Promise<void> {
+  await fs.mkdir(targetDir, { recursive: true });
+  const entries = await fs.readdir(skillsDir, { withFileTypes: true });
+
+  // Clean up old paths
+  for (const cleanupPath of [
+    path.join(targetDir, '..', 'skills'),
+    path.join(targetDir, '..', '.windsurfrules'),
+  ]) {
+    await fs.rm(cleanupPath, { recursive: true, force: true });
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const skillPath = path.join(skillsDir, entry.name, 'SKILL.md');
+    if (!await pathExists(skillPath)) {
+      continue;
+    }
+
+    const skillContent = await fs.readFile(skillPath, 'utf-8');
+    await fs.writeFile(path.join(targetDir, `${entry.name}.md`), skillContent, 'utf-8');
+  }
+}
+
 export async function installAmazonQMemoryBank(skillsDir: string, rulesDir: string): Promise<void> {
   const memoryBankDir = path.join(rulesDir, 'memory-bank');
   await fs.mkdir(memoryBankDir, { recursive: true });
@@ -444,6 +471,8 @@ export async function installAgentSkills(skillsDir: string, agents: ExtendedAgen
       } else if (agent.install_kind === 'amazonq_rules') {
         await installAmazonQRules(globalSkillsDir, agent.install_path);
         await installAmazonQMemoryBank(globalSkillsDir, agent.install_path);
+      } else if (agent.install_kind === 'windsurf_rules') {
+        await installWindsurfRules(globalSkillsDir, agent.install_path);
       } else if (agent.install_kind === 'antigravity_workflows') {
         await installAntigravityWorkflows(globalSkillsDir, agent.install_path);
       }
@@ -588,11 +617,12 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       {
         name: 'windsurf',
         path: path.join(baseDir, '.windsurf'),
-        install_path: path.join(baseDir, '.windsurf', 'skills'),
-        install_kind: 'skills_namespace',
-        bootstrap_strength: 'skills_only',
+        install_path: path.join(baseDir, '.windsurf', 'rules'),
+        install_kind: 'windsurf_rules',
+        bootstrap_strength: 'rule_bootstrap',
         cleanup_paths: [
-          path.join(baseDir, '.windsurf', 'commands', 'superplan.md'),
+          path.join(baseDir, '.windsurf', 'skills'),
+          path.join(baseDir, '.windsurfrules'),
         ],
       },
     ];
