@@ -39,7 +39,7 @@
 ## Readiness Matrix
 
 - CLI missing in a host that expects Superplan: give readiness guidance for installation or availability
-- repo not initialized but the CLI exists and Superplan should engage: run `superplan init --scope local --yes --json` and continue
+- repo not initialized but the CLI exists and Superplan should engage: run `superplan init --yes --json` and continue
 - host setup missing but the CLI exists: do not let that block repo-local init by itself
 - init present but serious brownfield context missing: route `superplan-context`
 

@@ -203,7 +203,7 @@ function inferErrorNextAction(command: string | undefined, error: { code: string
 
   if (error.code === 'INVALID_INIT_COMMAND' || error.code === 'INTERACTIVE_REQUIRED') {
     return stopNextAction(
-      'The init invocation is invalid for the current mode. Use `superplan init --scope <local|global|both|skip> --yes --json` for automation.',
+      'The init invocation is invalid for the current mode. Use `superplan init --yes --json` for automation.',
       'Invalid init invocations should terminate with the exact supported non-interactive form.',
     );
   }
@@ -224,7 +224,7 @@ function inferErrorNextAction(command: string | undefined, error: { code: string
 
   if (error.code === 'INSTALL_REQUIRED') {
     return commandNextAction(
-      'superplan install --quiet --json',
+      'superplan init --yes --json',
       'The requested command depends on machine-level Superplan state that does not exist yet.',
     );
   }

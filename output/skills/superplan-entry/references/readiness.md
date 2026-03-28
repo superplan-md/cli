@@ -31,11 +31,11 @@ Action:
 Meaning:
 
 - the repo has not been initialized for Superplan
-- `.superplan/config.toml` or equivalent repo-local initialization markers are missing
+- repo-visible Superplan integration markers are missing or stale
 
 Action:
 
-- if the `superplan` CLI exists and Superplan engagement is warranted, run `superplan init --scope local --yes --json`
+- if the `superplan` CLI exists and Superplan engagement is warranted, run `superplan init --yes --json`
 - continue in the same turn after init succeeds
 - only stop and ask the user to intervene if the init command fails or the CLI itself is missing
 
@@ -84,9 +84,9 @@ Action:
 The March 17 product design settled these as distinct concepts:
 
 - `superplan init`: machine and agent integration setup, plus repo-local initialization
-- `superplan init --scope local --yes --json`: repo-local initialization fast path for agent flows
+- `superplan init --yes --json`: repo-local initialization fast path for agent flows
 - global config: `~/.config/superplan/config.toml`
-- workspace config: `<repo>/.superplan/config.toml`
+- workspace integration markers: repo-managed instruction files such as `AGENTS.md`, `CLAUDE.md`, or agent skill folders
 
 Global integration is still a useful default, but repo-local initialization should not wait on it when the CLI already exists and the current work needs Superplan.
 
@@ -104,7 +104,7 @@ If repo-local work begins before machine setup appears complete:
 
 - `command -v superplan` or equivalent command discovery for CLI availability
 - `superplan doctor --json` when the CLI exists but readiness is unclear
-- `<repo>/.superplan/config.toml` for repo-local initialization
+- repo-managed instruction files such as `AGENTS.md`, `CLAUDE.md`, or agent skill folders for workspace integration state
 
 ## Keep Out Of `decisions.md`
 
@@ -114,5 +114,5 @@ If repo-local work begins before machine setup appears complete:
 
 ## Good `decisions.md` Entries
 
-- "Repo init was missing, so `superplan init --scope local --yes --json` was run before continuing."
+- "Repo init was missing, so `superplan init --yes --json` was run before continuing."
 - "Brownfield repo lacked durable context; context bootstrap required before shaping."

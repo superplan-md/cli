@@ -56,11 +56,11 @@ function getInvalidRunCommandError(): RunResult {
     error: {
       code: 'INVALID_RUN_COMMAND',
       message: [
-        'Run accepts at most one optional <task_id>.',
+        'Run accepts at most one optional <task_ref>.',
         '',
         'Usage:',
         '  superplan run',
-        '  superplan run <task_id>',
+        '  superplan run <task_ref>',
       ].join('\n'),
       retryable: true,
     },

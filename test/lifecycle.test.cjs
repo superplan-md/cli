@@ -116,7 +116,7 @@ test('init --yes auto-installs without prompting in human mode', async () => {
   const initResult = await runCli(['init', '--yes'], { cwd: sandbox.cwd, env: sandbox.env });
 
   assert.equal(initResult.code, 0, initResult.stderr || initResult.stdout);
-  assert.match(initResult.stdout, /Project initialized successfully/);
+  assert.match(initResult.stdout, /Local installation complete/);
   assert.doesNotMatch(initResult.stdout, /Would you like to install it now\?/);
   assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'config.toml')), true);
 });

@@ -11,7 +11,7 @@ Non-negotiable rules:
 - No broad repo exploration before loading and following `superplan-entry`.
 - No planning or repo-specific clarification before loading and following `superplan-entry`.
 - Keep workflow control internal: do not narrate skill names, routing, or command logs to the user.
-- If `.superplan/` exists, treat the Superplan CLI as the execution control plane.
+- Treat the Superplan CLI as the execution control plane for structured repo work, even when tracked changes live under `~/.config/superplan/` instead of a repo-local `.superplan/` directory.
 - Prefer workspace harnesses, scripts, and custom workflows when `superplan-entry` routes you there.
 - For any repo work beyond a direct answer, create a tracked Superplan task before acting — even lightweight work.
 - Users cannot see what the agent is doing without a task; task creation is not ceremony, it is visibility.
@@ -27,10 +27,10 @@ Task creation rule:
 Canonical loop when Superplan is active:
 1. Run `superplan status --json`.
 2. If no active task exists for the current work, shape and scaffold one now before proceeding.
-3. Claim or resume work with `superplan run --json` or `superplan run <task_id> --json`.
+3. Claim or resume work with `superplan run --json` or `superplan run <task_ref> --json`.
 4. Do not edit repo files until that run command has returned an active task for this turn.
 5. Continue through the owning Superplan phase instead of improvising a parallel workflow.
-6. Use lifecycle commands such as `superplan task runtime block`, `superplan task runtime request-feedback`, and `superplan task review complete`; never hand-edit `.superplan/runtime/`.
+6. Use lifecycle commands such as `superplan task runtime block`, `superplan task runtime request-feedback`, and `superplan task review complete`; never hand-edit `~/.config/superplan/runtime/`.
 
 Decision guardrails:
 - If readiness is missing, give the concrete missing-layer guidance and stop.

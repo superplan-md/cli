@@ -3,7 +3,7 @@ import * as path from 'path';
 import { loadChangeGraph } from '../graph';
 import { getLocalTaskId, toQualifiedTaskId } from '../task-identity';
 import { parseTaskRecipeSections, type TaskRecipeConfig } from '../task-execution';
-import { resolveWorkspaceRoot } from '../workspace-root';
+import { resolveSuperplanRoot, resolveWorkspaceRoot } from '../workspace-root';
 import { commandNextAction, stopNextAction, type NextAction } from '../next-action';
 
 interface ParseOptions {
@@ -51,6 +51,39 @@ export interface ParsedTask {
 type ParseResult =
   | { ok: true; data: { tasks: ParsedTask[]; diagnostics: ParseDiagnostic[]; next_action: NextAction } }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
+
+const LEGACY_CHANGES_DIR = path.join('.superplan', 'changes');
+
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function getDefaultChangesRoots(cwd = process.cwd()): string[] {
+  const globalChangesRoot = path.join(resolveSuperplanRoot(), 'changes');
+  const legacyWorkspaceChangesRoot = path.join(resolveWorkspaceRoot(cwd), LEGACY_CHANGES_DIR);
+  return [...new Set([globalChangesRoot, legacyWorkspaceChangesRoot])];
+}
+
+async function resolveInputPath(cwd: string, inputPath: string): Promise<string | null> {
+  const explicitPath = path.resolve(cwd, inputPath);
+  if (await pathExists(explicitPath)) {
+    return explicitPath;
+  }
+
+  for (const changesRoot of getDefaultChangesRoots(cwd)) {
+    const candidatePath = path.join(changesRoot, inputPath);
+    if (await pathExists(candidatePath)) {
+      return candidatePath;
+    }
+  }
+
+  return null;
+}
 
 function parseStringArray(value: string): string[] {
   const trimmedValue = value.trim();
@@ -365,15 +398,6 @@ function computeTaskReadiness(tasks: ParsedTask[]): void {
   }
 }
 
-async function pathExists(targetPath: string): Promise<boolean> {
-  try {
-    await fs.access(targetPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function resolveTaskFiles(targetPath: string): Promise<string[]> {
   const stats = await fs.stat(targetPath);
 
@@ -575,32 +599,14 @@ export async function parse(args: string[], _options: ParseOptions): Promise<Par
   const positionalArgs = args.filter(arg => arg !== '--json' && arg !== '--quiet');
   const cwd = process.cwd();
   const inputPath = positionalArgs[0];
-  const resolvedInputPath = inputPath
-    ? path.resolve(cwd, inputPath)
-    : path.join(resolveWorkspaceRoot(cwd), '.superplan', 'changes');
+  const resolvedInputPath = inputPath ? await resolveInputPath(cwd, inputPath) : null;
+  const changesRoots = inputPath
+    ? []
+    : (await Promise.all(
+      getDefaultChangesRoots(cwd).map(async changesRoot => (await pathExists(changesRoot) ? changesRoot : null)),
+    )).filter((changesRoot): changesRoot is string => changesRoot !== null);
 
-  try {
-    await fs.access(resolvedInputPath);
-  } catch {
-    if (positionalArgs.length === 0) {
-      return {
-        ok: true,
-        data: {
-          tasks: [],
-          diagnostics: [
-            {
-              code: 'CHANGES_DIR_MISSING',
-              message: 'No .superplan/changes directory found. Run superplan init.',
-            },
-          ],
-          next_action: commandNextAction(
-            'superplan init --scope local --yes --json',
-            'Parsing cannot proceed until the repo-local Superplan workspace exists.',
-          ),
-        },
-      };
-    }
-
+  if (inputPath && !resolvedInputPath) {
     return {
       ok: false,
       error: {
@@ -611,35 +617,91 @@ export async function parse(args: string[], _options: ParseOptions): Promise<Par
     };
   }
 
+  if (!inputPath && changesRoots.length === 0) {
+    return {
+      ok: true,
+      data: {
+        tasks: [],
+        diagnostics: [
+          {
+            code: 'CHANGES_DIR_MISSING',
+            message: 'No Superplan changes directory found. Run superplan init.',
+          },
+        ],
+        next_action: commandNextAction(
+          'superplan init --yes --json',
+          'Parsing cannot proceed until Superplan has created a tracked changes root.',
+        ),
+      },
+    };
+  }
+
   try {
-    const stats = await fs.stat(resolvedInputPath);
-    if (stats.isFile()) {
-      const parsedSingleFile = await parseSingleTaskFile(resolvedInputPath);
+    if (resolvedInputPath) {
+      const stats = await fs.stat(resolvedInputPath);
+      if (stats.isFile()) {
+        const parsedSingleFile = await parseSingleTaskFile(resolvedInputPath);
+        return {
+          ok: true,
+          data: {
+            ...parsedSingleFile,
+            next_action: parsedSingleFile.diagnostics.length > 0
+              ? stopNextAction(
+                'Fix the reported task-file diagnostics before relying on this task.',
+                'The parsed task file still has diagnostics that need resolution.',
+              )
+              : commandNextAction(
+                'superplan status --json',
+                'The task file parsed cleanly, so the next useful control-plane step is checking the frontier.',
+              ),
+          },
+        };
+      }
+
+      const changeDirs = await resolveChangeDirs(resolvedInputPath);
+      const tasks: ParsedTask[] = [];
+      const diagnostics: ParseDiagnostic[] = [];
+
+      for (const changeDir of changeDirs) {
+        const parsedChange = await parseChangeDir(changeDir);
+        tasks.push(...parsedChange.tasks);
+        diagnostics.push(...parsedChange.diagnostics);
+      }
+
       return {
         ok: true,
         data: {
-          ...parsedSingleFile,
-          next_action: parsedSingleFile.diagnostics.length > 0
+          tasks,
+          diagnostics,
+          next_action: diagnostics.length > 0
             ? stopNextAction(
-              'Fix the reported task-file diagnostics before relying on this task.',
-              'The parsed task file still has diagnostics that need resolution.',
+              'Fix the reported task-file or graph diagnostics before relying on the runtime loop.',
+              'The parsed task set is not clean, so execution should not continue blindly.',
             )
             : commandNextAction(
               'superplan status --json',
-              'The task file parsed cleanly, so the next useful control-plane step is checking the frontier.',
+              'The task files parsed cleanly, so the next useful control-plane step is checking the frontier.',
             ),
         },
       };
     }
 
-    const changeDirs = await resolveChangeDirs(resolvedInputPath);
     const tasks: ParsedTask[] = [];
     const diagnostics: ParseDiagnostic[] = [];
+    const seenChangeDirs = new Set<string>();
 
-    for (const changeDir of changeDirs) {
-      const parsedChange = await parseChangeDir(changeDir);
-      tasks.push(...parsedChange.tasks);
-      diagnostics.push(...parsedChange.diagnostics);
+    for (const changesRoot of changesRoots) {
+      const changeDirs = await resolveChangeDirs(changesRoot);
+      for (const changeDir of changeDirs) {
+        if (seenChangeDirs.has(changeDir)) {
+          continue;
+        }
+
+        seenChangeDirs.add(changeDir);
+        const parsedChange = await parseChangeDir(changeDir);
+        tasks.push(...parsedChange.tasks);
+        diagnostics.push(...parsedChange.diagnostics);
+      }
     }
 
     return {

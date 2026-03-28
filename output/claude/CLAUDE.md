@@ -26,7 +26,7 @@ Task creation rule:
 Canonical loop when Superplan is active:
 1. Run `superplan status --json`.
 2. If no active task exists for the current work, shape and scaffold one now before proceeding.
-3. Claim or resume work with `superplan run --json` or `superplan run <task_id> --json`.
+3. Claim or resume work with `superplan run --json` or `superplan run <task_ref> --json`.
 4. Continue through the owning Superplan phase instead of improvising a parallel workflow.
 5. Use lifecycle commands such as `superplan task runtime block`, `superplan task runtime request-feedback`, and `superplan task review complete`; never hand-edit `.superplan/runtime/`.
 
