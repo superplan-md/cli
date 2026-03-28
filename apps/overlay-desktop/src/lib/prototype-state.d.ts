@@ -2,6 +2,8 @@ export type PrototypeMode = 'compact' | 'expanded';
 
 export interface PrototypeTask {
   task_id: string;
+  change_id?: string;
+  task_ref?: string;
   title: string;
   description?: string;
   status: string;
@@ -44,6 +46,7 @@ export interface PrototypeSnapshot {
   workspace_path: string;
   session_id: string;
   updated_at: string;
+  tracked_changes: PrototypeFocusedChange[];
   focused_change: PrototypeFocusedChange | null;
   active_task: PrototypeTask | null;
   board: PrototypeBoard;

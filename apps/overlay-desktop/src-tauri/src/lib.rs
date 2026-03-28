@@ -17,6 +17,14 @@ fn overlay_runtime_file_path_for_workspace(workspace_root: &Path, file_name: &st
     overlay_runtime_dir_for_workspace(workspace_root).join(file_name)
 }
 
+fn overlay_runtime_root_dir() -> PathBuf {
+    let home_dir = env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    home_dir.join(".config").join("superplan").join("runtime")
+}
+
 fn overlay_runtime_dir_for_workspace(workspace_root: &Path) -> PathBuf {
     let workspace_name = workspace_root
         .file_name()
@@ -27,15 +35,107 @@ fn overlay_runtime_dir_for_workspace(workspace_root: &Path) -> PathBuf {
         .map(|character| if character.is_ascii_alphanumeric() { character } else { '-' })
         .collect::<String>();
 
-    let home_dir = env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
-
-    home_dir
-        .join(".config")
-        .join("superplan")
-        .join("runtime")
+    overlay_runtime_root_dir()
         .join(format!("workspace-{}", if workspace_name.is_empty() { "root" } else { &workspace_name }))
+}
+
+fn load_runtime_json_payloads(file_name: &str) -> Result<Vec<serde_json::Value>, String> {
+    let runtime_root = overlay_runtime_root_dir();
+    let runtime_entries = match fs::read_dir(&runtime_root) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => {
+            return Err(format!(
+                "failed to read overlay runtime directory at {}: {error}",
+                runtime_root.display()
+            ));
+        }
+    };
+
+    let mut payloads = Vec::new();
+
+    for entry in runtime_entries {
+        let entry = entry.map_err(|error| {
+            format!(
+                "failed to read an entry from overlay runtime directory at {}: {error}",
+                runtime_root.display()
+            )
+        })?;
+        let entry_path = entry.path();
+        if !entry_path.is_dir() {
+            continue;
+        }
+
+        let payload_path = entry_path.join(file_name);
+        if !payload_path.is_file() {
+            continue;
+        }
+
+        let payload = match fs::read_to_string(&payload_path) {
+            Ok(payload) => payload,
+            Err(error) => {
+                eprintln!(
+                    "skipping unreadable overlay runtime payload at {}: {error}",
+                    payload_path.display()
+                );
+                continue;
+            }
+        };
+        let payload_value: serde_json::Value = match serde_json::from_str(&payload) {
+            Ok(payload_value) => payload_value,
+            Err(error) => {
+                eprintln!(
+                    "skipping invalid overlay runtime payload at {}: {error}",
+                    payload_path.display()
+                );
+                continue;
+            }
+        };
+        payloads.push(payload_value);
+    }
+
+    payloads.sort_by(|left, right| {
+        let left_attention = left
+            .get("attention_state")
+            .and_then(|value| value.as_str())
+            .unwrap_or("normal");
+        let right_attention = right
+            .get("attention_state")
+            .and_then(|value| value.as_str())
+            .unwrap_or("normal");
+        let attention_rank = |value: &str| match value {
+            "needs_feedback" => 0,
+            "all_tasks_done" => 2,
+            _ => 1,
+        };
+
+        attention_rank(left_attention)
+            .cmp(&attention_rank(right_attention))
+            .then_with(|| {
+                let left_updated = left
+                    .get("updated_at")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("");
+                let right_updated = right
+                    .get("updated_at")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("");
+                right_updated.cmp(left_updated)
+            })
+            .then_with(|| {
+                let left_workspace = left
+                    .get("workspace_path")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("");
+                let right_workspace = right
+                    .get("workspace_path")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("");
+                left_workspace.cmp(right_workspace)
+            })
+    });
+
+    Ok(payloads)
 }
 
 #[derive(Default)]
@@ -165,6 +265,12 @@ fn load_overlay_snapshot(app_handle: tauri::AppHandle) -> Result<String, String>
 }
 
 #[tauri::command]
+fn load_overlay_snapshots() -> Result<String, String> {
+    serde_json::to_string(&load_runtime_json_payloads("overlay.json")?)
+        .map_err(|error| format!("failed to serialize overlay snapshots: {error}"))
+}
+
+#[tauri::command]
 fn load_overlay_control_state(app_handle: tauri::AppHandle) -> Result<Option<String>, String> {
     let control_path = match resolve_overlay_control_path(&app_handle)? {
         Some(path) => path,
@@ -179,6 +285,12 @@ fn load_overlay_control_state(app_handle: tauri::AppHandle) -> Result<Option<Str
                 control_path.display()
             )
         })
+}
+
+#[tauri::command]
+fn load_overlay_control_states() -> Result<String, String> {
+    serde_json::to_string(&load_runtime_json_payloads("overlay-control.json")?)
+        .map_err(|error| format!("failed to serialize overlay control states: {error}"))
 }
 
 // Bug #1 fix: manifest_dir (CARGO_MANIFEST_DIR) was baked in at compile time
@@ -406,6 +518,7 @@ fn persist_overlay_requested_action(
     requested_action: String,
     updated_at: String,
     visible: bool,
+    workspace_path: Option<String>,
 ) -> Result<(), String> {
     let requested_action = requested_action.trim().to_ascii_lowercase();
     if requested_action != "ensure" && requested_action != "show" && requested_action != "hide" {
@@ -414,9 +527,12 @@ fn persist_overlay_requested_action(
         ));
     }
 
-    let workspace_root = resolve_overlay_workspace_root(&app_handle)?.ok_or_else(|| {
-        "failed to resolve overlay workspace root for control state persistence".to_string()
-    })?;
+    let workspace_root = workspace_path
+        .map(PathBuf::from)
+        .or(resolve_overlay_workspace_root(&app_handle)?)
+        .ok_or_else(|| {
+            "failed to resolve overlay workspace root for control state persistence".to_string()
+        })?;
     let runtime_dir = overlay_runtime_dir_for_workspace(workspace_root.as_path());
     let control_path = runtime_dir.join("overlay-control.json");
 
@@ -567,7 +683,9 @@ pub fn run() {
         .manage(OverlayWorkspaceState::default())
         .invoke_handler(tauri::generate_handler![
         load_overlay_snapshot,
+        load_overlay_snapshots,
         load_overlay_control_state,
+        load_overlay_control_states,
         persist_overlay_requested_action,
         set_overlay_visibility,
         exit_overlay_application,

@@ -21,6 +21,8 @@ test('browser fallback snapshot includes live and completed task timing cues', a
   const snapshot = getBrowserFallbackSnapshot('/tmp/workspace');
 
   assert.equal(snapshot.workspace_path, '/tmp/workspace');
+  assert.equal(snapshot.tracked_changes.length, 1);
+  assert.equal(snapshot.tracked_changes[0].change_id, 'compact-overlay-refresh');
   assert.equal(snapshot.attention_state, 'normal');
   assert.equal(snapshot.active_task?.status, 'in_progress');
   assert.equal(snapshot.active_task?.started_at, '2026-03-19T21:56:00.000Z');

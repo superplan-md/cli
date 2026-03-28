@@ -17,6 +17,7 @@ test('overlay snapshot factory supplies stable defaults', () => {
     workspace_path: '/tmp/workspace',
     session_id: 'session-123',
     updated_at: '2026-03-19T21:30:00.000Z',
+    tracked_changes: [],
     focused_change: null,
     active_task: null,
     board: {
@@ -36,6 +37,8 @@ test('overlay snapshot factory preserves explicit event and board payloads', () 
 
   const activeTask = {
     task_id: 'T-12',
+    change_id: 'shape-spec',
+    task_ref: 'shape-spec/T-12',
     title: 'Build overlay prototype',
     description: 'Show active task details in the compact shell',
     status: 'in_progress',
@@ -63,6 +66,7 @@ test('overlay snapshot factory preserves explicit event and board payloads', () 
     workspace_path: '/tmp/workspace',
     session_id: 'session-123',
     updated_at: '2026-03-19T21:30:00.000Z',
+    tracked_changes: [focusedChange],
     focused_change: focusedChange,
     active_task: activeTask,
     board: {
@@ -77,6 +81,7 @@ test('overlay snapshot factory preserves explicit event and board payloads', () 
     workspace_path: '/tmp/workspace',
     session_id: 'session-123',
     updated_at: '2026-03-19T21:30:00.000Z',
+    tracked_changes: [focusedChange],
     focused_change: focusedChange,
     active_task: activeTask,
     board: {

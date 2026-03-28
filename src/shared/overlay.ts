@@ -24,6 +24,8 @@ export type OverlayRequestedAction = 'ensure' | 'show' | 'hide';
 
 export interface OverlayTaskSummary {
   task_id: string;
+  change_id?: string;
+  task_ref?: string;
   title: string;
   description?: string;
   status: OverlayTaskStatus;
@@ -54,6 +56,8 @@ export interface OverlayFocusedChange {
   updated_at: string;
 }
 
+export interface OverlayTrackedChange extends OverlayFocusedChange {}
+
 export interface OverlayEvent {
   id: string;
   kind: OverlayEventKind;
@@ -64,6 +68,7 @@ export interface OverlaySnapshot {
   workspace_path: string;
   session_id: string;
   updated_at: string;
+  tracked_changes: OverlayTrackedChange[];
   focused_change: OverlayFocusedChange | null;
   active_task: OverlayTaskSummary | null;
   board: OverlayBoard;
@@ -81,6 +86,7 @@ export interface CreateOverlaySnapshotInput {
   workspace_path: string;
   session_id: string;
   updated_at: string;
+  tracked_changes?: OverlayTrackedChange[];
   focused_change?: OverlayFocusedChange | null;
   active_task?: OverlayTaskSummary | null;
   board?: Partial<OverlayBoard>;
@@ -131,6 +137,10 @@ function cloneFocusedChange(focusedChange: OverlayFocusedChange | null | undefin
   return focusedChange ? { ...focusedChange } : null;
 }
 
+function cloneTrackedChanges(trackedChanges: OverlayTrackedChange[] | undefined): OverlayTrackedChange[] {
+  return (trackedChanges ?? []).map(change => ({ ...change }));
+}
+
 export function createOverlaySnapshot(input: CreateOverlaySnapshotInput): OverlaySnapshot {
   const board = input.board ?? {};
 
@@ -138,6 +148,7 @@ export function createOverlaySnapshot(input: CreateOverlaySnapshotInput): Overla
     workspace_path: input.workspace_path,
     session_id: input.session_id,
     updated_at: input.updated_at,
+    tracked_changes: cloneTrackedChanges(input.tracked_changes),
     focused_change: cloneFocusedChange(input.focused_change),
     active_task: input.active_task ? { ...input.active_task } : null,
     board: {

@@ -1716,6 +1716,130 @@ p {
   width: 100%;
 }
 
+.change-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 14px;
+  width: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 4px;
+}
+
+.change-card-grid--empty {
+  grid-template-columns: minmax(320px, 720px);
+}
+
+.change-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 28%),
+    var(--board-panel);
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.change-card--needs_feedback {
+  border-color: rgba(244, 194, 93, 0.22);
+}
+
+.change-card--in_progress {
+  border-color: rgba(123, 162, 232, 0.22);
+}
+
+.change-card--blocked {
+  border-color: rgba(189, 150, 255, 0.2);
+}
+
+.change-card--done {
+  border-color: rgba(111, 221, 176, 0.16);
+}
+
+.change-card__header,
+.change-card__eyebrow-row,
+.change-card__counts,
+.change-card__task-group-header,
+.change-card__chips {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.change-card__title-block {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.change-card__workspace,
+.change-card__status,
+.change-card__chip,
+.change-card__count-label,
+.change-card__task-group-header {
+  font: 500 0.62rem/1 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.change-card__workspace,
+.change-card__chip {
+  color: rgba(255, 255, 255, 0.56);
+}
+
+.change-card__status {
+  color: rgba(255, 244, 226, 0.8);
+}
+
+.change-card h3 {
+  font-size: 1.05rem;
+  line-height: 1.15;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+.change-card__meta,
+.change-card__empty {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.change-card__counts {
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.change-card__count {
+  color: rgba(255, 249, 240, 0.94);
+  font-size: 1.4rem;
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+
+.change-card__body,
+.change-card__task-list {
+  display: grid;
+  gap: 10px;
+}
+
+.change-card__task-group {
+  display: grid;
+  gap: 10px;
+}
+
+.change-card__task-group + .change-card__task-group {
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.change-card__task-group-header {
+  color: rgba(255, 255, 255, 0.48);
+}
+
 .board-column {
   position: relative;
   z-index: 1;

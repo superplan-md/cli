@@ -19,8 +19,17 @@ const sampleSnapshot = {
   workspace_path: '/tmp/workspace',
   session_id: 'workspace:/tmp/workspace',
   updated_at: '2026-03-19T16:45:00.000Z',
+  tracked_changes: [{
+    change_id: 'overlay-refresh',
+    title: 'Overlay Refresh',
+    status: 'in_progress',
+    task_total: 3,
+    task_done: 1,
+    updated_at: '2026-03-19T16:45:00.000Z',
+  }],
   active_task: {
     task_id: 'T-901',
+    change_id: 'overlay-refresh',
     title: 'Ship overlay prototype',
     status: 'in_progress',
     started_at: '2026-03-19T16:00:00.000Z',
@@ -29,6 +38,7 @@ const sampleSnapshot = {
     in_progress: [
       {
         task_id: 'T-901',
+        change_id: 'overlay-refresh',
         title: 'Ship overlay prototype',
         status: 'in_progress',
         started_at: '2026-03-19T16:00:00.000Z',
@@ -37,6 +47,7 @@ const sampleSnapshot = {
     backlog: [
       {
         task_id: 'T-902',
+        change_id: 'overlay-refresh',
         title: 'Wire snapshot polling',
         status: 'backlog',
       },
@@ -44,6 +55,7 @@ const sampleSnapshot = {
     done: [
       {
         task_id: 'T-899',
+        change_id: 'overlay-refresh',
         title: 'Define overlay contract',
         status: 'done',
         started_at: '2026-03-19T15:10:00.000Z',
@@ -65,7 +77,7 @@ test('prototype view model derives compact overlay content from the active task'
   assert.equal(viewModel.mode, 'compact');
   assert.equal(viewModel.primaryTask.title, 'Ship overlay prototype');
   assert.equal(viewModel.primaryTask.status, 'in_progress');
-  assert.equal(viewModel.surfaceLabel, 'Tracking active session');
+  assert.equal(viewModel.surfaceLabel, 'Tracking change');
   assert.equal(viewModel.secondaryLabel, 'Working now');
   assert.deepEqual(viewModel.columnCounts, {
     in_progress: 1,
@@ -75,6 +87,26 @@ test('prototype view model derives compact overlay content from the active task'
     needs_feedback: 0,
   });
   assert.equal(viewModel.board.backlog[0].title, 'Wire snapshot polling');
+});
+
+test('prototype view model falls back to tracked_changes when focused_change is absent', async () => {
+  const { createPrototypeViewModel } = await loadPrototypeStateModule();
+
+  const viewModel = createPrototypeViewModel({
+    ...sampleSnapshot,
+    focused_change: null,
+    active_task: null,
+    board: {
+      in_progress: [],
+      backlog: [],
+      done: [],
+      blocked: [],
+      needs_feedback: [],
+    },
+  }, 'expanded');
+
+  assert.equal(viewModel.focusedChange?.change_id, 'overlay-refresh');
+  assert.equal(viewModel.surfaceLabel, 'Tracking change');
 });
 
 test('prototype view model builds board columns in UX order and only shows Needs You when populated', async () => {
