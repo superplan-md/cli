@@ -7,6 +7,7 @@ import { readInstallMetadata, type InstallMetadata } from '../install-metadata';
 import { ALL_SUPERPLAN_SKILL_NAMES } from '../skill-names';
 import { stopNextAction, type NextAction } from '../next-action';
 import { terminateInstalledOverlayCompanion } from '../overlay-companion';
+import { removeAgentsFromRegistry, getInstalledAgentsFromRegistry } from '../global-superplan';
 
 interface AgentEnvironment {
   name: string;
@@ -593,6 +594,10 @@ async function removeCommand(
 
     if (scope === 'global') {
       await removeAgentInstalls(globalAgents, managedSkillNames, removedPaths);
+      // Remove agents from registry
+      if (globalAgents.length > 0) {
+        await removeAgentsFromRegistry(globalAgents.map(a => a.name));
+      }
       await removeManagedInstructionsFile(path.join(homeDir, '.codex', 'AGENTS.md'), removedPaths);
       await removeManagedInstructionsFile(path.join(homeDir, '.claude', 'CLAUDE.md'), removedPaths);
       for (const installedCliTarget of installedCliTargets) {
@@ -617,6 +622,10 @@ async function removeCommand(
 
     if (scope === 'local' || scope === 'global') {
       await removeAgentInstalls(localAgents, managedSkillNames, removedPaths);
+      // Remove local agents from registry too
+      if (localAgents.length > 0) {
+        await removeAgentsFromRegistry(localAgents.map(a => a.name));
+      }
       await removeManagedInstructionsFile(path.join(localRootDir, 'AGENTS.md'), removedPaths);
       await removeManagedInstructionsFile(path.join(localRootDir, 'CLAUDE.md'), removedPaths);
       await removePath(localSuperplanDir, removedPaths);

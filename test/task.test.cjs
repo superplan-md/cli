@@ -750,7 +750,8 @@ Broken dependency task
 - [ ] A
 `);
 
-  await writeJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'), {
+  // Use global superplan path for runtime state
+  await writeJson(path.join(sandbox.home, '.config', 'superplan', 'runtime', 'tasks.json'), {
     tasks: {
       'demo/T-401': {
         status: 'in_progress',
@@ -786,7 +787,8 @@ Broken dependency task
   assert.equal(fixPayload.data.next_action.command, 'superplan run --json');
   assert.equal(fixPayload.error, null);
 
-  const runtimeState = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'));
+  // Use global superplan path for runtime state
+  const runtimeState = await readJson(path.join(sandbox.home, '.config', 'superplan', 'runtime', 'tasks.json'));
   assert.deepEqual(runtimeState, {
     changes: {
       demo: {

@@ -3,7 +3,6 @@ import { context } from "./commands/context";
 import { doctor } from "./commands/doctor";
 import { parse } from "./commands/parse";
 import { init } from "./commands/init";
-import { install } from "./commands/install";
 import { task } from "./commands/task";
 import { removeCli } from "./commands/remove";
 import { run } from "./commands/run";
@@ -218,7 +217,7 @@ function inferErrorNextAction(command: string | undefined, error: { code: string
 
   if (error.code === 'INSTALL_REQUIRED') {
     return commandNextAction(
-      'superplan install --quiet --json',
+      'superplan init --yes --json',
       'The requested command depends on machine-level Superplan state that does not exist yet.',
     );
   }
@@ -313,10 +312,6 @@ export const router: Record<string, CommandHandler> = {
     json: options.json,
     quiet: options.quiet,
     yes: options.yes,
-  }),
-  install: async (_args, options) => install({
-    json: options.json,
-    quiet: options.quiet,
   }),
   remove: async (args, options) => removeCli(args, {
     json: options.json,

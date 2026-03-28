@@ -29,8 +29,8 @@ export function isValidTaskId(taskId: string): boolean {
   return /^T-[A-Za-z0-9]+$/.test(taskId);
 }
 
-export function getChangePaths(changeSlug: string, cwd = process.cwd()): ChangePaths {
-  const superplanRoot = resolveSuperplanRoot(cwd);
+export function getChangePaths(changeSlug: string): ChangePaths {
+  const superplanRoot = resolveSuperplanRoot();
   const changesRoot = path.join(superplanRoot, 'changes');
   const changeRoot = path.join(changesRoot, changeSlug);
 

@@ -4,7 +4,7 @@ import { execFile as execFileCallback } from 'node:child_process';
 import { promisify } from 'node:util';
 import { parse, type ParseDiagnostic, type ParsedTask } from './commands/parse';
 import { getTaskRef } from './task-identity';
-import { getWorkspaceArtifactPaths } from './workspace-artifacts';
+import { getGlobalSuperplanPaths } from './global-superplan';
 
 const execFile = promisify(execFileCallback);
 
@@ -248,18 +248,13 @@ function buildEditDriftIssues(
 }
 
 export async function collectWorkspaceHealthIssues(workspaceRoot: string): Promise<WorkspaceHealthIssue[]> {
-  const superplanRoot = path.join(workspaceRoot, '.superplan');
-  if (!await pathExists(superplanRoot)) {
-    return [];
-  }
-
-  const artifactPaths = getWorkspaceArtifactPaths(superplanRoot);
+  const globalPaths = getGlobalSuperplanPaths();
   const issues: WorkspaceHealthIssue[] = [];
   const requiredArtifacts = [
-    { code: 'WORKSPACE_CONTEXT_README_MISSING', filePath: artifactPaths.contextReadmePath, fix: 'Run superplan context bootstrap --json' },
-    { code: 'WORKSPACE_CONTEXT_INDEX_MISSING', filePath: artifactPaths.contextIndexPath, fix: 'Run superplan context bootstrap --json' },
-    { code: 'WORKSPACE_DECISIONS_LOG_MISSING', filePath: artifactPaths.decisionsPath, fix: 'Run superplan context bootstrap --json' },
-    { code: 'WORKSPACE_GOTCHAS_LOG_MISSING', filePath: artifactPaths.gotchasPath, fix: 'Run superplan context bootstrap --json' },
+    { code: 'WORKSPACE_CONTEXT_README_MISSING', filePath: path.join(globalPaths.contextDir, 'README.md'), fix: 'Run superplan context bootstrap --json' },
+    { code: 'WORKSPACE_CONTEXT_INDEX_MISSING', filePath: globalPaths.contextIndexPath, fix: 'Run superplan context bootstrap --json' },
+    { code: 'WORKSPACE_DECISIONS_LOG_MISSING', filePath: globalPaths.decisionsPath, fix: 'Run superplan context bootstrap --json' },
+    { code: 'WORKSPACE_GOTCHAS_LOG_MISSING', filePath: globalPaths.gotchasPath, fix: 'Run superplan context bootstrap --json' },
   ];
 
   for (const artifact of requiredArtifacts) {
@@ -269,12 +264,12 @@ export async function collectWorkspaceHealthIssues(workspaceRoot: string): Promi
 
     issues.push({
       code: artifact.code,
-      message: `Missing workspace artifact: ${path.relative(workspaceRoot, artifact.filePath) || artifact.filePath}`,
+      message: `Missing workspace artifact: ${artifact.filePath}`,
       fix: artifact.fix,
     });
   }
 
-  const changeDirs = await getChangeDirs(path.join(superplanRoot, 'changes'));
+  const changeDirs = await getChangeDirs(globalPaths.changesDir);
   const parsedTasks: ParsedTask[] = [];
 
   for (const changeDir of changeDirs) {
@@ -301,7 +296,7 @@ export async function collectWorkspaceHealthIssues(workspaceRoot: string): Promi
   }
 
   const runtimeState = normalizeRuntimeState(
-    await readRuntimeState(path.join(superplanRoot, 'runtime', 'tasks.json')),
+    await readRuntimeState(path.join(globalPaths.runtimeDir, 'tasks.json')),
     parsedTasks,
   );
 
