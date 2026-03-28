@@ -37,28 +37,28 @@ async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
-function getChangesRoot(cwd = process.cwd()): string {
-  return path.join(resolveSuperplanRoot(cwd), 'changes');
+function getChangesRoot(): string {
+  return path.join(resolveSuperplanRoot(), 'changes');
 }
 
-function getChangeRoot(changeId: string, cwd = process.cwd()): string {
-  return path.join(getChangesRoot(cwd), changeId);
+function getChangeRoot(changeId: string): string {
+  return path.join(getChangesRoot(), changeId);
 }
 
-function getMetricsPath(changeId: string, cwd = process.cwd()): string {
-  return path.join(getChangeRoot(changeId, cwd), CHANGE_METRICS_FILE_NAME);
+function getMetricsPath(changeId: string): string {
+  return path.join(getChangeRoot(changeId), CHANGE_METRICS_FILE_NAME);
 }
 
 function getTaskRef(changeId: string, taskId: string): string {
   return `${changeId}/${taskId}`;
 }
 
-async function listChangeTaskContracts(changeId: string, cwd = process.cwd()): Promise<Array<{
+async function listChangeTaskContracts(changeId: string): Promise<Array<{
   task_id: string;
   title: string;
   path: string;
 }>> {
-  const tasksDir = path.join(getChangeRoot(changeId, cwd), 'tasks');
+  const tasksDir = path.join(getChangeRoot(changeId), 'tasks');
   let entries: Array<{ isFile(): boolean; name: string }> = [];
 
   try {
@@ -87,15 +87,15 @@ async function listChangeTaskContracts(changeId: string, cwd = process.cwd()): P
   }));
 }
 
-async function buildChangeMetricsSnapshot(changeId: string, cwd = process.cwd()): Promise<ChangeMetricsSnapshot | null> {
-  const changeRoot = getChangeRoot(changeId, cwd);
+async function buildChangeMetricsSnapshot(changeId: string): Promise<ChangeMetricsSnapshot | null> {
+  const changeRoot = getChangeRoot(changeId);
   if (!await pathExists(changeRoot)) {
     return null;
   }
 
   const [graphResult, taskContracts, events] = await Promise.all([
     loadChangeGraph(changeRoot),
-    listChangeTaskContracts(changeId, cwd),
+    listChangeTaskContracts(changeId),
     readVisibilityEvents(),
   ]);
 
@@ -126,13 +126,13 @@ async function buildChangeMetricsSnapshot(changeId: string, cwd = process.cwd())
   };
 }
 
-export async function syncChangeMetrics(changeId: string, cwd = process.cwd()): Promise<string | null> {
-  const snapshot = await buildChangeMetricsSnapshot(changeId, cwd);
+export async function syncChangeMetrics(changeId: string): Promise<string | null> {
+  const snapshot = await buildChangeMetricsSnapshot(changeId);
   if (!snapshot) {
     return null;
   }
 
-  const metricsPath = getMetricsPath(changeId, cwd);
+  const metricsPath = getMetricsPath(changeId);
   await fs.mkdir(path.dirname(metricsPath), { recursive: true });
   await fs.writeFile(metricsPath, JSON.stringify(snapshot, null, 2), 'utf-8');
   return metricsPath;

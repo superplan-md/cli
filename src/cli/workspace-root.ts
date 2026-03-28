@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 function pathExists(targetPath: string): boolean {
   try {
@@ -24,12 +25,9 @@ export function resolveWorkspaceRoot(startDir = process.cwd()): string {
   let gitRoot: string | null = null;
 
   while (true) {
-    if (pathExists(path.join(currentDir, '.superplan'))) {
-      return currentDir;
-    }
-
-    if (gitRoot === null && pathExists(path.join(currentDir, '.git'))) {
+    if (pathExists(path.join(currentDir, '.git'))) {
       gitRoot = currentDir;
+      return gitRoot;
     }
 
     const parentDir = path.dirname(currentDir);
@@ -40,9 +38,9 @@ export function resolveWorkspaceRoot(startDir = process.cwd()): string {
     currentDir = parentDir;
   }
 
-  return gitRoot ?? resolvedStartDir;
+  return resolvedStartDir;
 }
 
-export function resolveSuperplanRoot(startDir = process.cwd()): string {
-  return path.join(resolveWorkspaceRoot(startDir), '.superplan');
+export function resolveSuperplanRoot(): string {
+  return path.join(os.homedir(), '.config', 'superplan');
 }

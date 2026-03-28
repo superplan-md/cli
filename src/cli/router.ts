@@ -3,9 +3,9 @@ import { context } from "./commands/context";
 import { doctor } from "./commands/doctor";
 import { parse } from "./commands/parse";
 import { init } from "./commands/init";
-import { install } from "./commands/install";
 import { task } from "./commands/task";
 import { removeCli } from "./commands/remove";
+import { uninstallCli } from "./commands/uninstall";
 import { run } from "./commands/run";
 import { sync } from "./commands/sync";
 import { status } from "./commands/status";
@@ -98,7 +98,6 @@ function printHumanSuccess(command: string, result: CommandResult): boolean {
       return true;
     }
   }
-
   return false;
 }
 
@@ -192,6 +191,13 @@ function inferErrorNextAction(command: string | undefined, error: { code: string
     return stopNextAction(
       'The remove command is invalid. Use `superplan remove --scope <local|global|skip> --yes --json` for automation.',
       'Invalid remove invocations should terminate with the exact supported non-interactive form.',
+    );
+  }
+
+  if (error.code === 'INVALID_UNINSTALL_COMMAND') {
+    return stopNextAction(
+      'The uninstall command is invalid. Use `superplan uninstall --yes --json` for automation.',
+      'Invalid uninstall invocations should terminate with the exact supported non-interactive form.',
     );
   }
 
@@ -314,10 +320,6 @@ export const router: Record<string, CommandHandler> = {
     quiet: options.quiet,
     yes: options.yes,
   }),
-  install: async (_args, options) => install({
-    json: options.json,
-    quiet: options.quiet,
-  }),
   remove: async (args, options) => removeCli(args, {
     json: options.json,
     quiet: options.quiet,
@@ -325,6 +327,11 @@ export const router: Record<string, CommandHandler> = {
     scope: options.scope === 'local' || options.scope === 'global' || options.scope === 'skip'
       ? options.scope
       : undefined,
+  }),
+  uninstall: async (args, options) => uninstallCli(args, {
+    json: options.json,
+    quiet: options.quiet,
+    yes: options.yes,
   }),
   doctor: async (args) => doctor(args),
   parse: async (args, options) => parse(args, options),
