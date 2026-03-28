@@ -508,38 +508,47 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
         name: 'gemini',
         path: path.join(baseDir, '.gemini'),
         source_subdirs: ['gemini'],
-        install_path: path.join(baseDir, '.gemini', 'commands', 'superplan.toml'),
-        install_kind: 'toml_command',
+        install_path: path.join(baseDir, '.gemini', 'skills'),
+        install_kind: 'skills_namespace',
         bootstrap_strength: 'context_bootstrap',
+        cleanup_paths: [
+          path.join(baseDir, '.gemini', 'commands', 'superplan.toml'),
+        ],
       },
       {
         name: 'cursor',
         path: path.join(baseDir, '.cursor'),
         source_subdirs: ['cursor', 'cursor-plugin', 'hooks'],
+        install_path: path.join(baseDir, '.cursor', 'skills'),
+        install_kind: 'skills_namespace',
         bootstrap_strength: 'skills_only',
         cleanup_paths: [
           path.join(baseDir, '.cursor', 'commands', 'superplan.md'),
-          path.join(baseDir, '.cursor', 'skills')
+          // Note: .cursor/skills/ is the install_path, don't clean it up
         ],
       },
       {
         name: 'codex',
         path: path.join(baseDir, '.codex'),
         source_subdirs: ['codex', 'codex-plugin', 'hooks'],
+        install_path: path.join(baseDir, '.codex', 'skills'),
+        install_kind: 'skills_namespace',
         bootstrap_strength: 'skills_only',
         cleanup_paths: [
-          path.join(baseDir, '.codex', 'skills'),
-          path.join(baseDir, '.codex', 'skills', 'superplan')
+          path.join(baseDir, '.codex', 'skills', 'superplan'),
+          // Note: .codex/skills/ is the install_path, don't clean it up
         ],
       },
       {
         name: 'opencode',
         path: path.join(baseDir, '.opencode'),
         source_subdirs: ['opencode', 'opencode-plugin', 'hooks'],
+        install_path: path.join(baseDir, '.opencode', 'skills'),
+        install_kind: 'skills_namespace',
         bootstrap_strength: 'skills_only',
         cleanup_paths: [
           path.join(baseDir, '.opencode', 'commands', 'superplan.md'),
-          path.join(baseDir, '.opencode', 'skills')
+          // Note: .opencode/skills/ is the install_path, don't clean it up
         ],
       },
       {
@@ -566,9 +575,12 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       {
         name: 'copilot',
         path: path.join(baseDir, '.github'),
-        install_path: path.join(baseDir, '.github', 'copilot-instructions.md'),
-        install_kind: 'pointer_rule',
+        install_path: path.join(baseDir, '.github', 'skills'),
+        install_kind: 'skills_namespace',
         bootstrap_strength: 'rule_bootstrap',
+        cleanup_paths: [
+          path.join(baseDir, '.github', 'copilot-instructions.md'),
+        ],
       },
     ];
   }
@@ -593,14 +605,19 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       name: 'gemini',
       path: path.join(baseDir, '.gemini'),
       source_subdirs: ['gemini'],
-      install_path: path.join(baseDir, '.gemini', 'commands', 'superplan.toml'),
-      install_kind: 'toml_command',
+      install_path: path.join(baseDir, '.gemini', 'skills'),
+      install_kind: 'skills_namespace',
       bootstrap_strength: 'context_bootstrap',
+      cleanup_paths: [
+        path.join(baseDir, '.gemini', 'commands', 'superplan.toml'),
+      ],
     },
     {
       name: 'cursor',
       path: path.join(baseDir, '.cursor'),
       source_subdirs: ['cursor', 'cursor-plugin', 'hooks'],
+      install_path: path.join(baseDir, '.cursor', 'skills'),
+      install_kind: 'skills_namespace',
       bootstrap_strength: 'skills_only',
       cleanup_paths: [
         path.join(baseDir, '.cursor', 'commands', 'superplan.md'),
@@ -611,6 +628,8 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       name: 'codex',
       path: path.join(baseDir, '.codex'),
       source_subdirs: ['codex', 'codex-plugin', 'hooks'],
+      install_path: path.join(baseDir, '.codex', 'skills'),
+      install_kind: 'skills_namespace',
       bootstrap_strength: 'skills_only',
       cleanup_paths: [
         path.join(baseDir, '.codex', 'skills'),
@@ -621,6 +640,8 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       name: 'opencode',
       path: path.join(baseDir, '.config', 'opencode'),
       source_subdirs: ['opencode', 'opencode-plugin', 'hooks'],
+      install_path: path.join(baseDir, '.config', 'opencode', 'skills'),
+      install_kind: 'skills_namespace',
       bootstrap_strength: 'skills_only',
       cleanup_paths: [
         path.join(baseDir, '.config', 'opencode', 'commands', 'superplan.md'),
@@ -639,9 +660,12 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
     {
       name: 'copilot',
       path: path.join(baseDir, '.github'),
-      install_path: path.join(baseDir, '.github', 'copilot-instructions.md'),
-      install_kind: 'pointer_rule',
+      install_path: path.join(baseDir, '.github', 'skills'),
+      install_kind: 'skills_namespace',
       bootstrap_strength: 'rule_bootstrap',
+      cleanup_paths: [
+        path.join(baseDir, '.github', 'copilot-instructions.md'),
+      ],
     },
   ];
 }

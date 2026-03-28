@@ -4,7 +4,7 @@
 Apply this contract for any request that may touch the repo: implementation, debugging, review, planning, repo-specific clarification, or broad exploration.
 
 Before doing any of that work, load and follow `superplan-entry` from the first available path:
-- `/Users/puneetbhatt/.config/superplan/skills/superplan-entry/SKILL.md`
+- `/Users/ishashank/.config/superplan/skills/superplan-entry/SKILL.md`
 
 Non-negotiable rules:
 - No implementation before loading and following `superplan-entry`.
@@ -21,17 +21,22 @@ Task creation rule:
 - Do not treat "this is small" or "this is obvious" as a reason to skip task creation.
 - For tiny work, one `direct`-depth task is enough; for multi-step work, shape a full task graph.
 - Task creation happens before the first file edit, not after.
+- Non-trivial edits require a concrete task contract, not just a vague intent to work on something.
+- Multi-file refactors should happen only when the task graph already declares that work.
 
 Canonical loop when Superplan is active:
 1. Run `superplan status --json`.
 2. If no active task exists for the current work, shape and scaffold one now before proceeding.
 3. Claim or resume work with `superplan run --json` or `superplan run <task_id> --json`.
-4. Continue through the owning Superplan phase instead of improvising a parallel workflow.
-5. Use lifecycle commands such as `superplan task runtime block`, `superplan task runtime request-feedback`, and `superplan task review complete`; never hand-edit `.superplan/runtime/`.
+4. Do not edit repo files until that run command has returned an active task for this turn.
+5. Continue through the owning Superplan phase instead of improvising a parallel workflow.
+6. Use lifecycle commands such as `superplan task runtime block`, `superplan task runtime request-feedback`, and `superplan task review complete`; never hand-edit `.superplan/runtime/`.
 
 Decision guardrails:
 - If readiness is missing, give the concrete missing-layer guidance and stop.
 - If work is already shaped, resume the owning execution or review phase instead of routing from scratch.
 - If the request is large, ambiguous, or multi-workstream, route before implementing.
 - If the agent is about to edit a file without a tracked task, stop and create the task first.
+- If `superplan run`, `status`, or task activation returns an unexpected lifecycle or runtime error, the next action must be another Superplan command, not implementation.
+- If `superplan run` fails, do not proceed until the task is blocked, reopened, repaired, or clarified through Superplan.
 <!-- superplan-entry-instructions:end -->

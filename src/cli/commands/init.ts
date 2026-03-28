@@ -1,26 +1,35 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { checkbox, confirm } from '@inquirer/prompts';
-import { 
-  pathExists, 
-  installSkills,
+import { select, checkbox, confirm } from '@inquirer/prompts';
+import {
   installAgentSkills,
   detectAgents,
   ExtendedAgentEnvironment,
   getAgentDisplayName,
   sortAgentsForSelection,
   installManagedInstructionsFile,
-  resolveWorkspaceRoot
+  resolveWorkspaceRoot,
+  pathExists,
 } from './install-helpers';
 import { install as runInstall } from './install';
-import { writeOverlayPreference } from '../overlay-preferences';
-import { ensureWorkspaceArtifacts } from '../workspace-artifacts';
+import {
+  ensureGlobalWorkspaceArtifacts,
+  ensureGlobalChangeArtifacts,
+  getGlobalSuperplanPaths,
+  hasGlobalSuperplan,
+  getInstalledAgentsFromRegistry,
+  addAgentsToRegistry,
+  isAgentInRegistry,
+  getCurrentDirName,
+} from '../global-superplan';
 
 export interface InitOptions {
   yes?: boolean;
   quiet?: boolean;
   json?: boolean;
+  global?: boolean;
+  local?: boolean;
 }
 
 export type InitResult =
@@ -29,7 +38,6 @@ export type InitResult =
       data: {
         superplan_root: string;
         agents: ExtendedAgentEnvironment[];
-        workspace_artifacts: string[];
         message?: string;
         verified?: boolean;
       };
@@ -58,35 +66,98 @@ function hasAgent(agents: ExtendedAgentEnvironment[], name: ExtendedAgentEnviron
   return agents.some(agent => agent.name === name);
 }
 
-async function verifyLocalSetup(paths: {
-  superplanRoot: string;
-  projectAgents: ExtendedAgentEnvironment[];
-}): Promise<string[]> {
-  const issues: string[] = [];
-
-  if (!await pathExists(paths.superplanRoot)) {
-    issues.push('Local .superplan directory was not created.');
-  }
-
-  for (const agent of paths.projectAgents) {
-    if (agent.install_path && !await pathExists(agent.install_path)) {
-      issues.push(`Local ${agent.name} integration was not installed correctly.`);
+async function updateGitignoreForLocalInstall(cwd: string, agents: ExtendedAgentEnvironment[]): Promise<void> {
+  const gitignorePath = path.join(cwd, '.gitignore');
+  
+  // Build list of entries based on installed agents
+  const entries: string[] = [];
+  
+  for (const agent of agents) {
+    switch (agent.name) {
+      case 'claude':
+        entries.push('.claude/');
+        break;
+      case 'cursor':
+        entries.push('.cursor/');
+        break;
+      case 'codex':
+        entries.push('.codex/');
+        break;
+      case 'opencode':
+        entries.push('.opencode/');
+        break;
+      case 'gemini':
+        entries.push('.gemini/');
+        break;
+      case 'amazonq':
+        entries.push('.amazonq/');
+        break;
+      case 'antigravity':
+        entries.push('.agents/');
+        break;
+      case 'copilot':
+        entries.push('.github/skills/');
+        break;
     }
   }
-
-  return issues;
+  
+  // Also add root-level files
+  if (agents.some(a => a.name === 'claude')) {
+    entries.push('CLAUDE.md');
+  }
+  entries.push('AGENTS.md');
+  
+  // Remove duplicates and sort
+  const uniqueEntries = [...new Set(entries)].sort();
+  
+  try {
+    let content = '';
+    try {
+      content = await fs.readFile(gitignorePath, 'utf-8');
+    } catch {
+      // File doesn't exist, will create new
+    }
+    
+    // Filter out entries that already exist
+    const newEntries = uniqueEntries.filter(entry => !content.includes(entry));
+    
+    if (newEntries.length === 0) {
+      return; // Nothing to add
+    }
+    
+    // Add Superplan section
+    const sectionHeader = '\n# Superplan - AI agent configurations\n';
+    const sectionContent = newEntries.join('\n') + '\n';
+    
+    const newContent = content.endsWith('\n') || content === ''
+      ? content + sectionHeader + sectionContent
+      : content + '\n' + sectionHeader + sectionContent;
+    
+    await fs.writeFile(gitignorePath, newContent, 'utf-8');
+    
+    console.log(`\n✓ Updated .gitignore with ${newEntries.length} entries:`);
+    for (const entry of newEntries) {
+      console.log(`  - ${entry}`);
+    }
+  } catch {
+    // Ignore errors
+  }
 }
 
 export function getInitCommandHelpMessage(): string {
   return [
-    'Initialize the current repository for Superplan.',
+    'Initialize Superplan for your workspace.',
     '',
     'Usage:',
     '  superplan init',
+    '  superplan init --global',
+    '  superplan init --local',
     '  superplan init --yes',
     '  superplan init --json',
     '',
     'Options:',
+    '  --global          install globally (all projects)',
+    '  --local           install locally (this project only)',
     '  --yes             skip prompts with default choices',
     '  --quiet           non-interactive mode (alias for --yes --json)',
     '  --json            return structured output',
@@ -104,12 +175,146 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
 
     const homeDir = os.homedir();
     const globalConfigPath = path.join(homeDir, '.config', 'superplan', 'config.toml');
+    const globalSkillsDir = path.join(homeDir, '.config', 'superplan', 'skills');
+    const globalPaths = getGlobalSuperplanPaths();
 
-    // Auto-install check
+    // Determine installation scope: global or local
+    let installScope: 'global' | 'local';
+    
+    if (options.global) {
+      installScope = 'global';
+    } else if (options.local) {
+      installScope = 'local';
+    } else if (!isQuiet) {
+      const scopeChoice = await select({
+        message: 'How would you like to install Superplan?',
+        choices: [
+          { name: 'Global - Available in all projects (~/.config/superplan/)', value: 'global' },
+          { name: 'Local - Only this repository (visible in git)', value: 'local' },
+        ],
+      });
+      installScope = scopeChoice as 'global' | 'local';
+    } else {
+      // Default to local in quiet mode
+      installScope = 'local';
+    }
+
+    // Handle global installation
+    if (installScope === 'global') {
+      // Check if global superplan exists, if not install it
+      if (!await pathExists(globalConfigPath)) {
+        if (!isQuiet) {
+          const proceedWithInstall = await confirm({
+            message: 'Superplan global installation not found. Would you like to install it now?',
+            default: true,
+          });
+
+          if (!proceedWithInstall) {
+            return {
+              ok: false,
+              error: {
+                code: 'INSTALL_REQUIRED',
+                message: 'Superplan global installation is required.',
+                retryable: false,
+              },
+            };
+          }
+        }
+
+        const installResult = await runInstall({ quiet: true, json: true });
+        if (!installResult.ok) {
+          return {
+            ok: false,
+            error: {
+              code: 'AUTO_INSTALL_FAILED',
+              message: `Failed to install Superplan globally: ${installResult.error.message}`,
+              retryable: false,
+            },
+          };
+        }
+      }
+
+      // Ensure global workspace structure exists
+      await ensureGlobalWorkspaceArtifacts();
+
+      // Create a change for the current directory
+      const currentDirName = getCurrentDirName();
+      const changeSlug = `workspace-${currentDirName}`;
+      await ensureGlobalChangeArtifacts(changeSlug, `Workspace: ${currentDirName}`);
+
+      // Detect agents at global level
+      const detectedGlobalAgents = await detectAgents(homeDir, 'global');
+      const globalAgentsToInstall = detectedGlobalAgents.filter(a => a.detected);
+
+      // Filter out agents already in registry
+      const installedAgents = await getInstalledAgentsFromRegistry();
+      const newAgents = globalAgentsToInstall.filter(a => !installedAgents.includes(a.name));
+
+      // Agents that must always be local
+      const localOnlyAgents = new Set(['amazonq', 'antigravity']);
+
+      if (!isQuiet && globalAgentsToInstall.length > 0) {
+        // Show which agents already have superplan globally
+        const alreadyInstalled = globalAgentsToInstall.filter(a => installedAgents.includes(a.name));
+        if (alreadyInstalled.length > 0) {
+          const names = alreadyInstalled.map(a => getAgentDisplayName(a)).join(', ');
+          console.log(`\nSuperplan already installed globally for: ${names}`);
+        }
+
+        // Show new agents to install
+        if (newAgents.length > 0) {
+          const names = newAgents.map(a => getAgentDisplayName(a)).join(', ');
+          console.log(`\nIntegrating with new AI agents: ${names}`);
+        }
+
+        // Show local-only agents
+        const localOnlyToInstall = globalAgentsToInstall.filter(a => localOnlyAgents.has(a.name));
+        if (localOnlyToInstall.length > 0) {
+          const names = localOnlyToInstall.map(a => getAgentDisplayName(a)).join(', ');
+          console.log(`\nNote: ${names} will be installed locally (global not supported)`);
+        }
+      }
+
+      // Install skills in new agents (excluding local-only for global scope)
+      const globalInstallableAgents = newAgents.filter(a => !localOnlyAgents.has(a.name));
+      if (globalInstallableAgents.length > 0) {
+        await installAgentSkills(globalSkillsDir, globalInstallableAgents);
+        await addAgentsToRegistry(globalInstallableAgents.map(a => a.name));
+      }
+
+      // Install local-only agents locally
+      const localOnlyDetected = globalAgentsToInstall.filter(a => localOnlyAgents.has(a.name) && !installedAgents.includes(a.name));
+      if (localOnlyDetected.length > 0) {
+        await installAgentSkills(globalSkillsDir, localOnlyDetected);
+        await addAgentsToRegistry(localOnlyDetected.map(a => a.name));
+      }
+
+      return {
+        ok: true,
+        data: {
+          superplan_root: globalPaths.superplanRoot,
+          agents: [...globalInstallableAgents, ...localOnlyDetected],
+          verified: true,
+          message: `Global Superplan initialized. Workspace tracked as "${changeSlug}".`,
+        },
+      };
+    }
+
+    // Handle local installation (skills only, no .superplan folder)
+    const workspaceRoot = resolveWorkspaceRoot(process.cwd());
+    const cwd = workspaceRoot;
+
+    // Show disclaimer about local installation
+    if (!isQuiet) {
+      console.log('\n⚠️  Local installation will create files in this repository that are visible to other users via git.');
+      console.log('   Consider using --global for project-agnostic installation.\n');
+    }
+
+    // Auto-install global config if missing (needed for skills)
     if (!await pathExists(globalConfigPath)) {
       if (!isQuiet) {
         const proceedWithInstall = await confirm({
-          message: 'Superplan global configuration not found. Would you like to install it now?',
+          message: 'Superplan global installation not found. Would you like to install it now?',
           default: true,
         });
 
@@ -118,12 +323,13 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
             ok: false,
             error: {
               code: 'INSTALL_REQUIRED',
-              message: 'Superplan global installation is required to initialize a project.',
+              message: 'Superplan global installation is required.',
               retryable: false,
             },
           };
         }
       }
+
       const installResult = await runInstall({ quiet: true, json: true });
       if (!installResult.ok) {
         return {
@@ -137,29 +343,48 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
       }
     }
 
-    const workspaceRoot = resolveWorkspaceRoot(process.cwd());
-    const cwd = workspaceRoot;
-    const superplanRoot = path.join(workspaceRoot, '.superplan');
-    const globalSkillsDir = path.join(homeDir, '.config', 'superplan', 'skills');
-
-    await fs.mkdir(superplanRoot, { recursive: true });
-
-    const workspaceArtifacts = await ensureWorkspaceArtifacts(superplanRoot);
-
+    // Detect agents at project level
     const detectedProjectAgents = await detectAgents(workspaceRoot, 'project');
+    
+    // Check which agents already have superplan globally
+    const installedAgents = await getInstalledAgentsFromRegistry();
+    
+    // Filter agents: skip if already installed globally (unless local-only)
+    const localOnlyAgents = new Set(['amazonq', 'antigravity']);
+    const agentsNeedingInstall = detectedProjectAgents.filter(a => {
+      // Local-only agents always need local install
+      if (localOnlyAgents.has(a.name)) return a.detected;
+      // Others skip if globally installed
+      return a.detected && !installedAgents.includes(a.name);
+    });
+
     let projectAgentsToInstall: ExtendedAgentEnvironment[] = [];
 
     if (useDefaults) {
-      projectAgentsToInstall = detectedProjectAgents.filter(a => a.detected);
+      projectAgentsToInstall = agentsNeedingInstall;
     } else {
-      const sortedAgents = sortAgentsForSelection(detectedProjectAgents);
+      // For local init, show all available agents (not just detected)
+      // so users can choose agents they want to set up
+      const allProjectAgents = detectedProjectAgents;
+      const sortedAgents = sortAgentsForSelection(allProjectAgents);
+      
+      // Mark already globally installed agents
+      const choices = sortedAgents.map(agent => {
+        const globallyInstalled = installedAgents.includes(agent.name);
+        const isLocalOnly = localOnlyAgents.has(agent.name);
+        const name = getAgentDisplayName(agent);
+        const suffix = globallyInstalled && !isLocalOnly ? ' (already global - skipping)' : '';
+        return {
+          name: `${name}${suffix}`,
+          value: agent,
+          checked: !globallyInstalled || isLocalOnly,
+          disabled: globallyInstalled && !isLocalOnly,
+        };
+      });
+
       projectAgentsToInstall = await checkbox({
         message: 'Select AI agents to integrate with this project:',
-        choices: sortedAgents.map(agent => ({
-          name: getAgentDisplayName(agent),
-          value: agent,
-          checked: agent.detected,
-        })),
+        choices,
         instructions: formatDetectedAgentInstructions(sortedAgents),
       });
     }
@@ -169,8 +394,19 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
         const names = projectAgentsToInstall.map(a => getAgentDisplayName(a)).join(', ');
         console.log(`\nIntegrating with AI agents: ${names}`);
       }
-      // Pass empty skillsDir string since we're using globalSkillsDir internally in installAgentSkills
-      await installAgentSkills('', projectAgentsToInstall);
+      await installAgentSkills(globalSkillsDir, projectAgentsToInstall);
+      await addAgentsToRegistry(projectAgentsToInstall.map(a => a.name));
+      
+      // Ask user if they want to update .gitignore
+      if (!isQuiet) {
+        const shouldUpdateGitignore = await confirm({
+          message: 'Update .gitignore to ignore agent configuration files?',
+          default: true,
+        });
+        if (shouldUpdateGitignore) {
+          await updateGitignoreForLocalInstall(cwd, projectAgentsToInstall);
+        }
+      }
     }
 
     // Common repo-level managed instruction files
@@ -180,42 +416,15 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
       await installManagedInstructionsFile(path.join(cwd, '.claude', 'CLAUDE.md'), globalSkillsDir);
     }
 
-    // Save local overlay preference - DISABLED by default to prevent crashes
-    let overlayEnabled = false;
-    if (!useDefaults) {
-      overlayEnabled = await confirm({
-        message: 'Enable Superplan Overlay for this project? (Experimental - may cause system issues)',
-        default: false,
-      });
-    }
-    await writeOverlayPreference(overlayEnabled, { scope: 'local' });
-
-    const verificationIssues = await verifyLocalSetup({
-      superplanRoot,
-      projectAgents: projectAgentsToInstall,
-    });
-
-    if (verificationIssues.length > 0) {
-      return {
-        ok: false,
-        error: {
-          code: 'INIT_VERIFICATION_FAILED',
-          message: verificationIssues.join(' '),
-          retryable: false,
-        },
-      };
-    }
-
     const successMessage = projectAgentsToInstall.length > 0
-      ? `Project initialized successfully with ${projectAgentsToInstall.length} agent integrations.`
-      : 'Project initialized successfully.';
+      ? `Local installation complete with ${projectAgentsToInstall.length} agent integrations. Files are tracked in git.`
+      : 'Local installation complete. Files are tracked in git.';
 
     return {
       ok: true,
       data: {
-        superplan_root: superplanRoot,
+        superplan_root: globalPaths.superplanRoot,
         agents: projectAgentsToInstall,
-        workspace_artifacts: workspaceArtifacts,
         verified: true,
         message: successMessage,
       },

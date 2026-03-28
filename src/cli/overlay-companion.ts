@@ -700,7 +700,7 @@ export async function terminateInstalledOverlayCompanion(workspacePath?: string)
 }
 
 async function findRecentLaunchFailure(workspacePath: string): Promise<string | null> {
-  const events = await readVisibilityEvents(workspacePath);
+  const events = await readVisibilityEvents();
   const cutoff = Date.now() - LAUNCH_FAILURE_SUPPRESSION_WINDOW_MS;
   const recentFailure = [...events]
     .reverse()
