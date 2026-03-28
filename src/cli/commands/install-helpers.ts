@@ -424,6 +424,9 @@ export async function installAgentSkills(skillsDir: string, agents: ExtendedAgen
   // We need to copy templates from the CLI's installation package output/ dir, not the user's config dir.
   const sourceOutputDir = path.resolve(__dirname, '../../../output');
   for (const agent of agents) {
+    // Ensure agent directory exists
+    await fs.mkdir(agent.path, { recursive: true });
+    
     await copyAgentBaseFiles(sourceOutputDir, agent);
     const globalSkillsDir = agent.global_skills_dir ?? path.join(os.homedir(), '.config', 'superplan', 'skills');
 
