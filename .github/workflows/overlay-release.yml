@@ -1,0 +1,160 @@
+name: Overlay Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Git ref or commit to build from
+        required: true
+        default: main
+        type: string
+      release_tag:
+        description: GitHub release tag to create or update
+        required: true
+        type: string
+      release_name:
+        description: Optional release title override
+        required: false
+        type: string
+      draft:
+        description: Create or keep the release as draft
+        required: true
+        default: true
+        type: boolean
+      prerelease:
+        description: Mark the release as a prerelease
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.runs_on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS arm64
+            runs_on: macos-14
+            platform: darwin
+            arch: arm64
+          - label: Linux x64
+            runs_on: ubuntu-22.04
+            platform: linux
+            arch: x64
+          - label: Windows x64
+            runs_on: windows-2022
+            platform: windows
+            arch: x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/overlay-desktop/package-lock.json
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install overlay dependencies
+        run: npm --prefix apps/overlay-desktop ci
+
+      - name: Build Tauri overlay
+        run: npm --prefix apps/overlay-desktop run tauri build
+
+      - name: Package stable overlay artifact
+        run: node ./scripts/overlay-release.js package --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
+
+      - name: Upload packaged artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: overlay-${{ matrix.platform }}-${{ matrix.arch }}
+          path: dist/release/overlay/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: overlay-*
+          merge-multiple: true
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_NAME: ${{ inputs.release_name }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          DRAFT: ${{ inputs.draft }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -eu
+
+          release_name="$RELEASE_NAME"
+          if [ -z "$release_name" ]; then
+            release_name="$RELEASE_TAG"
+          fi
+
+          draft_flag=""
+          prerelease_flag=""
+
+          if [ "$DRAFT" = "true" ]; then
+            draft_flag="--draft"
+          fi
+
+          if [ "$PRERELEASE" = "true" ]; then
+            prerelease_flag="--prerelease"
+          fi
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.id')"
+            gh api \
+              --method PATCH \
+              "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+              -f name="$release_name" \
+              -F draft="$DRAFT" \
+              -F prerelease="$PRERELEASE" >/dev/null
+            gh release upload "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              release-assets/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$SOURCE_REF" \
+              --title "$release_name" \
+              --generate-notes \
+              $draft_flag \
+              $prerelease_flag
+          fi

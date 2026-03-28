@@ -75,7 +75,15 @@ Output directory:
 dist/release/overlay/
 ```
 
+Current multi-platform release publication command:
+
+```bash
+npm run overlay:release:github -- --tag <release-tag>
+```
+
+That dispatches the GitHub Actions release workflow so macOS, Linux, and Windows artifacts are built on native runners and uploaded to the requested GitHub release.
+
 ## Remaining Caveats
 
-- The curl installer depends on packaged overlay release assets being published for the target ref and platform. Without those assets, the CLI still installs, but the one-product overlay experience cannot be delivered for that release channel.
+- The curl installer depends on packaged overlay release assets being published for the target ref and platform. The GitHub release workflow now covers macOS, Linux, and Windows publication, but the install flow still degrades gracefully when a specific platform asset is missing for a tag.
 - Native fullscreen-space behavior on macOS remains a separate shell acceptance gate. The install flow is wired, but fullscreen visibility still needs platform acceptance verification outside the packaging path.

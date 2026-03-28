@@ -40,7 +40,7 @@ Windows Command Prompt:
 curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && install-superplan.cmd
 ```
 
-The Windows installer now installs the CLI and the packaged overlay companion when a matching Windows release artifact is available.
+The Windows installer now installs the CLI and the packaged overlay companion when a matching Windows release artifact has been published to the repo's GitHub release.
 
 ## How it works
 
@@ -129,7 +129,7 @@ For Windows Command Prompt:
 curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && install-superplan.cmd
 ```
 
-The Windows installer resolves the latest published GitHub release tag for the CLI source when `SUPERPLAN_REF` is not pinned, and it installs the Windows overlay companion when the matching release artifact is available.
+The Windows installer resolves the latest published GitHub release tag for the CLI source when `SUPERPLAN_REF` is not pinned, and it installs the Windows overlay companion when the matching release artifact has been published for that release tag.
 After install, Superplan asks whether you want to run `superplan init` immediately in the directory you launched from.
 
 If you want the direct PowerShell installer instead, this still works:
@@ -201,6 +201,22 @@ superplan run --json     # Start/continue the next task
 4. **Fastest Path to Init**: If a repo needs Superplan, `init` should be automatic and invisible whenever possible.
 
 For advanced setup, internal specs, and development details, see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
+
+## Overlay Releases
+
+Use the local packaging command when you only need the current machine's overlay artifact:
+
+```bash
+npm run overlay:release
+```
+
+Use the GitHub-backed release path when you need published native artifacts for macOS, Linux, and Windows from one command:
+
+```bash
+npm run overlay:release:github -- --tag <release-tag>
+```
+
+That dispatches a GitHub Actions matrix build and uploads the packaged overlay artifacts to the requested GitHub release tag.
 
 ## Credits
 
