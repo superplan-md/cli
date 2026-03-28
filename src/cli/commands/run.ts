@@ -1,4 +1,4 @@
-import { activateTask, selectNextTask, type ParsedTask } from './task';
+import { activateTask, selectNextTask, type ParsedTask, loadTasks } from './task';
 import type { OverlayRuntimeNotice } from '../overlay-visibility';
 import { getQueueNextAction, stopNextAction, type NextAction } from '../next-action';
 import { getTaskRef } from '../task-identity';
@@ -35,19 +35,31 @@ export type RunResult =
       ok: true;
       data: {
         task_id: string | null;
-        action: 'start' | 'resume' | 'continue' | 'idle';
-        status: 'in_progress' | null;
+        action: 'activated' | 'idle' | 'batch_activated' | 'start' | 'resume' | 'continue';
+        status: string | null;
         task: ParsedTask | null;
         active_task_context?: ActiveTaskContext | null;
         reason: string;
         next_action: NextAction;
         overlay?: OverlayRuntimeNotice;
+        // Batch activation results
+        batch_results?: Array<{
+          task_id: string;
+          status: string;
+          task: ParsedTask;
+          active_task_context: ActiveTaskContext | null;
+        }>;
+        batch_count?: number;
       };
     }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
 
 function getPositionalArgs(args: string[]): string[] {
-  return args.filter(arg => arg !== '--json' && arg !== '--quiet');
+  return args.filter(arg => arg !== '--json' && arg !== '--quiet' && arg !== '--all-ready');
+}
+
+function hasAllReadyFlag(args: string[]): boolean {
+  return args.includes('--all-ready');
 }
 
 function getInvalidRunCommandError(): RunResult {
@@ -56,11 +68,12 @@ function getInvalidRunCommandError(): RunResult {
     error: {
       code: 'INVALID_RUN_COMMAND',
       message: [
-        'Run accepts at most one optional <task_ref>.',
+        'Run accepts at most one optional <task_ref>, or --all-ready flag.',
         '',
         'Usage:',
         '  superplan run',
         '  superplan run <task_ref>',
+        '  superplan run --all-ready',
       ].join('\n'),
       retryable: true,
     },
@@ -136,6 +149,87 @@ function buildRunResultFromActivation(
   };
 }
 
+async function runAllReady(runtimeDeps: RunDeps, workflowSurfaces: WorkflowSurfaceSummary): Promise<RunResult> {
+  const tasksResult = await loadTasks();
+  if (!tasksResult.ok) {
+    return tasksResult;
+  }
+
+  const tasks = tasksResult.data.tasks as ParsedTask[];
+  const readyTasks = tasks.filter(taskItem => taskItem.is_ready);
+
+  if (readyTasks.length === 0) {
+    return {
+      ok: true,
+      data: {
+        task_id: null,
+        action: 'idle',
+        status: null,
+        task: null,
+        reason: 'No ready tasks available for batch activation',
+        next_action: getQueueNextAction({
+          active: null,
+          ready: [],
+          in_review: [],
+          blocked: [],
+          needs_feedback: [],
+        }),
+      },
+    };
+  }
+
+  // Activate all ready tasks in parallel
+  const batchResults: Array<{
+    task_id: string;
+    status: string;
+    task: ParsedTask;
+    active_task_context: ActiveTaskContext | null;
+  }> = [];
+
+  for (const task of readyTasks) {
+    const activationResult = await runtimeDeps.activateTaskFn(task.task_id, 'run');
+    if (activationResult.ok) {
+      batchResults.push({
+        task_id: activationResult.data.task_id,
+        status: activationResult.data.status,
+        task: activationResult.data.task,
+        active_task_context: buildActiveTaskContext(activationResult.data.task, workflowSurfaces),
+      });
+    }
+  }
+
+  if (batchResults.length === 0) {
+    return {
+      ok: false,
+      error: {
+        code: 'BATCH_ACTIVATION_FAILED',
+        message: 'Failed to activate any ready tasks',
+        retryable: false,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      task_id: null,
+      action: 'batch_activated',
+      status: 'ready',
+      task: null,
+      reason: `Activated ${batchResults.length} tasks in batch mode`,
+      batch_results: batchResults,
+      batch_count: batchResults.length,
+      next_action: getQueueNextAction({
+        active: null,
+        ready: batchResults.map(r => r.task_id),
+        in_review: [],
+        blocked: [],
+        needs_feedback: [],
+      }),
+    },
+  };
+}
+
 export async function run(args: string[] = [], deps: Partial<RunDeps> = {}): Promise<RunResult> {
   const runtimeDeps: RunDeps = {
     selectNextTaskFn: selectNextTask,
@@ -143,6 +237,7 @@ export async function run(args: string[] = [], deps: Partial<RunDeps> = {}): Pro
     ...deps,
   };
   const positionalArgs = getPositionalArgs(args);
+  const allReadyFlag = hasAllReadyFlag(args);
 
   if (positionalArgs.length > 1) {
     return getInvalidRunCommandError();
@@ -153,6 +248,11 @@ export async function run(args: string[] = [], deps: Partial<RunDeps> = {}): Pro
   const explicitTaskId = positionalArgs[0];
   if (explicitTaskId) {
     return buildRunResultFromActivation(await runtimeDeps.activateTaskFn(explicitTaskId, 'run'), workflowSurfaces);
+  }
+
+  // Handle --all-ready batch activation
+  if (allReadyFlag) {
+    return runAllReady(runtimeDeps, workflowSurfaces);
   }
 
   const nextTaskResult = await runtimeDeps.selectNextTaskFn();
