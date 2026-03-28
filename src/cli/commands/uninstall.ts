@@ -8,6 +8,7 @@ import { ALL_SUPERPLAN_SKILL_NAMES } from '../skill-names';
 import { stopNextAction, type NextAction } from '../next-action';
 import { terminateInstalledOverlayCompanion } from '../overlay-companion';
 import { removeAgentsFromRegistry, getInstalledAgentsFromRegistry } from '../global-superplan';
+import { remove } from './remove';
 
 interface AgentEnvironment {
   name: string;
@@ -525,6 +526,12 @@ async function uninstallCommand(
           },
         };
       }
+    }
+
+    // First, run remove --scope global to clean up agent integrations
+    const removeResult = await remove({ scope: 'global', yes: true, json: options.json, quiet: options.quiet });
+    if (!removeResult.ok && !options.json) {
+      console.warn(`Warning: Global remove step encountered an issue: ${removeResult.error.message}`);
     }
 
     const removedPaths: string[] = [];
