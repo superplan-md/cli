@@ -107,7 +107,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
 
     // Auto-install check
     if (!await pathExists(globalConfigPath)) {
-      if (!isQuiet) {
+      if (!useDefaults && !isQuiet) {
         const proceedWithInstall = await confirm({
           message: 'Superplan global configuration not found. Would you like to install it now?',
           default: true,

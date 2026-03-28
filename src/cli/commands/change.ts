@@ -274,7 +274,7 @@ export function getChangeCommandHelpMessage(options: {
     '  new <slug>                           Create a new tracked change',
     '  plan set <change-slug>               Write change-scoped plan content through the CLI',
     '  spec set <change-slug>               Write change-scoped spec content through the CLI',
-    '  task add <change-slug>               Add a graph task and scaffold its contract through the CLI',
+    '  task add <change-slug>               Add one tracked task and scaffold its contract through the CLI',
     '',
     'Options:',
     '  --title <title>                      Set the tracked change title or task title',
@@ -297,6 +297,9 @@ export function getChangeCommandHelpMessage(options: {
     '  superplan change plan set improve-task-authoring --file plan.md --json',
     '  superplan change spec set improve-task-authoring --name design --stdin --json',
     '  superplan change task add improve-task-authoring --title "Add CLI plan writer" --depends-on-all T-001 --acceptance-criterion "CLI can write change plans" --json',
+    '',
+    'Use `change task add` for the normal one-task path.',
+    'Use `task scaffold new` or `task scaffold batch` only when task ids are already declared in the graph and you need to scaffold contracts from that pre-shaped graph.',
   ].join('\n');
 }
 
@@ -407,8 +410,8 @@ async function createChange(changeSlug: string, options: {
               'The single-task change is scaffolded and ready to start immediately.',
             )
           : stopNextAction(
-              `Author ${path.relative(process.cwd(), changePaths.tasksIndexPath) || changePaths.tasksIndexPath} as the graph truth for this change before scaffolding tasks.`,
-              'The change scaffold exists now; the next step is to define the task graph before validation or task scaffolding.',
+              `The change scaffold exists. For most new work, use \`superplan change task add ${changeSlug} --title "..." --json\`. Edit ${path.relative(process.cwd(), changePaths.tasksIndexPath) || changePaths.tasksIndexPath} directly only when you are shaping a larger graph up front.`,
+              'The default next step is CLI-owned task creation; manual graph editing is only needed for pre-shaped or multi-task authoring.',
             ),
         ...(overlay ? { overlay } : {}),
       },

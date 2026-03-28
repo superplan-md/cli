@@ -112,6 +112,17 @@ test('init --yes --json creates repository scaffolding without prompting', async
   assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'plan.md')), false);
 });
 
+test('init --yes auto-installs without prompting in human mode', async () => {
+  const sandbox = await makeSandbox('superplan-init-yes-human-');
+
+  const initResult = await runCli(['init', '--yes'], { cwd: sandbox.cwd, env: sandbox.env });
+
+  assert.equal(initResult.code, 0, initResult.stderr || initResult.stdout);
+  assert.match(initResult.stdout, /Project initialized successfully/);
+  assert.doesNotMatch(initResult.stdout, /Would you like to install it now\?/);
+  assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'config.toml')), true);
+});
+
 test('init --yes --json honors a repo Claude preference from root CLAUDE.md and creates local Claude skills', async () => {
   const sandbox = await makeSandbox('superplan-init-claude-root-');
 

@@ -54,7 +54,69 @@ function printHumanSuccess(command: string, result: CommandResult): boolean {
     return true;
   }
 
+  if (command === "change" && data && typeof data.change_id === "string") {
+    console.log(`Created change ${data.change_id}.`);
+    if (data.next_action?.type === 'command' && data.next_action.command) {
+      console.log(`Next: ${data.next_action.command}`);
+    } else if (data.next_action?.type === 'stop' && data.next_action.outcome) {
+      console.log(data.next_action.outcome);
+    }
+    return true;
+  }
+
+  if (command === "context" && data && Array.isArray(data.created)) {
+    const created = data.created.length > 0 ? data.created.join(', ') : 'no files';
+    console.log(`Updated context: ${created}.`);
+    if (data.next_action?.type === 'command' && data.next_action.command) {
+      console.log(`Next: ${data.next_action.command}`);
+    }
+    return true;
+  }
+
+  if (command === "status" && data && data.counts) {
+    if (!data.active && data.counts.ready === 0 && data.counts.in_review === 0 && data.counts.blocked === 0 && data.counts.needs_feedback === 0) {
+      console.log('No runnable tracked work.');
+      return true;
+    }
+
+    if (data.active) {
+      console.log(`Active: ${data.active}`);
+    }
+    console.log(`Ready: ${data.counts.ready}  In review: ${data.counts.in_review}  Blocked: ${data.counts.blocked}  Needs feedback: ${data.counts.needs_feedback}`);
+    return true;
+  }
+
+  if (command === "run" && data) {
+    if (data.action === 'idle') {
+      console.log('No ready tasks available.');
+      return true;
+    }
+
+    if (typeof data.task_id === 'string' && data.task && typeof data.task.title === 'string') {
+      const action = typeof data.action === 'string' ? data.action[0].toUpperCase() + data.action.slice(1) : 'Activated';
+      console.log(`${action} ${data.task_id}: ${data.task.title}`);
+      return true;
+    }
+  }
+
   return false;
+}
+
+function printHumanError(error: { code: string; message: string; retryable: boolean; next_action?: NextAction }): void {
+  console.error(error.message);
+
+  if (!error.next_action) {
+    return;
+  }
+
+  if (error.next_action.type === 'command' && error.next_action.command) {
+    console.error(`Next: ${error.next_action.command}`);
+    return;
+  }
+
+  if (error.next_action.type === 'stop' && error.next_action.outcome && error.next_action.outcome !== error.message) {
+    console.error(`Next: ${error.next_action.outcome}`);
+  }
 }
 
 function hasError(result: CommandResult): result is CommandResult & {
@@ -293,13 +355,8 @@ export async function routeCommand(args: string[]) {
     if (!result.ok && result.error) {
       result.error.next_action = inferErrorNextAction(command, result.error);
     }
-    if (
-      hasError(result) &&
-      !options.json &&
-      !options.quiet &&
-      result.error.code === "INVALID_TASK_COMMAND"
-    ) {
-      console.error(result.error.message);
+    if (hasError(result) && !options.json && !options.quiet) {
+      printHumanError(result.error);
     } else if (
       result.ok &&
       !options.json &&
@@ -321,20 +378,29 @@ export async function routeCommand(args: string[]) {
       process.exitCode = 1;
     }
   } else {
-    console.error(
-      JSON.stringify(
-        {
-          ok: false,
-          error: {
-            code: "UNKNOWN_COMMAND",
-            message: `Unknown command: ${command}`,
-            retryable: false,
-          },
-        },
-        null,
-        2,
+    const unknownCommandError = {
+      code: "UNKNOWN_COMMAND",
+      message: `Unknown command: ${command}`,
+      retryable: false,
+      next_action: stopNextAction(
+        `Top-level command "${command}" does not exist. Choose a supported top-level command intentionally.`,
+        'Unknown top-level commands should terminate instead of sending the agent into menu exploration.',
       ),
-    );
+    };
+    if (!options.json && !options.quiet) {
+      printHumanError(unknownCommandError);
+    } else {
+      console.error(
+        JSON.stringify(
+          {
+            ok: false,
+            error: unknownCommandError,
+          },
+          null,
+          2,
+        ),
+      );
+    }
     process.exitCode = 1;
   }
 }
