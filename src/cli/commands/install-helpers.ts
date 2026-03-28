@@ -617,11 +617,12 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       {
         name: 'windsurf',
         path: path.join(baseDir, '.windsurf'),
-        install_path: path.join(baseDir, '.windsurf', 'rules'),
+        install_path: path.join(baseDir, '.windsurf', 'workflows'),
         install_kind: 'windsurf_rules',
         bootstrap_strength: 'rule_bootstrap',
         cleanup_paths: [
           path.join(baseDir, '.windsurf', 'skills'),
+          path.join(baseDir, '.windsurf', 'rules'),
           path.join(baseDir, '.windsurfrules'),
         ],
       },

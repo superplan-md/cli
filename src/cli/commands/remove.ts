@@ -182,10 +182,11 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
       {
         name: 'windsurf',
         path: path.join(baseDir, '.windsurf'),
-        install_path: path.join(baseDir, '.windsurf', 'rules'),
+        install_path: path.join(baseDir, '.windsurf', 'workflows'),
         install_kind: 'windsurf_rules',
         cleanup_paths: [
           path.join(baseDir, '.windsurf', 'skills'),
+          path.join(baseDir, '.windsurf', 'rules'),
           path.join(baseDir, '.windsurfrules'),
         ],
       },
@@ -236,10 +237,11 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
     {
       name: 'windsurf',
       path: path.join(baseDir, '.windsurf'),
-      install_path: path.join(baseDir, '.windsurf', 'rules'),
+      install_path: path.join(baseDir, '.windsurf', 'workflows'),
       install_kind: 'windsurf_rules',
       cleanup_paths: [
         path.join(baseDir, '.windsurf', 'skills'),
+        path.join(baseDir, '.windsurf', 'rules'),
         path.join(baseDir, '.windsurfrules'),
       ],
     },
