@@ -14,11 +14,12 @@ import {
   type OverlaySnapshot,
   type OverlayTaskStatus,
   type OverlayTaskSummary,
+  type OverlayTrackedChange,
 } from '../shared/overlay';
 import { loadChangeGraph } from './graph';
 import { getTaskRef, toQualifiedTaskId } from './task-identity';
 import { formatTitleFromSlug } from './commands/scaffold';
-import { resolveWorkspaceRoot } from './workspace-root';
+import { resolveSuperplanRoot, resolveWorkspaceRoot } from './workspace-root';
 
 type TaskPriority = 'high' | 'medium' | 'low';
 
@@ -39,7 +40,7 @@ export interface OverlayTaskSource {
   message?: string;
 }
 
-interface OverlayTrackedChange {
+interface OverlayTrackedChangeSource {
   change_id: string;
   title: string;
   status: OverlayChangeStatus;
@@ -149,6 +150,8 @@ function toOverlayTaskSummary(task: OverlayTaskSource): OverlayTaskSummary {
   const description = getTaskDescription(task);
   return {
     task_id: task.task_id,
+    ...(task.change_id ? { change_id: task.change_id } : {}),
+    ...(task.task_ref ? { task_ref: task.task_ref } : {}),
     title: getTaskTitle(task),
     ...(description ? { description } : {}),
     status: getOverlayTaskStatus(task.status),
@@ -169,7 +172,7 @@ function toOverlayTaskSummary(task: OverlayTaskSource): OverlayTaskSummary {
   };
 }
 
-function getAttentionState(tasks: OverlayTaskSource[], trackedChanges: OverlayTrackedChange[]): OverlayAttentionState {
+function getAttentionState(tasks: OverlayTaskSource[], trackedChanges: OverlayTrackedChangeSource[]): OverlayAttentionState {
   if (tasks.some(task => task.status === 'needs_feedback')) {
     return 'needs_feedback';
   }
@@ -274,38 +277,46 @@ async function getTrackedChangeUpdatedAt(options: {
 async function collectTrackedChanges(
   workspacePath: string,
   tasks: OverlayTaskSource[],
-): Promise<OverlayTrackedChange[]> {
-  const changesRoot = path.join(workspacePath, '.superplan', 'changes');
-  let changeEntries: Array<{ isDirectory(): boolean; name: string }> = [];
+): Promise<OverlayTrackedChangeSource[]> {
+  const changesRoots = [
+    path.join(resolveSuperplanRoot(), 'changes'),
+    path.join(workspacePath, '.superplan', 'changes'),
+  ];
+  const changeDirs = new Map<string, string>();
 
-  try {
-    changeEntries = await fs.readdir(changesRoot, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-
-  const taskMap = new Map(tasks.map(task => [getTaskRef(task), task]));
-  const trackedChanges: OverlayTrackedChange[] = [];
-
-  for (const entry of changeEntries) {
-    if (!entry.isDirectory()) {
+  for (const changesRoot of changesRoots) {
+    let changeEntries: Array<{ isDirectory(): boolean; name: string }> = [];
+    try {
+      changeEntries = await fs.readdir(changesRoot, { withFileTypes: true });
+    } catch {
       continue;
     }
 
-    const changeDir = path.join(changesRoot, entry.name);
+    for (const entry of changeEntries) {
+      if (!entry.isDirectory() || changeDirs.has(entry.name)) {
+        continue;
+      }
+      changeDirs.set(entry.name, path.join(changesRoot, entry.name));
+    }
+  }
+
+  const taskMap = new Map(tasks.map(task => [getTaskRef(task), task]));
+  const trackedChanges: OverlayTrackedChangeSource[] = [];
+
+  for (const [changeId, changeDir] of changeDirs.entries()) {
     const [graphResult, taskIds] = await Promise.all([
       loadChangeGraph(changeDir),
       getTrackedChangeTaskIds(changeDir),
     ]);
     const matchedTasks = taskIds
-      .map(taskId => taskMap.get(toQualifiedTaskId(entry.name, taskId)))
+      .map(taskId => taskMap.get(toQualifiedTaskId(changeId, taskId)))
       .filter((task): task is OverlayTaskSource => task !== undefined);
     const taskTotal = taskIds.length;
     const taskDone = matchedTasks.filter(task => task.status === 'done').length;
-    const title = graphResult.graph?.title?.trim() || formatTitleFromSlug(entry.name);
+    const title = graphResult.graph?.title?.trim() || formatTitleFromSlug(changeId);
 
     trackedChanges.push({
-      change_id: entry.name,
+      change_id: changeId,
       title,
       status: getTrackedChangeStatus(taskTotal, matchedTasks),
       task_total: taskTotal,
@@ -336,11 +347,7 @@ async function collectTrackedChanges(
   return trackedChanges;
 }
 
-function toFocusedChange(change: OverlayTrackedChange | undefined): OverlayFocusedChange | null {
-  if (!change) {
-    return null;
-  }
-
+function toOverlayTrackedChange(change: OverlayTrackedChangeSource): OverlayTrackedChange {
   return {
     change_id: change.change_id,
     title: change.title,
@@ -349,6 +356,14 @@ function toFocusedChange(change: OverlayTrackedChange | undefined): OverlayFocus
     task_done: change.task_done,
     updated_at: change.updated_at,
   };
+}
+
+function toFocusedChange(change: OverlayTrackedChangeSource | undefined): OverlayFocusedChange | null {
+  if (!change) {
+    return null;
+  }
+
+  return toOverlayTrackedChange(change);
 }
 
 export async function refreshOverlaySnapshot(
@@ -377,6 +392,7 @@ export async function refreshOverlaySnapshot(
     workspace_path: workspacePath,
     session_id: `workspace:${workspacePath}`,
     updated_at: timestamp,
+    tracked_changes: trackedChanges.map(toOverlayTrackedChange),
     focused_change: focusedChange,
     active_task: board.in_progress[0] ?? null,
     board,

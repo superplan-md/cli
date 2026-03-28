@@ -127,6 +127,27 @@ async function waitForFile(targetPath, timeoutMs = 3000) {
   throw new Error(`Timed out waiting for ${targetPath}`);
 }
 
+function getOverlayRuntimePathsForSandbox(sandbox) {
+  const { getWorkspaceOverlayKey } = loadDistModule('shared/overlay.js');
+  const workspaceKey = getWorkspaceOverlayKey(sandbox.cwd);
+  const runtimeDir = path.join(sandbox.home, '.config', 'superplan', 'runtime', workspaceKey);
+  return {
+    runtime_dir: runtimeDir,
+    snapshot_path: path.join(runtimeDir, 'overlay.json'),
+    control_path: path.join(runtimeDir, 'overlay-control.json'),
+  };
+}
+
+function getGlobalRuntimePathsForSandbox(sandbox) {
+  const runtimeDir = path.join(sandbox.home, '.config', 'superplan', 'runtime');
+  return {
+    runtime_dir: runtimeDir,
+    tasks_path: path.join(runtimeDir, 'tasks.json'),
+    events_path: path.join(runtimeDir, 'events.ndjson'),
+    session_path: path.join(runtimeDir, 'session.json'),
+  };
+}
+
 function processExists(pid) {
   try {
     process.kill(pid, 0);
@@ -230,7 +251,7 @@ Show the current task description in the overlay
   assert.equal(ensurePayload.data.enabled, false);
   assert.equal(ensurePayload.data.reason, 'disabled');
 
-  const snapshot = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
+  const snapshot = await readJson(getOverlayRuntimePathsForSandbox(sandbox).snapshot_path);
   assert.equal(snapshot.workspace_path, realWorkspacePath);
   assert.equal(snapshot.active_task, null);
   assert.deepEqual(snapshot.board.in_progress, []);
@@ -246,7 +267,7 @@ Show the current task description in the overlay
   assert.equal(snapshot.attention_state, 'normal');
   assert.deepEqual(snapshot.events, []);
 
-  const control = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
+  const control = await readJson(getOverlayRuntimePathsForSandbox(sandbox).control_path);
   assert.deepEqual(control, {
     workspace_path: realWorkspacePath,
     requested_action: 'hide',
@@ -330,8 +351,8 @@ printf '%s\n' "$SUPERPLAN_OVERLAY_WORKSPACE" >> "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
   }));
   const realWorkspacePath = await fs.realpath(sandbox.cwd);
   const launchOutput = await waitForFile(overlayOutputPath);
-  const snapshot = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
-  const control = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
+  const snapshot = await readJson(getOverlayRuntimePathsForSandbox(sandbox).snapshot_path);
+  const control = await readJson(getOverlayRuntimePathsForSandbox(sandbox).control_path);
 
   assert.equal(createPayload.ok, true);
   assert.equal(createPayload.data.task_id, 'shape-spec/T-001');
@@ -394,8 +415,8 @@ printf '%s\n' "$SUPERPLAN_OVERLAY_WORKSPACE" >> "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
   }));
   const realWorkspacePath = await fs.realpath(sandbox.cwd);
   const launchOutput = await waitForFile(overlayOutputPath);
-  const snapshot = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
-  const control = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
+  const snapshot = await readJson(getOverlayRuntimePathsForSandbox(sandbox).snapshot_path);
+  const control = await readJson(getOverlayRuntimePathsForSandbox(sandbox).control_path);
 
   assert.equal(createPayload.ok, true);
   assert.equal(createPayload.data.change_id, 'shape-spec');
@@ -443,7 +464,7 @@ Ship prior work
 ## Acceptance Criteria
 - [x] Done
 `);
-  await writeJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'), {
+  await writeJson(getGlobalRuntimePathsForSandbox(sandbox).tasks_path, {
     tasks: {
       'T-001': {
         status: 'done',
@@ -473,8 +494,8 @@ Ship prior work
   }));
   const realWorkspacePath = await fs.realpath(sandbox.cwd);
   const launchOutput = await waitForFile(overlayOutputPath);
-  const snapshot = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
-  const control = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
+  const snapshot = await readJson(getOverlayRuntimePathsForSandbox(sandbox).snapshot_path);
+  const control = await readJson(getOverlayRuntimePathsForSandbox(sandbox).control_path);
 
   assert.equal(changePayload.ok, true);
   assert.equal(changePayload.data.change_id, 'next-change');
@@ -568,8 +589,8 @@ Run overlay task
   parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   const firstRunPayload = parseCliJson(await runCli(['run', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
 
-  const startedSnapshot = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
-  const startedControl = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
+  const startedSnapshot = await readJson(getOverlayRuntimePathsForSandbox(sandbox).snapshot_path);
+  const startedControl = await readJson(getOverlayRuntimePathsForSandbox(sandbox).control_path);
   assert.equal(startedSnapshot.active_task?.task_id, 'T-150');
   assert.equal(startedSnapshot.active_task?.status, 'in_progress');
   assert.equal(startedControl.requested_action, 'ensure');
@@ -580,13 +601,13 @@ Run overlay task
   assert.equal(firstRunPayload.data.overlay.companion.reason, 'not_installed');
 
   parseCliJson(await runCli(['overlay', 'hide', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
-  const hiddenControl = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
+  const hiddenControl = await readJson(getOverlayRuntimePathsForSandbox(sandbox).control_path);
   assert.equal(hiddenControl.requested_action, 'hide');
   assert.equal(hiddenControl.visible, false);
 
   const secondRunPayload = parseCliJson(await runCli(['run', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
 
-  const continuedControl = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
+  const continuedControl = await readJson(getOverlayRuntimePathsForSandbox(sandbox).control_path);
   assert.equal(continuedControl.requested_action, 'ensure');
   assert.equal(continuedControl.visible, true);
   assert.equal(secondRunPayload.data.overlay.requested_action, 'ensure');
@@ -880,7 +901,7 @@ Relaunch overlay when feedback is requested
 - [ ] A
 `);
 
-  await writeJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'), {
+  await writeJson(getGlobalRuntimePathsForSandbox(sandbox).tasks_path, {
     tasks: {
       'demo/T-011E': {
         status: 'in_progress',
@@ -924,7 +945,7 @@ Relaunch overlay when feedback is requested
   const [firstPid] = await waitForPidCount(pidLogPath, 1);
   assert.equal(processExists(firstPid), true);
 
-  const initialSnapshot = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
+  const initialSnapshot = await readJson(getOverlayRuntimePathsForSandbox(sandbox).snapshot_path);
   assert.equal(initialSnapshot.active_task?.task_id, 'T-011E');
   assert.equal(initialSnapshot.active_task?.status, 'in_progress');
 
@@ -961,11 +982,11 @@ Relaunch overlay when feedback is requested
   assert.notEqual(secondPid, firstPid);
   assert.equal(processExists(secondPid), true);
 
-  const control = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
+  const control = await readJson(getOverlayRuntimePathsForSandbox(sandbox).control_path);
   assert.equal(control.requested_action, 'ensure');
   assert.equal(control.visible, true);
 
-  const snapshot = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
+  const snapshot = await readJson(getOverlayRuntimePathsForSandbox(sandbox).snapshot_path);
   assert.equal(snapshot.active_task, null);
   assert.equal(snapshot.attention_state, 'needs_feedback');
   assert.equal(snapshot.board.needs_feedback[0].task_id, 'T-011E');
@@ -1050,7 +1071,7 @@ Terminate overlay companion when there is nothing left to show
   assert.equal(emptyEnsurePayload.data.has_content, true);
   assert.equal(emptyEnsurePayload.data.reason, undefined);
 
-  const snapshot = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
+  const snapshot = await readJson(getOverlayRuntimePathsForSandbox(sandbox).snapshot_path);
   assert.deepEqual(snapshot.focused_change, {
     change_id: 'demo',
     title: 'Demo',
@@ -1233,8 +1254,8 @@ Pickup overlay task
   parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   const startPayload = parseCliJson(await runCli(['run', 'T-250', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
 
-  const startedControl = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
-  const startedSnapshot = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
+  const startedControl = await readJson(getOverlayRuntimePathsForSandbox(sandbox).control_path);
+  const startedSnapshot = await readJson(getOverlayRuntimePathsForSandbox(sandbox).snapshot_path);
   assert.equal(startedControl.requested_action, 'ensure');
   assert.equal(startedControl.visible, true);
   assert.equal(startedSnapshot.active_task?.task_id, 'T-250');
@@ -1248,8 +1269,8 @@ Pickup overlay task
   parseCliJson(await runCli(['task', 'runtime', 'block', 'T-250', '--reason', 'Need to pause', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   const resumePayload = parseCliJson(await runCli(['run', 'T-250', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
 
-  const resumedControl = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
-  const resumedSnapshot = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
+  const resumedControl = await readJson(getOverlayRuntimePathsForSandbox(sandbox).control_path);
+  const resumedSnapshot = await readJson(getOverlayRuntimePathsForSandbox(sandbox).snapshot_path);
   assert.equal(resumedControl.requested_action, 'ensure');
   assert.equal(resumedControl.visible, true);
   assert.equal(resumedSnapshot.active_task?.task_id, 'T-250');
@@ -1286,7 +1307,7 @@ Track real checklist progress
   parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   parseCliJson(await runCli(['overlay', 'ensure', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
 
-  const snapshot = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
+  const snapshot = await readJson(getOverlayRuntimePathsForSandbox(sandbox).snapshot_path);
   assert.equal(snapshot.active_task.task_id, 'T-020');
   assert.equal(snapshot.active_task.completed_acceptance_criteria, 1);
   assert.equal(snapshot.active_task.total_acceptance_criteria, 3);
@@ -1325,7 +1346,7 @@ Refresh overlay after checklist edits
   parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   parseCliJson(await runCli(['overlay', 'ensure', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
 
-  let snapshot = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
+  let snapshot = await readJson(getOverlayRuntimePathsForSandbox(sandbox).snapshot_path);
   assert.equal(snapshot.active_task.completed_acceptance_criteria, 1);
   assert.equal(snapshot.active_task.total_acceptance_criteria, 2);
 
@@ -1345,7 +1366,7 @@ Refresh overlay after checklist edits
 
   parseCliJson(await runCli(['sync', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
 
-  snapshot = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
+  snapshot = await readJson(getOverlayRuntimePathsForSandbox(sandbox).snapshot_path);
   assert.equal(snapshot.active_task, null);
   assert.equal(snapshot.attention_state, 'all_tasks_done');
   assert.deepEqual(snapshot.board.done, [{
@@ -1380,7 +1401,7 @@ Needs review
   parseCliJson(await runCli(['run', 'T-200', '--json'], { cwd: feedbackSandbox.cwd, env: feedbackSandbox.env }));
   parseCliJson(await runCli(['task', 'runtime', 'request-feedback', 'T-200', '--message', 'Please review', '--json'], { cwd: feedbackSandbox.cwd, env: feedbackSandbox.env }));
 
-  const feedbackSnapshot = await readJson(path.join(feedbackSandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
+  const feedbackSnapshot = await readJson(getOverlayRuntimePathsForSandbox(feedbackSandbox).snapshot_path);
   assert.equal(feedbackSnapshot.active_task, null);
   assert.equal(feedbackSnapshot.attention_state, 'needs_feedback');
   assert.deepEqual(feedbackSnapshot.board.needs_feedback, [{
@@ -1417,7 +1438,7 @@ Finish me
 - [x] A
 `);
 
-  await writeJson(path.join(doneSandbox.cwd, '.superplan', 'runtime', 'tasks.json'), {
+  await writeJson(getGlobalRuntimePathsForSandbox(doneSandbox).tasks_path, {
     tasks: {
       'demo/T-300': {
         status: 'in_progress',
@@ -1430,7 +1451,7 @@ Finish me
   const reviewPayload = parseCliJson(await runCli(['task', 'review', 'complete', 'demo/T-300', '--json'], { cwd: doneSandbox.cwd, env: doneSandbox.env }));
   assert.equal(reviewPayload.data.status, 'done');
 
-  const doneSnapshot = await readJson(path.join(doneSandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
+  const doneSnapshot = await readJson(getOverlayRuntimePathsForSandbox(doneSandbox).snapshot_path);
   assert.equal(doneSnapshot.attention_state, 'all_tasks_done');
   assert.deepEqual(doneSnapshot.board.done, [{
     task_id: 'T-300',

@@ -17,3 +17,8 @@ changes
 .cursor
 .opencode
 .github
+
+# Superplan - AI agent configurations
+.agents/
+.amazonq/
+AGENTS.md

@@ -178,7 +178,8 @@ async function verifyGlobalSetup(paths: {
   }
 
   for (const agent of paths.homeAgents) {
-    if (agent.install_path && !await pathExists(agent.install_path)) {
+    // Only verify agents that were actually detected and selected for installation
+    if (agent.detected && agent.install_path && !await pathExists(agent.install_path)) {
       issues.push(`Global ${agent.name} integration was not installed correctly.`);
     }
   }

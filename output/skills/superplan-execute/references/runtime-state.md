@@ -74,7 +74,7 @@ These can still be skill outputs and handoff states even when the CLI does not s
 ## Useful CLI Reads
 
 - `superplan status --json`
-- `superplan task inspect show <task_id> --json`
+- `superplan task inspect show <task_ref> --json`
 
 ## Runtime Summary Today
 

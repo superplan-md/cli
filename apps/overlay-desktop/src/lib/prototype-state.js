@@ -60,11 +60,16 @@ function getPrimaryTask(snapshot) {
 }
 
 function getFocusedChange(snapshot) {
-  if (!snapshot.focused_change || snapshot.focused_change.status === 'done') {
+  const change = snapshot.focused_change
+    ?? snapshot.tracked_changes?.find(candidate => candidate.status !== 'done')
+    ?? snapshot.tracked_changes?.[0]
+    ?? null;
+
+  if (!change || change.status === 'done') {
     return null;
   }
 
-  return snapshot.focused_change;
+  return change;
 }
 
 function createColumnCounts(board) {

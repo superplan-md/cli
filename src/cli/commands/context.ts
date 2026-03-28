@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { resolveWorkspaceRoot } from '../workspace-root';
-import { ensureWorkspaceArtifacts, getWorkspaceArtifactPaths } from '../workspace-artifacts';
+import * as os from 'os';
+import { ensureGlobalWorkspaceArtifacts, getGlobalSuperplanPaths } from '../global-superplan';
 import { commandNextAction, type NextAction } from '../next-action';
 
 export type ContextResult =
@@ -221,17 +221,18 @@ function invalidContextCommand(subcommand?: string): ContextResult {
   };
 }
 
-function getMissingContextArtifacts(superplanRoot: string): string[] {
-  const paths = getWorkspaceArtifactPaths(superplanRoot);
+function getMissingContextArtifacts(): string[] {
+  const paths = getGlobalSuperplanPaths();
   return [
-    paths.contextReadmePath,
-    paths.contextIndexPath,
+    paths.contextDir,
+    path.join(paths.contextDir, 'README.md'),
+    path.join(paths.contextDir, 'INDEX.md'),
     paths.decisionsPath,
     paths.gotchasPath,
   ];
 }
 
-async function writeContextDoc(args: string[], docSlug: string, superplanRoot: string, cwd: string): Promise<ContextResult> {
+async function writeContextDoc(args: string[], docSlug: string, cwd: string): Promise<ContextResult> {
   const normalizedDocSlug = normalizeDocSlug(docSlug);
   if (!normalizedDocSlug) {
     return {
@@ -249,8 +250,8 @@ async function writeContextDoc(args: string[], docSlug: string, superplanRoot: s
     return contentResult.error;
   }
 
-  const paths = getWorkspaceArtifactPaths(superplanRoot);
-  await ensureWorkspaceArtifacts(superplanRoot);
+  const paths = getGlobalSuperplanPaths();
+  await ensureGlobalWorkspaceArtifacts();
   const docPath = path.join(paths.contextDir, `${normalizedDocSlug}.md`);
   await fs.mkdir(path.dirname(docPath), { recursive: true });
   await fs.writeFile(docPath, `${contentResult.content!.trimEnd()}\n`, 'utf-8');
@@ -260,8 +261,8 @@ async function writeContextDoc(args: string[], docSlug: string, superplanRoot: s
     ok: true,
     data: {
       action: 'bootstrap',
-      root: toRelative(cwd, superplanRoot),
-      created: [toRelative(cwd, docPath)],
+      root: paths.superplanRoot,
+      created: [docPath],
       next_action: commandNextAction(
         'superplan status --json',
         'The context document is now written through the CLI; continue from the tracked frontier.',
@@ -270,7 +271,7 @@ async function writeContextDoc(args: string[], docSlug: string, superplanRoot: s
   };
 }
 
-async function appendContextLog(args: string[], superplanRoot: string, cwd: string): Promise<ContextResult> {
+async function appendContextLog(args: string[], cwd: string): Promise<ContextResult> {
   const kind = getOptionValue(args, '--kind');
   if (kind !== 'decision' && kind !== 'gotcha') {
     return {
@@ -288,8 +289,8 @@ async function appendContextLog(args: string[], superplanRoot: string, cwd: stri
     return contentResult.error;
   }
 
-  const paths = getWorkspaceArtifactPaths(superplanRoot);
-  await ensureWorkspaceArtifacts(superplanRoot);
+  const paths = getGlobalSuperplanPaths();
+  await ensureGlobalWorkspaceArtifacts();
   const logPath = kind === 'decision' ? paths.decisionsPath : paths.gotchasPath;
   const normalizedEntry = contentResult.content!
     .split(/\r?\n/)
@@ -304,8 +305,8 @@ async function appendContextLog(args: string[], superplanRoot: string, cwd: stri
     ok: true,
     data: {
       action: 'bootstrap',
-      root: toRelative(cwd, superplanRoot),
-      created: [toRelative(cwd, logPath)],
+      root: paths.superplanRoot,
+      created: [logPath],
       next_action: commandNextAction(
         'superplan status --json',
         'The workspace log entry is now written through the CLI; continue from the tracked frontier.',
@@ -319,8 +320,7 @@ export async function context(args: string[] = []): Promise<ContextResult> {
   const subcommand = positionalArgs[0];
   const action = positionalArgs[1];
   const subject = positionalArgs[2];
-  const workspaceRoot = resolveWorkspaceRoot(process.cwd());
-  const superplanRoot = path.join(workspaceRoot, '.superplan');
+  const paths = getGlobalSuperplanPaths();
   const cwd = process.cwd();
 
   if (subcommand === 'doc' && action === 'set') {
@@ -328,28 +328,27 @@ export async function context(args: string[] = []): Promise<ContextResult> {
       return invalidContextCommand('doc set');
     }
 
-    return await writeContextDoc(args, subject, superplanRoot, cwd);
+    return await writeContextDoc(args, subject, cwd);
   }
 
   if (subcommand === 'log' && action === 'add') {
-    return await appendContextLog(args, superplanRoot, cwd);
+    return await appendContextLog(args, cwd);
   }
 
   if (subcommand !== 'bootstrap' && subcommand !== 'status') {
     return invalidContextCommand(subcommand);
   }
 
-  const artifactPaths = getWorkspaceArtifactPaths(superplanRoot);
-  const requiredPaths = getMissingContextArtifacts(superplanRoot);
+  const requiredPaths = getMissingContextArtifacts();
 
   if (subcommand === 'bootstrap') {
-    const createdPaths = await ensureWorkspaceArtifacts(superplanRoot);
+    const createdPaths = await ensureGlobalWorkspaceArtifacts();
     return {
       ok: true,
       data: {
         action: 'bootstrap',
-        root: toRelative(cwd, superplanRoot),
-        created: createdPaths.map(createdPath => toRelative(cwd, createdPath)),
+        root: paths.superplanRoot,
+        created: createdPaths,
         next_action: commandNextAction(
           'superplan change new <change-slug> --json',
           'Durable workspace context now exists, so the next control-plane step is creating tracked work.',
@@ -363,7 +362,7 @@ export async function context(args: string[] = []): Promise<ContextResult> {
     try {
       await fs.access(targetPath);
     } catch {
-      missing.push(toRelative(cwd, targetPath));
+      missing.push(targetPath);
     }
   }
 
@@ -371,7 +370,7 @@ export async function context(args: string[] = []): Promise<ContextResult> {
     ok: true,
     data: {
       action: 'status',
-      root: toRelative(cwd, artifactPaths.superplanRoot),
+      root: paths.superplanRoot,
       missing,
       next_action: missing.length > 0
         ? commandNextAction(

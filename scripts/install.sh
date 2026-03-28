@@ -631,7 +631,7 @@ if [ ! -x "$INSTALL_BIN_DIR/superplan" ]; then
   fail "superplan binary was not installed to $INSTALL_BIN_DIR"
 fi
 
-run_machine_setup || true
+# Defer machine setup prompt to the end after all installation messages
 
 INSTALL_STATE_DIR="${HOME}/.config/superplan"
 INSTALL_STATE_PATH="$INSTALL_STATE_DIR/install.json"
@@ -736,3 +736,7 @@ else
   say "Please cd into your favorite repo and run: superplan init"
 fi
 say "Run: superplan --version"
+say ""
+
+# Ask about running superplan init at the very end
+run_machine_setup || true

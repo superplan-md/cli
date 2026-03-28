@@ -31,6 +31,8 @@ import {
 
 type OverlayTask = {
   task_id: string;
+  change_id?: string;
+  task_ref?: string;
   title: string;
   description?: string;
   status: string;
@@ -57,6 +59,7 @@ type OverlaySnapshot = {
   workspace_path: string;
   session_id: string;
   updated_at: string;
+  tracked_changes: OverlayChange[];
   focused_change: OverlayChange | null;
   active_task: OverlayTask | null;
   board: {
@@ -108,9 +111,10 @@ const RESIZE_DIRECTIONS = new Set<ResizeDirection>([
 
 let mode: PrototypeMode = 'compact';
 let latestSnapshot: OverlaySnapshot | null = null;
-let latestControlState: OverlayControlState | null = null;
+let latestSnapshots: OverlaySnapshot[] = [];
+let latestControlStates: OverlayControlState[] = [];
 let lastSnapshotText = '';
-let lastControlText: string | null = null;
+let lastControlText = '';
 let lastAppliedVisibility: boolean | null = null;
 let pollTimer: number | undefined;
 let liveTimeTimer: number | undefined;
@@ -154,6 +158,77 @@ function getAppWindow() {
   }
 
   return getCurrentWindow();
+}
+
+function getWorkspaceName(workspacePath: string): string {
+  const segments = workspacePath.split('/').filter(Boolean);
+  return segments.length === 0 ? workspacePath : segments[segments.length - 1];
+}
+
+function getSnapshotTrackedChanges(snapshot: OverlaySnapshot | null | undefined): OverlayChange[] {
+  return Array.isArray(snapshot?.tracked_changes) ? snapshot.tracked_changes : [];
+}
+
+function getSnapshotSelectionKey(snapshot: OverlaySnapshot | null | undefined): string {
+  if (!snapshot) {
+    return '';
+  }
+
+  return `${snapshot.session_id}|${snapshot.workspace_path}|${snapshot.updated_at}`;
+}
+
+function compareSnapshots(left: OverlaySnapshot, right: OverlaySnapshot): number {
+  const attentionRank = (snapshot: OverlaySnapshot): number => {
+    if (snapshot.attention_state === 'needs_feedback') {
+      return 0;
+    }
+
+    if (snapshot.active_task) {
+      return 1;
+    }
+
+    if (getSnapshotTrackedChanges(snapshot).some(change => change.status !== 'done')) {
+      return 2;
+    }
+
+    if (snapshot.attention_state === 'all_tasks_done') {
+      return 4;
+    }
+
+    return 3;
+  };
+
+  const rankDifference = attentionRank(left) - attentionRank(right);
+  if (rankDifference !== 0) {
+    return rankDifference;
+  }
+
+  const timestampDifference = Date.parse(right.updated_at) - Date.parse(left.updated_at);
+  if (timestampDifference !== 0) {
+    return timestampDifference;
+  }
+
+  return left.workspace_path.localeCompare(right.workspace_path);
+}
+
+function getVisibleWorkspacePaths(): Set<string> {
+  return new Set(
+    latestControlStates
+      .filter(control => control.visible)
+      .map(control => control.workspace_path),
+  );
+}
+
+function getRenderableSnapshots(): OverlaySnapshot[] {
+  const visibleWorkspacePaths = getVisibleWorkspacePaths();
+  return latestSnapshots
+    .filter(snapshot => visibleWorkspacePaths.has(snapshot.workspace_path))
+    .filter(snapshot => hasRenderableSnapshotContent(snapshot))
+    .sort(compareSnapshots);
+}
+
+function getPrimarySnapshot(): OverlaySnapshot | null {
+  return getRenderableSnapshots()[0] ?? latestSnapshots.slice().sort(compareSnapshots)[0] ?? null;
 }
 
 function readStoredOverlayPosition(): { x: number; y: number } | null {
@@ -481,138 +556,6 @@ function refreshLiveTimeLabels(): void {
   });
 }
 
-function boardStatMarkup(label: string, value: string, tone: 'neutral' | 'live' | 'done' | 'warning' = 'neutral'): string {
-  return `
-    <div class="board-stat board-stat--${tone}">
-      <span class="board-stat__label">${escapeHtml(label)}</span>
-      <strong class="board-stat__value">${escapeHtml(value)}</strong>
-    </div>
-  `;
-}
-
-function boardStatLiveMarkup(
-  label: string,
-  kind: 'elapsed' | 'relative',
-  timestamp: string,
-  prefix: string,
-  tone: 'neutral' | 'live' | 'done' | 'warning' = 'neutral',
-): string {
-  return `
-    <div class="board-stat board-stat--${tone}">
-      <span class="board-stat__label">${escapeHtml(label)}</span>
-      <strong class="board-stat__value">
-        ${liveLabelMarkup(kind, timestamp, prefix)}
-      </strong>
-    </div>
-  `;
-}
-
-function shouldShowBoardHero(snapshot: OverlaySnapshot, viewModel: PrototypeViewModel): boolean {
-  const totalTracked = viewModel.columnCounts.in_progress
-    + viewModel.columnCounts.backlog
-    + viewModel.columnCounts.done
-    + viewModel.columnCounts.blocked
-    + viewModel.columnCounts.needs_feedback;
-
-  return !snapshot.active_task && (viewModel.attentionState === 'all_tasks_done' || totalTracked === 0);
-}
-
-function boardHeroStatMarkup(label: string, value: string, note: string, tone: 'warm' | 'cool' | 'mint'): string {
-  return `
-    <article class="landing-stat landing-stat--${tone}">
-      <span class="landing-stat__label">${escapeHtml(label)}</span>
-      <strong class="landing-stat__value">${escapeHtml(value)}</strong>
-      <p class="landing-stat__note">${escapeHtml(note)}</p>
-    </article>
-  `;
-}
-
-function boardHeroFeatureMarkup(
-  eyebrow: string,
-  title: string,
-  description: string,
-  tone: 'sunrise' | 'lagoon' | 'sand',
-): string {
-  return `
-    <article class="landing-feature landing-feature--${tone}">
-      <p class="landing-feature__eyebrow">${escapeHtml(eyebrow)}</p>
-      <h3>${escapeHtml(title)}</h3>
-      <p>${escapeHtml(description)}</p>
-    </article>
-  `;
-}
-
-function boardHeroMarkup(snapshot: OverlaySnapshot, viewModel: PrototypeViewModel): string {
-  const totalTracked = viewModel.columnCounts.in_progress
-    + viewModel.columnCounts.backlog
-    + viewModel.columnCounts.done
-    + viewModel.columnCounts.blocked
-    + viewModel.columnCounts.needs_feedback;
-  const doneCount = viewModel.columnCounts.done;
-  const completionRate = totalTracked > 0
-    ? `${Math.round((doneCount / totalTracked) * 100)}%`
-    : '100%';
-  const heroTitle = viewModel.focusedChange
-    ? viewModel.focusedChange.title
-    : 'One warm control deck for shipping work';
-  const heroCopy = snapshot.attention_state === 'all_tasks_done'
-    ? 'Everything tracked here has landed cleanly. The board stays visible so the next change can start from proof, not guesswork.'
-    : 'Keep planning, execution, and proof in one polished surface. The overlay should feel less like an empty dashboard and more like a confident launch deck.';
-
-  const partnerRail = [
-    'Task Graphs',
-    'Runtime Signals',
-    'Review Ready',
-    'Workspace Proof',
-  ].map(label => `<span class="landing-rail__pill">${escapeHtml(label)}</span>`).join('');
-
-  return `
-    <section class="landing-hero">
-      <div class="landing-hero__copy">
-        <p class="landing-hero__eyebrow">One stop visibility for agent work</p>
-        <h2>${escapeHtml(heroTitle)}</h2>
-        <p class="landing-hero__lede">${escapeHtml(heroCopy)}</p>
-        <div class="landing-hero__chips">
-          <span class="landing-chip landing-chip--strong">${escapeHtml(getExpandedSurfaceLabel(snapshot, viewModel))}</span>
-          <span class="landing-chip">${escapeHtml(viewModel.updatedLabel)}</span>
-          <span class="landing-chip">${escapeHtml(viewModel.workspaceLabel)}</span>
-        </div>
-      </div>
-      <div class="landing-hero__stats">
-        ${boardHeroStatMarkup('Completion', completionRate, 'Tracked work wrapped with visible proof.', 'warm')}
-        ${boardHeroStatMarkup('Queued', String(viewModel.columnCounts.backlog), 'Tasks waiting for the next run loop.', 'cool')}
-        ${boardHeroStatMarkup('Support', viewModel.columnCounts.needs_feedback > 0 ? 'Needed' : 'Calm', 'Surface blockers and handoffs early.', 'mint')}
-      </div>
-    </section>
-
-    <section class="landing-features" aria-label="Overlay highlights">
-      ${boardHeroFeatureMarkup(
-        'Command-ready',
-        'Clear starting points',
-        'Keep the next move obvious with live state, task focus, and update timing in one glance.',
-        'sunrise',
-      )}
-      ${boardHeroFeatureMarkup(
-        'Travel-light',
-        'A calmer board language',
-        'Use warmer gradients, spotlight cards, and trust cues so the board feels intentional even when idle.',
-        'lagoon',
-      )}
-      ${boardHeroFeatureMarkup(
-        'Proof-first',
-        'Visible completion',
-        'Finished work stays readable, reviewable, and ready to hand off without digging through runtime files.',
-        'sand',
-      )}
-    </section>
-
-    <div class="landing-rail" aria-label="Overlay capabilities">
-      <span class="landing-rail__label">Built around</span>
-      <div class="landing-rail__items">${partnerRail}</div>
-    </div>
-  `;
-}
-
 function getTaskNote(task: OverlayTask): string | null {
   if (task.status === 'needs_feedback') {
     return task.message ?? task.description ?? null;
@@ -707,24 +650,159 @@ function taskMetaMarkup(task: OverlayTask): string {
   `;
 }
 
-function getEmptyColumnLabel(columnKey: PrototypeViewModel['visibleColumns'][number]['key']): string {
-  if (columnKey === 'in_progress') {
-    return 'No live task';
+function changeStatusLabel(status: OverlayChange['status']): string {
+  if (status === 'in_progress') {
+    return 'In progress';
   }
 
-  if (columnKey === 'backlog') {
-    return 'Nothing queued';
+  if (status === 'needs_feedback') {
+    return 'Needs feedback';
   }
 
-  if (columnKey === 'done') {
-    return 'Nothing shipped yet';
+  if (status === 'blocked') {
+    return 'Blocked';
   }
 
-  if (columnKey === 'blocked') {
-    return 'Nothing blocked';
+  if (status === 'done') {
+    return 'Done';
   }
 
-  return 'No handoff waiting';
+  if (status === 'tracking') {
+    return 'Tracking';
+  }
+
+  return 'Queued';
+}
+
+function getSnapshotTasksForChange(snapshot: OverlaySnapshot, changeId: string): OverlayTask[] {
+  return [
+    ...snapshot.board.needs_feedback,
+    ...snapshot.board.in_progress,
+    ...snapshot.board.backlog,
+    ...snapshot.board.blocked,
+    ...snapshot.board.done,
+  ].filter(task => task.change_id === changeId);
+}
+
+function taskGroupLabel(status: OverlayTask['status']): string {
+  if (status === 'needs_feedback') {
+    return 'Needs you';
+  }
+
+  if (status === 'in_progress') {
+    return 'In progress';
+  }
+
+  if (status === 'blocked') {
+    return 'Blocked';
+  }
+
+  if (status === 'done') {
+    return 'Done';
+  }
+
+  return 'Backlog';
+}
+
+function changeTaskGroupMarkup(status: OverlayTask['status'], tasks: OverlayTask[]): string {
+  if (tasks.length === 0) {
+    return '';
+  }
+
+  return `
+    <section class="change-card__task-group">
+      <div class="change-card__task-group-header">
+        <span>${escapeHtml(taskGroupLabel(status))}</span>
+        <span>${escapeHtml(String(tasks.length))}</span>
+      </div>
+      <div class="change-card__task-list">
+        ${tasks.map(task => `
+          <article class="task-card task-card--${task.status}">
+            <div class="task-card__topline">
+              <p class="task-card__eyebrow">${taskLeadMarkup(task)}</p>
+            </div>
+            <strong>${escapeHtml(task.title)}</strong>
+            ${getTaskNote(task) ? `<p class="task-card__note">${escapeHtml(getTaskNote(task)!)}</p>` : ''}
+            ${taskMetaMarkup(task)}
+          </article>
+        `).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function changeCardMarkup(snapshot: OverlaySnapshot, change: OverlayChange): string {
+  const tasks = getSnapshotTasksForChange(snapshot, change.change_id);
+  const workspaceName = getWorkspaceName(snapshot.workspace_path);
+  const remainingTasks = Math.max(0, change.task_total - change.task_done);
+
+  const groupedMarkup = ([
+    'needs_feedback',
+    'in_progress',
+    'backlog',
+    'blocked',
+    'done',
+  ] as OverlayTask['status'][]).map(status => (
+    changeTaskGroupMarkup(status, tasks.filter(task => task.status === status))
+  )).join('');
+
+  return `
+    <article class="change-card change-card--${change.status}">
+      <header class="change-card__header">
+        <div class="change-card__title-block">
+          <div class="change-card__eyebrow-row">
+            <span class="change-card__workspace">${escapeHtml(workspaceName)}</span>
+            <span class="change-card__status">${escapeHtml(changeStatusLabel(change.status))}</span>
+          </div>
+          <h3>${escapeHtml(change.title)}</h3>
+          <p class="change-card__meta">${escapeHtml(snapshot.workspace_path)}</p>
+        </div>
+        <div class="change-card__counts">
+          <span class="change-card__count">${escapeHtml(`${change.task_done}/${change.task_total}`)}</span>
+          <span class="change-card__count-label">${escapeHtml(remainingTasks === 0 ? 'Complete' : `${remainingTasks} left`)}</span>
+        </div>
+      </header>
+      <div class="change-card__chips">
+        <span class="change-card__chip">${escapeHtml(change.change_id)}</span>
+        <span class="change-card__chip">${escapeHtml(`Updated ${new Date(change.updated_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`)}</span>
+      </div>
+      <div class="change-card__body">
+        ${groupedMarkup || '<p class="change-card__empty">No tasks yet for this change.</p>'}
+      </div>
+    </article>
+  `;
+}
+
+function expandedCardGridMarkup(): string {
+  const snapshots = getRenderableSnapshots();
+  const cards = snapshots.flatMap(snapshot => (
+    getSnapshotTrackedChanges(snapshot).map(change => changeCardMarkup(snapshot, change))
+  ));
+
+  if (snapshots.length === 0 || cards.length === 0) {
+    return `
+      <section class="change-card-grid change-card-grid--empty">
+        <article class="change-card change-card--empty">
+          <header class="change-card__header">
+            <div class="change-card__title-block">
+              <div class="change-card__eyebrow-row">
+                <span class="change-card__workspace">Overlay</span>
+                <span class="change-card__status">Idle</span>
+              </div>
+              <h3>No tracked changes yet</h3>
+              <p class="change-card__meta">Start a change in any Superplan workspace to populate this board.</p>
+            </div>
+          </header>
+        </article>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="change-card-grid">
+      ${cards.join('')}
+    </section>
+  `;
 }
 
 function getCompactTaskProgress(snapshot: OverlaySnapshot): { done: number; total: number; ratio: number } {
@@ -1273,22 +1351,27 @@ async function setCompactWorkingExpanded(expanded: boolean): Promise<void> {
 }
 
 async function hideOverlayFromUi(): Promise<void> {
-  try {
-    await invoke('persist_overlay_requested_action', {
-      requestedAction: 'hide',
-      updatedAt: new Date().toISOString(),
-      visible: false,
-    });
-  } catch (error) {
-    console.error('persist_overlay_requested_action failed', error);
+  const updatedAt = new Date().toISOString();
+
+  for (const workspacePath of getVisibleWorkspacePaths()) {
+    try {
+      await invoke('persist_overlay_requested_action', {
+        requestedAction: 'hide',
+        updatedAt,
+        visible: false,
+        workspacePath,
+      });
+    } catch (error) {
+      console.error('persist_overlay_requested_action failed', error);
+    }
   }
 
-  latestControlState = {
-    workspace_path: latestSnapshot?.workspace_path ?? '',
+  latestControlStates = latestControlStates.map(control => ({
+    ...control,
     requested_action: 'hide',
-    updated_at: new Date().toISOString(),
+    updated_at: updatedAt,
     visible: false,
-  };
+  }));
   lastAppliedVisibility = false;
   await terminateOverlayApplication();
 }
@@ -1342,113 +1425,6 @@ function bindExpandedWindowDragSurface(surface: HTMLElement): void {
   });
 }
 
-function activeStripMarkup(snapshot: OverlaySnapshot, viewModel: PrototypeViewModel): string {
-  const activeTask = snapshot.active_task;
-  const stripTask = activeTask ?? viewModel.primaryTask;
-  const stripTone = activeTask?.status
-    ?? (viewModel.attentionState === 'needs_feedback'
-      ? 'needs_feedback'
-      : viewModel.attentionState === 'all_tasks_done'
-        ? 'done'
-        : 'backlog');
-
-  const boardStats = [
-    activeTask?.started_at
-      ? boardStatLiveMarkup('Live', 'elapsed', activeTask.started_at, '', 'live')
-      : '',
-    viewModel.columnCounts.backlog > 0
-      ? boardStatMarkup('Queued', String(viewModel.columnCounts.backlog), 'neutral')
-      : '',
-    viewModel.columnCounts.done > 0
-      ? boardStatMarkup('Done', String(viewModel.columnCounts.done), 'done')
-      : '',
-    viewModel.columnCounts.blocked > 0
-      ? boardStatMarkup('Blocked', String(viewModel.columnCounts.blocked), 'warning')
-      : '',
-  ].filter(Boolean).join('');
-
-  if (!stripTask) {
-    const idleTitle = snapshot.attention_state === 'all_tasks_done'
-      ? 'Everything wrapped and ready for the next trip'
-      : 'No active task, but the board is ready';
-    const idleCopy = snapshot.attention_state === 'all_tasks_done'
-      ? 'All tracked work is complete. Keep this surface open as a handoff-ready summary while you decide what ships next.'
-      : 'The queue is quiet right now. Use this moment to shape the next change, confirm proof, or start the next guided run.';
-
-    return `
-      <section class="active-strip active-strip--empty">
-        <div class="active-strip__main">
-          <div class="active-strip__status">
-            <span>${escapeHtml(viewModel.secondaryLabel)}</span>
-          </div>
-          <div class="active-strip__copy">
-            <h2>${escapeHtml(idleTitle)}</h2>
-            <p>${escapeHtml(idleCopy)}</p>
-          </div>
-        </div>
-        <div class="active-strip__stats">
-          ${boardStats || boardStatMarkup('State', 'Quiet', 'neutral')}
-        </div>
-      </section>
-    `;
-  }
-
-  const stripNote = activeTask?.description
-    ?? (stripTask.status === 'needs_feedback' ? stripTask.message : null)
-    ?? (stripTask.status === 'blocked' ? stripTask.reason : null)
-    ?? null;
-
-  return `
-    <section class="active-strip active-strip--${stripTone}">
-      <div class="active-strip__main">
-        <div class="active-strip__status">
-          ${stripTask.status === 'in_progress' ? '<span class="live-indicator" aria-hidden="true"></span>' : ''}
-          <span>${escapeHtml(viewModel.secondaryLabel)}</span>
-        </div>
-        <div class="active-strip__copy">
-          <h2>${escapeHtml(stripTask.title)}</h2>
-          ${stripNote ? `<p>${escapeHtml(stripNote)}</p>` : ''}
-        </div>
-      </div>
-      <div class="active-strip__stats">
-        ${boardStats}
-      </div>
-    </section>
-  `;
-}
-
-function columnMarkup(column: PrototypeViewModel['visibleColumns'][number]): string {
-  return `
-    <section class="board-column board-column--${column.tone}" data-column="${column.key}">
-      <header class="board-column__header">
-        <div class="board-column__heading">
-          <h3>${escapeHtml(column.title)}</h3>
-        </div>
-        <span class="board-count-pill">${escapeHtml(String(column.count))}</span>
-      </header>
-      <div class="board-column__rule" aria-hidden="true"></div>
-      <div class="board-stack ${column.items.length === 0 ? 'board-stack--empty' : ''}">
-        ${column.items.length === 0
-          ? `
-            <div class="board-empty">
-              <p>${escapeHtml(getEmptyColumnLabel(column.key))}</p>
-            </div>
-          `
-          : column.items.map(item => `
-              <article class="task-card task-card--${item.status}">
-                <div class="task-card__topline">
-                  <p class="task-card__eyebrow">${taskLeadMarkup(item)}</p>
-                </div>
-                <strong>${escapeHtml(item.title)}</strong>
-                ${getTaskNote(item) ? `<p class="task-card__note">${escapeHtml(getTaskNote(item)!)}</p>` : ''}
-                ${taskMetaMarkup(item)}
-              </article>
-            `).join('')}
-      </div>
-    </section>
-  `;
-}
-
 function boardResizeZonesMarkup(): string {
   const zones = [
     ['North', 'board-resize-zone--north'],
@@ -1496,8 +1472,8 @@ function render(snapshot: OverlaySnapshot): void {
             ${boardBrandMarkup()}
             <div class="board-heading__copy">
               <p class="eyebrow">Superplan board</p>
-              <h1>${escapeHtml(viewModel.workspaceLabel)}</h1>
-              <p class="board-heading__meta">${escapeHtml(viewModel.updatedLabel)}</p>
+              <h1>Tracked changes</h1>
+              <p class="board-heading__meta">${escapeHtml(`${getRenderableSnapshots().length} active workspace view${getRenderableSnapshots().length === 1 ? '' : 's'}`)}</p>
             </div>
           </div>
           <div class="board-topbar__actions">
@@ -1518,13 +1494,7 @@ function render(snapshot: OverlaySnapshot): void {
           </div>
         </header>
 
-        ${shouldShowBoardHero(snapshot, viewModel) ? boardHeroMarkup(snapshot, viewModel) : ''}
-
-        ${activeStripMarkup(snapshot, viewModel)}
-
-        <section class="board-grid">
-          ${viewModel.visibleColumns.map(column => columnMarkup(column)).join('')}
-        </section>
+        ${expandedCardGridMarkup()}
       </section>
       ${boardResizeZonesMarkup()}
     `;
@@ -1651,7 +1621,7 @@ async function loadSnapshot(): Promise<void> {
   let snapshotText: string;
   if (isTauriWindowAvailable(getCurrentWindow)) {
     try {
-      snapshotText = await invoke<string>('load_overlay_snapshot');
+      snapshotText = await invoke<string>('load_overlay_snapshots');
       // Bug fix: reset failure counter on every success.
       consecutiveSnapshotFailures = 0;
     } catch {
@@ -1665,10 +1635,10 @@ async function loadSnapshot(): Promise<void> {
 
       // N consecutive failures — something is structurally wrong, fall through
       // to empty snapshot which will trigger a graceful exit.
-      snapshotText = JSON.stringify(getEmptyRuntimeSnapshot());
+      snapshotText = JSON.stringify([]);
     }
   } else {
-    snapshotText = JSON.stringify(getBrowserFallbackSnapshot());
+    snapshotText = JSON.stringify([getBrowserFallbackSnapshot()]);
   }
 
   if (snapshotText === lastSnapshotText && latestSnapshot) {
@@ -1677,7 +1647,11 @@ async function loadSnapshot(): Promise<void> {
 
   lastSnapshotText = snapshotText;
   const previousSnapshot = latestSnapshot;
-  latestSnapshot = JSON.parse(snapshotText) as OverlaySnapshot;
+  latestSnapshots = JSON.parse(snapshotText) as OverlaySnapshot[];
+  latestSnapshot = getPrimarySnapshot();
+  if (!latestSnapshot) {
+    latestSnapshot = getEmptyRuntimeSnapshot() as OverlaySnapshot;
+  }
   const attentionSoundKind = getAttentionSoundKind(previousSnapshot, latestSnapshot);
 
   if (attentionSoundKind) {
@@ -1756,9 +1730,9 @@ async function playAttentionSound(kind: string): Promise<void> {
 let consecutiveControlFailures = 0;
 
 async function loadControlState(): Promise<void> {
-  let controlText: string | null;
+  let controlText: string;
   try {
-    controlText = await invoke<string | null>('load_overlay_control_state');
+    controlText = await invoke<string>('load_overlay_control_states');
     consecutiveControlFailures = 0;
   } catch {
     consecutiveControlFailures += 1;
@@ -1766,8 +1740,7 @@ async function loadControlState(): Promise<void> {
       // Transient FS error. Keep previous control state and skip update this tick.
       return;
     }
-    // Give up and fall through to null (which triggers terminate).
-    controlText = null;
+    controlText = '[]';
   }
 
   if (controlText === lastControlText) {
@@ -1775,12 +1748,22 @@ async function loadControlState(): Promise<void> {
   }
 
   lastControlText = controlText;
-  latestControlState = controlText ? JSON.parse(controlText) as OverlayControlState : null;
+  const previousSelectionKey = getSnapshotSelectionKey(latestSnapshot);
+  latestControlStates = JSON.parse(controlText) as OverlayControlState[];
+  const nextPrimarySnapshot = getPrimarySnapshot() ?? latestSnapshot;
+  latestSnapshot = nextPrimarySnapshot;
+
+  if (nextPrimarySnapshot && getSnapshotSelectionKey(nextPrimarySnapshot) !== previousSelectionKey) {
+    render(nextPrimarySnapshot);
+  }
 }
 
 async function syncDerivedVisibility(): Promise<void> {
-  const requestedVisibility = latestControlState?.visible ?? false;
-  const visible = requestedVisibility && hasRenderableSnapshotContent(latestSnapshot);
+  latestSnapshot = getPrimarySnapshot() ?? latestSnapshot;
+  const visibleWorkspacePaths = getVisibleWorkspacePaths();
+  const visible = latestSnapshots.some(snapshot => (
+    visibleWorkspacePaths.has(snapshot.workspace_path) && hasRenderableSnapshotContent(snapshot)
+  ));
 
   if (lastAppliedVisibility === visible) {
     return;
@@ -1788,10 +1771,9 @@ async function syncDerivedVisibility(): Promise<void> {
 
   lastAppliedVisibility = visible;
   if (!visible) {
-    // Bug H6 fix: don't terminate on the very first tick when latestControlState
-    // is still null (overlay-control.json not flushed yet at cold start). The
-    // null defaults to requestedVisibility=false which would fire
-    // terminateOverlayApplication before the overlay shows anything.
+    // Bug H6 fix: don't terminate on the very first tick when the control-state
+    // files have not been flushed yet at cold start. That momentarily looks
+    // like "no workspace asked to be visible" and would otherwise exit early.
     if (!bootstrapComplete) {
       return;
     }

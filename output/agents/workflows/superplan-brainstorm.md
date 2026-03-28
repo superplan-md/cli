@@ -113,6 +113,19 @@ For larger or riskier work, cover the parts that materially prevent wrong execut
 
 Do not expand this into boilerplate for its own sake.
 
+## Public Reasoning Rules
+
+Keep the thinking visible in a user-helpful way.
+
+- lead with your best read of the user's actual intention, not just the literal wording of the request
+- be explicit about what signals, tensions, or hidden expectations are driving the design question
+- when alternatives are real, always show the approaches and recommend one
+- take positions; avoid bland summaries that only repeat uncertainty back to the user
+- keep the conversation focused on product, UX, technical trade-offs, and acceptance intent rather than Superplan process
+
+The goal is not to expose raw chain-of-thought.
+The goal is to make the important reasoning legible: what you think the user wants, what options exist, and which direction you recommend.
+
 ## Durable Output Rules
 
 Conversation is not durable enough by itself when future shaping or execution depends on the result.
@@ -212,6 +225,7 @@ Should fail if:
 - it skips context inspection and asks avoidable questions
 - it asks multiple low-leverage questions in one burst
 - it presents only one path when real alternatives exist
+- it hides the useful reasoning behind a thin summary of the user's intentions
 - it proceeds without approval
 - it forces a spec file when a smaller durable artifact would do
 - it turns into `superplan-shape` or execution

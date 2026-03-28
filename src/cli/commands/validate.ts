@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { loadChangeGraph, type ChangeGraph } from '../graph';
-import { parse, type ParseDiagnostic, type ParsedTask } from './parse';
+import { getDefaultChangesRoots, parse, type ParseDiagnostic, type ParsedTask } from './parse';
 import { resolveWorkspaceRoot } from '../workspace-root';
 import { collectWorkspaceHealthIssues, workspaceIssuesToDiagnostics } from '../workspace-health';
 import { commandNextAction, stopNextAction, type NextAction } from '../next-action';
@@ -90,15 +90,30 @@ export async function validate(args: string[] = []): Promise<ValidateResult> {
   const shouldFix = args.includes('--fix');
   const positionalArgs = args.filter(arg => arg !== '--json' && arg !== '--quiet' && arg !== '--fix');
   const cwd = process.cwd();
-  const changesRoot = path.join(resolveWorkspaceRoot(cwd), '.superplan', 'changes');
   const input = positionalArgs[0];
-  const resolvedTargetPath = input
-    ? (await pathExists(path.resolve(cwd, input))
-      ? path.resolve(cwd, input)
-      : path.join(changesRoot, input))
-    : changesRoot;
+  let resolvedTargetPath: string | null = null;
 
-  if (!await pathExists(resolvedTargetPath)) {
+  if (input) {
+    const explicitPath = path.resolve(cwd, input);
+    if (await pathExists(explicitPath)) {
+      resolvedTargetPath = explicitPath;
+    } else {
+      for (const changesRoot of getDefaultChangesRoots(cwd)) {
+        const candidatePath = path.join(changesRoot, input);
+        if (await pathExists(candidatePath)) {
+          resolvedTargetPath = candidatePath;
+          break;
+        }
+      }
+    }
+  } else {
+    const existingChangesRoots = await Promise.all(
+      getDefaultChangesRoots(cwd).map(async changesRoot => (await pathExists(changesRoot) ? changesRoot : null)),
+    );
+    resolvedTargetPath = existingChangesRoots.find((changesRoot): changesRoot is string => changesRoot !== null) ?? null;
+  }
+
+  if (!resolvedTargetPath) {
     return {
       ok: true,
       data: {
@@ -107,12 +122,12 @@ export async function validate(args: string[] = []): Promise<ValidateResult> {
         diagnostics: [
           {
             code: 'CHANGES_DIR_MISSING',
-            message: 'No .superplan/changes directory found. Run superplan init.',
+            message: 'No Superplan changes directory found. Run superplan init.',
           },
         ],
         next_action: commandNextAction(
-          'superplan init --scope local --yes --json',
-          'Validation cannot run until the repo-local Superplan workspace exists.',
+          'superplan init --yes --json',
+          'Validation cannot run until Superplan has created a tracked changes root.',
         ),
       },
     };

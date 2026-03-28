@@ -12,7 +12,7 @@ Internal category: `workflow-control` / `execution-orchestration`.
 
 This skill replaces the entry discipline that `using-superpowers` used to provide.
 
-Keep it small.
+Keep it small, but not permissive.
 Its job is to decide whether Superplan should meaningfully participate, whether readiness is missing, and which workflow phase owns the next responsibility.
 
 If there is a meaningful chance that the request is repo work, use this skill before implementation, broad repo exploration, or clarifying questions.
@@ -41,6 +41,8 @@ Treat entry routing as mandatory first-contact discipline, not optional advice.
 - do not start broad repo exploration first and claim routing can happen after
 - do not ask clarifying questions first when the real first question is whether Superplan should engage
 - do not rationalize that a dense request is "probably just one task" without checking
+- do not let "smallest useful depth" become a reason to skip an explicit route result
+- do not begin execution for newly requested repo work until the route and shape chain is complete
 
 Rationalizations that mean stop and use this skill:
 
@@ -79,7 +81,7 @@ Entry routing is not permission to explore the CLI surface.
 
 - once the current intent is known, use the canonical command path already named in this skill
 - do not call `--help`, neighboring subcommands, or diagnostic commands just to orient yourself when the correct command is already listed
-- use `superplan task inspect show <task_id> --json` only when one task's detailed readiness is actually needed
+- use `superplan task inspect show <task_ref> --json` only when one task's detailed readiness is actually needed
 - use `superplan doctor --json` only for setup or install uncertainty, not normal routing
 - once the needed CLI state is known, stop polling and route or act
 
@@ -96,6 +98,7 @@ Use when:
 In practice, this is the default entry layer for repo work in this host.
 
 For dense requirement dumps, packed queries, JTBD lists, or multi-constraint briefs, assume this skill applies unless there is a strong reason to stay out.
+For new repo work with open structure, execution cannot begin until `superplan-route` has produced an explicit depth decision and `superplan-shape` has produced the initial executable frontier.
 
 ## Stay Out
 
@@ -166,11 +169,11 @@ Common commands:
 - `superplan task scaffold batch <change-slug> --stdin --json` to create two or more new task contracts in one pass
 - `superplan status --json` to see active, ready, blocked, and needs-feedback tasks
 - `superplan run --json` to claim the next ready task or continue the active task, with the chosen task contract and selection reason in the payload
-- `superplan run <task_id> --json` to explicitly start or resume one known task
-- `superplan task inspect show <task_id> --json` to inspect one task and its readiness reasons directly
-- `superplan task runtime block <task_id> --reason "<reason>" --json` when execution cannot safely continue
-- `superplan task runtime request-feedback <task_id> --message "<message>" --json` when the user must respond
-- `superplan task review complete <task_id> --json` after the work and acceptance criteria are satisfied
+- `superplan run <task_ref> --json` to explicitly start or resume one known task
+- `superplan task inspect show <task_ref> --json` to inspect one task and its readiness reasons directly
+- `superplan task runtime block <task_ref> --reason "<reason>" --json` when execution cannot safely continue
+- `superplan task runtime request-feedback <task_ref> --message "<message>" --json` when the user must respond
+- `superplan task review complete <task_ref> --json` after the work and acceptance criteria are satisfied
 - `superplan task repair fix --json` when runtime state becomes inconsistent
 - `superplan doctor --json` to verify setup, overlay launchability, and workspace health when readiness is unclear
 - `superplan overlay ensure --json` to explicitly reveal or resync the overlay when overlay support is enabled
@@ -181,13 +184,13 @@ Execution default:
 
 1. check `superplan status --json`
 2. claim work with `superplan run --json`
-3. do not edit repo files until `superplan run --json` or `superplan run <task_id> --json` has returned an active task for this turn
+3. do not edit repo files until `superplan run --json` or `superplan run <task_ref> --json` has returned an active task for this turn
 4. treat the returned active-task context as the edit gate; if no active task context was returned, implementation does not begin
-5. use the task returned by `superplan run`; only call `superplan task inspect show <task_id> --json` when you need one task's full details and readiness reasons
+5. use the task returned by `superplan run`; only call `superplan task inspect show <task_ref> --json` when you need one task's full details and readiness reasons
 6. if `run`, `status`, or task activation returns an unexpected lifecycle or runtime error, the next action must be another Superplan command, not code edits
 7. execute through the workflow spine, especially `superplan-execute`, instead of ad hoc task mutation
 8. block, request feedback, repair, reopen, or complete through the runtime commands rather than editing markdown state by hand
-9. if overlay support is enabled for the workspace and a launchable companion is installed, expect `superplan task scaffold new`, `superplan task scaffold batch`, `superplan run`, `superplan run <task_id>`, and `superplan task review reopen` to auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle again
+9. if overlay support is enabled for the workspace and a launchable companion is installed, expect `superplan task scaffold new`, `superplan task scaffold batch`, `superplan run`, `superplan run <task_ref>`, and `superplan task review reopen` to auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle again
 10. after overlay-triggering commands, inspect the returned overlay payload; if `overlay.companion.launched` is false, surface `overlay.companion.reason` instead of assuming the overlay appeared
 
 Authoring default:
@@ -214,7 +217,7 @@ Canonical command rule:
 Initialization rule:
 
 - do not call `superplan change new`, `superplan task scaffold new`, `superplan task scaffold batch`, or any other scaffolding command until `superplan-entry` has decided Superplan should engage
-- if Superplan should engage and repo init is missing while the CLI exists, run `superplan init --scope local --yes --json` immediately instead of stopping to tell the user to do it
+- if Superplan should engage and repo init is missing while the CLI exists, run `superplan init --yes --json` immediately instead of stopping to tell the user to do it
 - once repo init succeeds, continue to the owning workflow phase in the same turn
 
 ## Entry Decision Order
@@ -228,6 +231,7 @@ Apply this order:
 5. check readiness layers: CLI availability, init, and context
 6. if the request targets already shaped work, resume the owning workflow phase directly
 7. if the request is new or the structure decision is still open, route to `superplan-route`
+8. if routing chose engaged work for a new request, continue until `superplan-shape` has made the next executable frontier explicit
 
 Do not bounce already shaped work back through `superplan-route` just because the current message is short.
 
@@ -239,7 +243,8 @@ Completion rule:
 - if a readiness command fails, surface the failure concretely and stop
 - if the owning phase is already known, hand off directly in the same turn
 - if the request is dense, packed, or structurally ambiguous, do not stop at "this should route"; continue until the owning next phase is explicit
-- if `superplan-route` is invoked and returns `direct`, `task`, `slice`, or `program`, the work is not done until the next workflow owner is explicit, normally `superplan-shape`
+- if `superplan-route` is invoked and returns `direct`, `task`, `slice`, or `program`, the work is not done until the route result is explicit and the next workflow owner is explicit, normally `superplan-shape`
+- if the request is new and still structurally open, do not stop after routing; execution remains blocked until shaping has created an executable frontier
 
 ## Routing Model
 
@@ -275,6 +280,7 @@ Process-first rule:
 - choose the owning workflow phase first
 - only then let that phase invoke the right support discipline
 - do not end the turn with a vague recommendation to "use Superplan" when a specific owning phase is already knowable
+- do not treat an internal hunch like a route result; the depth choice must be explicit enough for downstream shaping to consume
 
 ## Direct Resume Routes
 
@@ -300,13 +306,15 @@ See `references/routing-boundaries.md`.
 - forcing engagement when Superplan adds no value
 - acting on repo work without a tracked task when the one-file/no-decisions carve-out does not apply
 - starting execution for work with 3 or more distinct steps without a complete task graph
+- starting execution for new tracked work before `superplan-route` has produced an explicit depth choice and `superplan-shape` has produced a concrete executable frontier
+- collapsing dense multi-surface work into one task just because a single agent could personally carry it
 - using entry routing as cover for CLI command-surface exploration once the next workflow owner is already clear
 - calling `--help`, neighboring subcommands, or repeated `status`/`task inspect show`/`doctor` checks without a concrete routing need
 
 ## Readiness Rules
 
 - If the `superplan` CLI itself appears missing, give brief installation or availability guidance and stop.
-- If the repo is not initialized and Superplan should engage, run `superplan init --scope local --yes --json` and continue.
+- If the repo is not initialized and Superplan should engage, run `superplan init --yes --json` and continue.
 - If host or agent integration appears missing but the CLI exists, do not let that block repo-local engagement by itself.
 - If the repo is initialized but serious brownfield context is missing or stale, route to `superplan-context`.
 - If the request targets existing tracked work, resume the owning later phase instead of forcing a fresh routing pass.
@@ -341,6 +349,7 @@ One of:
 The output should be brief and legible.
 
 For packed or ambiguous repo-work, "brief" does not mean vague. The output must still make the owning next phase explicit.
+For newly requested engaged work, the output is not complete unless the route result is explicit enough for shaping and the owning next phase is named.
 
 ## Handoff
 
@@ -355,7 +364,7 @@ Likely handoffs:
 ## CLI Hooks
 
 - `superplan doctor --json`
-- `superplan init --scope local --yes --json`
+- `superplan init --yes --json`
 - `superplan change new <change-slug> --json`
 - `superplan validate <change-slug> --json`
 - `superplan task scaffold new <change-slug> --task-id <task_id> --json`
@@ -363,7 +372,7 @@ Likely handoffs:
 - `superplan status --json`
 - `superplan run --json`
 - `superplan parse --json`
-- `superplan task inspect show <task_id> --json`
+- `superplan task inspect show <task_ref> --json`
 - `superplan overlay ensure --json`
 - `superplan overlay hide --json`
 
@@ -377,6 +386,7 @@ Should trigger:
 - any repo work request in a host configured for Superplan
 - "Continue the next ready task."
 - "Is T-003 actually done?"
+- dense PRDs, implementation checklists, or multi-surface requirement dumps even when one agent could probably execute them alone
 
 Should stay out:
 
@@ -401,3 +411,8 @@ Ambiguous:
 - "Fix this tiny typo."
 - "Can you look into this bug?" with no clear need for structure yet
 - "Write a quick recommendation doc" where the doc itself may be the deliverable
+
+Hard escalation cases:
+
+- if the request has 3 or more distinct deliverables, surfaces, or verification concerns, do not skip explicit routing
+- if parallelization would be useful, do not let entry hand the work straight to execution as a single task

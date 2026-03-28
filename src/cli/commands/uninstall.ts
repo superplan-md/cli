@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
-import { confirm, select } from '@inquirer/prompts';
+import { confirm } from '@inquirer/prompts';
 import { AgentInstallKind } from '../agent-integrations';
 import { readInstallMetadata, type InstallMetadata } from '../install-metadata';
 import { ALL_SUPERPLAN_SKILL_NAMES } from '../skill-names';
@@ -17,7 +17,6 @@ interface AgentEnvironment {
   cleanup_paths?: string[];
 }
 
-type RemoveScope = 'global' | 'local' | 'skip';
 type AgentScope = 'project' | 'global';
 
 const MANAGED_ANTIGRAVITY_BLOCK_START = '<!-- superplan-antigravity:start -->';
@@ -27,27 +26,27 @@ const MANAGED_ENTRY_INSTRUCTIONS_BLOCK_END = '<!-- superplan-entry-instructions:
 const MANAGED_AMAZONQ_MEMORY_BANK_START = '<!-- superplan-amazonq-memory-bank:start -->';
 const MANAGED_AMAZONQ_MEMORY_BANK_END = '<!-- superplan-amazonq-memory-bank:end -->';
 
-export interface RemoveOptions {
+export interface UninstallOptions {
   json?: boolean;
   quiet?: boolean;
-  scope?: RemoveScope;
   yes?: boolean;
 }
 
-interface RemoveDeps {
+interface UninstallDeps {
   readInstallMetadata?: () => Promise<InstallMetadata | null>;
   currentPackageRoot?: string;
   invokedEntryPath?: string;
 }
 
-export type RemoveResult =
+export type UninstallResult =
   | {
       ok: true;
       data: {
-        scope: RemoveScope;
-        mode: 'remove';
+        mode: 'uninstall';
         removed_paths: string[];
         agents: AgentEnvironment[];
+        cli_removed: boolean;
+        overlay_removed: boolean;
         message: string;
         next_action: NextAction;
       };
@@ -68,41 +67,31 @@ function getOptionValue(args: string[], optionName: string): string | undefined 
   return optionValue;
 }
 
-function isRemoveScope(value: string | undefined): value is RemoveScope {
-  return value === 'global' || value === 'local' || value === 'skip';
-}
-
-export function getRemoveCommandHelpMessage(invalidScope?: string): string {
-  const intro = invalidScope
-    ? `Invalid remove scope: ${invalidScope}`
-    : 'Remove Superplan skills and configuration from agent directories.';
-
+export function getUninstallCommandHelpMessage(): string {
   return [
-    intro,
+    'Completely uninstall Superplan including CLI, skills, and overlay.',
     '',
-    'This removes Superplan skills from agent directories but keeps the CLI installed.',
-    'Use "superplan uninstall" to completely remove Superplan including the CLI.',
+    'This removes Superplan completely from your system.',
+    'Use "superplan remove" if you want to keep the CLI.',
     '',
     'Usage:',
-    '  superplan remove --scope <local|global|skip> --yes --json',
-    '  superplan remove                 # interactive mode',
+    '  superplan uninstall --yes --json',
+    '  superplan uninstall              # interactive mode',
     '',
     'Options:',
-    '  --scope <scope>   local, global, or skip',
     '  --yes             confirm the destructive action without a prompt',
     '  --json            return structured output',
     '',
     'Examples:',
-    '  superplan remove --scope local --yes --json',
-    '  superplan remove --scope global --yes --json',
+    '  superplan uninstall --yes --json',
   ].join('\n');
 }
 
-function getInvalidRemoveCommandError(message: string): RemoveResult {
+function getInvalidUninstallCommandError(message: string): UninstallResult {
   return {
     ok: false,
     error: {
-      code: 'INVALID_REMOVE_COMMAND',
+      code: 'INVALID_UNINSTALL_COMMAND',
       message,
       retryable: false,
     },
@@ -163,21 +152,10 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
         cleanup_paths: [path.join(baseDir, '.amazonq', 'rules', 'superplan')],
       },
       {
-        name: 'copilot',
-        path: path.join(baseDir, '.github'),
-        install_path: path.join(baseDir, '.github', 'skills'),
-        install_kind: 'skills_namespace',
-        cleanup_paths: [path.join(baseDir, '.github', 'copilot-instructions.md')],
-      },
-      {
         name: 'antigravity',
         path: path.join(baseDir, '.agents'),
-        install_path: path.join(baseDir, '.agents', 'workflows'),
-        install_kind: 'antigravity_workflows',
-        cleanup_paths: [
-          path.join(baseDir, '.agents', 'rules', 'superplan-entry.md'),
-          path.join(baseDir, '.agents'),
-        ],
+        install_path: path.join(baseDir, '.agents', 'rules', 'superplan-entry.md'),
+        install_kind: 'markdown_rule',
       },
     ];
   }
@@ -266,15 +244,6 @@ async function detectAgents(baseDir: string, scope: AgentScope, managedSkillName
   const detectedAgents: AgentEnvironment[] = [];
 
   for (const agent of definitions) {
-    // Check if agent's base directory exists (e.g., .cursor/, .agents/)
-    const baseDirExists = await pathExists(agent.path);
-    
-    if (baseDirExists) {
-      detectedAgents.push(agent);
-      continue;
-    }
-    
-    // Fallback: check managed install paths
     const managedInstallPaths = getManagedInstallPaths(agent, managedSkillNames);
     const hasManagedInstall = (await Promise.all(managedInstallPaths.map(targetPath => pathExists(targetPath)))).some(Boolean);
 
@@ -423,25 +392,12 @@ async function removeAgentInstalls(
       for (const cleanupPath of agent.cleanup_paths ?? []) {
         await removePath(cleanupPath, removedPaths);
       }
-      // Also remove the agent's base directory
-      await removePath(agent.path, removedPaths);
-      continue;
-    }
-
-    if (agent.install_kind === 'antigravity_workflows') {
-      // Remove workflows directory and any cleanup paths (including .agents/)
-      await removePath(agent.install_path, removedPaths);
-      for (const cleanupPath of agent.cleanup_paths ?? []) {
-        await removePath(cleanupPath, removedPaths);
-      }
       continue;
     }
 
     for (const managedPath of getManagedInstallPaths(agent, managedSkillNames)) {
       await removePath(managedPath, removedPaths);
     }
-    // Also remove the agent's base directory if it exists
-    await removePath(agent.path, removedPaths);
   }
 }
 
@@ -532,10 +488,10 @@ function resolveInstalledOverlayTargets(installMetadata: InstallMetadata | null)
   return Array.from(targets);
 }
 
-async function removeCommand(
-  options: RemoveOptions,
-  deps: Partial<RemoveDeps> = {},
-): Promise<RemoveResult> {
+async function uninstallCommand(
+  options: UninstallOptions,
+  deps: Partial<UninstallDeps> = {},
+): Promise<UninstallResult> {
   try {
     const nonInteractive = Boolean(options.json || options.quiet);
     const cwd = process.cwd();
@@ -547,59 +503,24 @@ async function removeCommand(
     const globalSuperplanDir = path.join(homeDir, '.config', 'superplan');
     const localSuperplanDir = path.join(localRootDir, '.superplan');
 
-    let scope = options.scope;
-    if (!scope) {
-      if (nonInteractive) {
-        return getInvalidRemoveCommandError([
-          'Remove requires --scope in non-interactive mode.',
-          '',
-          getRemoveCommandHelpMessage(),
-        ].join('\n'));
-      }
-
-      scope = await select<RemoveScope>({
-        message: 'Where do you want to remove Superplan?',
-        choices: [
-          { name: 'Global (machine-level and this repository)', value: 'global' },
-          { name: 'Local (this repository only)', value: 'local' },
-          { name: 'Skip', value: 'skip' },
-        ],
-      });
-    }
-
-    if (scope === 'skip') {
-      return {
-        ok: true,
-        data: {
-          scope,
-          mode: 'remove',
-          removed_paths: [],
-          agents: [],
-          message: 'Removal skipped.',
-          next_action: stopNextAction(
-            'Removal was skipped; no further Superplan action is required from this command.',
-            'The command was explicitly told to skip removal.',
-          ),
-        },
-      };
-    }
-
     if (!options.yes) {
       if (nonInteractive) {
-        return getInvalidRemoveCommandError([
-          'Remove requires --yes in non-interactive mode.',
+        return getInvalidUninstallCommandError([
+          'Uninstall requires --yes in non-interactive mode.',
           '',
-          getRemoveCommandHelpMessage(),
+          getUninstallCommandHelpMessage(),
         ].join('\n'));
       }
 
-      const proceed = await confirm({ message: 'Proceed with remove?' });
+      const proceed = await confirm({ 
+        message: 'This will completely remove Superplan including the CLI. Proceed?' 
+      });
       if (!proceed) {
         return {
           ok: false,
           error: {
             code: 'USER_ABORTED',
-            message: 'remove aborted by user',
+            message: 'uninstall aborted by user',
             retryable: false,
           },
         };
@@ -615,73 +536,84 @@ async function removeCommand(
       deps.invokedEntryPath ?? process.argv[1] ?? '',
     );
     const installedOverlayTargets = resolveInstalledOverlayTargets(installMetadata);
-    const globalAgents = scope === 'global'
-      ? await detectAgents(homeDir, 'global', managedSkillNames)
-      : [];
-    const localAgents = scope === 'local' || scope === 'global'
-      ? await detectAgents(localRootDir, 'project', managedSkillNames)
-      : [];
+    
+    // Get all agents (both global and local)
+    const globalAgents = await detectAgents(homeDir, 'global', managedSkillNames);
+    const localAgents = await detectAgents(localRootDir, 'project', managedSkillNames);
 
-    if (scope === 'global') {
-      await terminateInstalledOverlayCompanion();
-    } else if (scope === 'local') {
-      await terminateInstalledOverlayCompanion(localRootDir);
+    // Terminate overlay companion
+    await terminateInstalledOverlayCompanion();
+    await terminateInstalledOverlayCompanion(localRootDir);
+
+    // Handle global uninstall
+    // Get installed agents from registry
+    const installedAgents = await getInstalledAgentsFromRegistry();
+    const allGlobalAgentDefs = getAgentDefinitions(homeDir, 'global');
+    const agentsToRemove = allGlobalAgentDefs.filter(agent => 
+      installedAgents.includes(agent.name)
+    );
+    
+    // Remove agent skills
+    await removeAgentInstalls(agentsToRemove, managedSkillNames, removedPaths);
+    
+    // Clear registry
+    if (agentsToRemove.length > 0) {
+      await removeAgentsFromRegistry(agentsToRemove.map(a => a.name));
+    }
+    
+    // Remove managed instruction files
+    await removeManagedInstructionsFile(path.join(homeDir, 'AGENTS.md'), removedPaths);
+    await removeManagedInstructionsFile(path.join(homeDir, 'CLAUDE.md'), removedPaths);
+    await removeManagedInstructionsFile(path.join(homeDir, '.claude', 'CLAUDE.md'), removedPaths);
+    await removeManagedInstructionsFile(path.join(homeDir, '.codex', 'AGENTS.md'), removedPaths);
+    
+    // Remove CLI binaries
+    for (const installedCliTarget of installedCliTargets) {
+      await removePath(installedCliTarget, removedPaths);
+    }
+    
+    // Remove overlay application
+    for (const installedOverlayTarget of installedOverlayTargets) {
+      await removePath(installedOverlayTarget, removedPaths);
+    }
+    
+    // Remove global config directory
+    await removePath(globalSuperplanDir, removedPaths);
+    
+    // Clean up overlay application support files on macOS
+    if (process.platform === 'darwin') {
+      const appSupportDir = path.join(homeDir, 'Library', 'Application Support');
+      await removePath(path.join(appSupportDir, 'superplan-overlay-desktop'), removedPaths);
+      await removePath(path.join(appSupportDir, 'Superplan Overlay Desktop'), removedPaths);
+      await removePath(path.join(appSupportDir, 'com.superplan.overlay'), removedPaths);
     }
 
-    // For global scope, check agent registry to find which agents have Superplan installed
-    if (scope === 'global') {
-      const installedAgents = await getInstalledAgentsFromRegistry();
-      
-      // Get agent definitions for all globally installed agents
-      const allGlobalAgentDefs = getAgentDefinitions(homeDir, 'global');
-      const agentsToRemove = allGlobalAgentDefs.filter(agent => 
-        installedAgents.includes(agent.name)
-      );
-      
-      // Remove agent skills from their directories
-      await removeAgentInstalls(agentsToRemove, managedSkillNames, removedPaths);
-      
-      // Remove agents from registry
-      if (agentsToRemove.length > 0) {
-        await removeAgentsFromRegistry(agentsToRemove.map(a => a.name));
-      }
-      
-      // Remove global AGENTS.md and CLAUDE.md if they exist
-      await removeManagedInstructionsFile(path.join(homeDir, 'AGENTS.md'), removedPaths);
-      await removeManagedInstructionsFile(path.join(homeDir, 'CLAUDE.md'), removedPaths);
-      await removeManagedInstructionsFile(path.join(homeDir, '.claude', 'CLAUDE.md'), removedPaths);
-      await removeManagedInstructionsFile(path.join(homeDir, '.codex', 'AGENTS.md'), removedPaths);
-      
-      // Thoroughly wipe the global config directory
-      await removePath(globalSuperplanDir, removedPaths);
+    // Handle local uninstall
+    await removeAgentInstalls(localAgents, managedSkillNames, removedPaths);
+    
+    if (localAgents.length > 0) {
+      await removeAgentsFromRegistry(localAgents.map(a => a.name));
     }
+    
+    await removeManagedInstructionsFile(path.join(localRootDir, 'AGENTS.md'), removedPaths);
+    await removeManagedInstructionsFile(path.join(localRootDir, 'CLAUDE.md'), removedPaths);
+    await removePath(localSuperplanDir, removedPaths);
 
-    if (scope === 'local' || scope === 'global') {
-      // For local scope, remove from project directories
-      await removeAgentInstalls(localAgents, managedSkillNames, removedPaths);
-      
-      // Remove local agents from registry
-      if (localAgents.length > 0) {
-        await removeAgentsFromRegistry(localAgents.map(a => a.name));
-      }
-      
-      // Remove local instruction files
-      await removeManagedInstructionsFile(path.join(localRootDir, 'AGENTS.md'), removedPaths);
-      await removeManagedInstructionsFile(path.join(localRootDir, 'CLAUDE.md'), removedPaths);
-      await removePath(localSuperplanDir, removedPaths);
-    }
+    const cliRemoved = installedCliTargets.length > 0;
+    const overlayRemoved = installedOverlayTargets.length > 0;
 
     return {
       ok: true,
       data: {
-        scope,
-        mode: 'remove',
+        mode: 'uninstall',
         removed_paths: removedPaths,
         agents: [...globalAgents, ...localAgents],
-        message: `Superplan removed from ${scope} scope. ${removedPaths.length} paths cleaned up.`,
+        cli_removed: cliRemoved,
+        overlay_removed: overlayRemoved,
+        message: `Superplan completely uninstalled. ${removedPaths.length} paths cleaned up.`,
         next_action: stopNextAction(
-          'Reinstall Superplan with `superplan init` only if you want to use it again in this environment.',
-          'Superplan state has been removed, so there is no follow-up workflow command to run now.',
+          'Superplan has been completely removed from your system.',
+          'To use Superplan again, you will need to reinstall it.',
         ),
       },
     };
@@ -689,7 +621,7 @@ async function removeCommand(
     return {
       ok: false,
       error: {
-        code: 'REMOVE_FAILED',
+        code: 'UNINSTALL_FAILED',
         message: error.message || 'An unknown error occurred',
         retryable: false,
       },
@@ -697,24 +629,17 @@ async function removeCommand(
   }
 }
 
-export async function remove(options: RemoveOptions, deps: Partial<RemoveDeps> = {}): Promise<RemoveResult> {
-  return removeCommand(options, deps);
+export async function uninstall(options: UninstallOptions, deps: Partial<UninstallDeps> = {}): Promise<UninstallResult> {
+  return uninstallCommand(options, deps);
 }
 
-export async function removeCli(
+export async function uninstallCli(
   args: string[],
-  options: RemoveOptions,
-  deps: Partial<RemoveDeps> = {},
-): Promise<RemoveResult> {
-  const rawScope = getOptionValue(args, '--scope');
-  if (rawScope && !isRemoveScope(rawScope)) {
-    return getInvalidRemoveCommandError(getRemoveCommandHelpMessage(rawScope));
-  }
-  const scope = rawScope as RemoveScope | undefined;
-
-  return removeCommand({
+  options: UninstallOptions,
+  deps: Partial<UninstallDeps> = {},
+): Promise<UninstallResult> {
+  return uninstallCommand({
     ...options,
-    ...(scope ? { scope } : {}),
     yes: args.includes('--yes'),
   }, deps);
 }

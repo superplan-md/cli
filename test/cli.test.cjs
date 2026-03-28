@@ -25,7 +25,7 @@ test('cli without a command shows the main Superplan command list', async () => 
   assert.match(result.stdout, /Authoring:/);
   assert.match(result.stdout, /Execution:/);
   assert.match(result.stdout, /change\s+Create tracked change scaffolding/);
-  assert.match(result.stdout, /init\s+Initialize the current repository for Superplan/);
+  assert.match(result.stdout, /init\s+Initialize Superplan \(global or local installation\)/);
   assert.match(result.stdout, /status\s+Show active, ready, review, blocked, and feedback-needed queues/);
   assert.match(result.stdout, /Diagnostics:/);
   assert.match(result.stdout, /sync\s+Reconcile repo state after task-file edits or runtime drift/);
@@ -109,15 +109,16 @@ test('task --help explains task subcommands explicitly', async () => {
   assert.match(result.stdout, /Review:/);
   assert.match(result.stdout, /Runtime:/);
   assert.match(result.stdout, /Repair:/);
-  assert.match(result.stdout, /inspect show <task_id>\s+Show one task, its readiness details, and its execution recipe/);
+  assert.match(result.stdout, /inspect show <task_ref>\s+Show one task, its readiness details, and its execution recipe/);
   assert.match(result.stdout, /scaffold new <change-slug>\s+Scaffold one graph-declared task contract/);
   assert.match(result.stdout, /scaffold batch <change-slug> --stdin\s+Scaffold multiple graph-declared task contracts from JSON stdin/);
-  assert.match(result.stdout, /review complete <task_id>\s+Finish implementation and mark the task done when acceptance criteria pass/);
-  assert.match(result.stdout, /review approve <task_id>\s+Approve an in-review task and mark it done when strict review is required/);
-  assert.match(result.stdout, /review reopen <task_id>\s+Move a review or done task back into implementation/);
-  assert.match(result.stdout, /runtime block <task_id> --reason\s+Pause a task because something external is blocking it/);
+  assert.match(result.stdout, /review complete <task_ref>\s+Finish implementation and mark the task done when acceptance criteria pass/);
+  assert.match(result.stdout, /review approve <task_ref>\s+Approve an in-review task and mark it done when strict review is required/);
+  assert.match(result.stdout, /review reopen <task_ref>\s+Move a review or done task back into implementation/);
+  assert.match(result.stdout, /runtime block <task_ref> --reason\s+Pause a task because something external is blocking it/);
   assert.match(result.stdout, /For a fast start:\s+superplan run --json/);
-  assert.match(result.stdout, /shape changes\/<slug>\/tasks\.md first, validate it, then scaffold task contracts from graph-declared ids/i);
+  assert.match(result.stdout, /For most new work, use `superplan change task add <change-slug> --title "\.\.\." --json`/);
+  assert.match(result.stdout, /Use `task scaffold new` or `task scaffold batch` only when task ids are already declared in the graph/i);
   assert.match(result.stdout, /## Execution/);
   assert.match(result.stdout, /## Verification/);
   assert.doesNotMatch(result.stdout, /\bstart <task_id>\b/);
@@ -134,7 +135,7 @@ test('remove --help explains the explicit non-interactive agent-safe path', asyn
   const result = await runCli(['remove', '--help']);
 
   assert.equal(result.code, 0);
-  assert.match(result.stdout, /Remove deletes Superplan installation and state/);
+  assert.match(result.stdout, /Remove Superplan skills and configuration from agent directories/);
   assert.match(result.stdout, /superplan remove --scope <local\|global\|skip> --yes --json/);
   assert.match(result.stdout, /superplan remove\s+# interactive mode/);
 });
@@ -145,6 +146,31 @@ test('change --help explains change scaffolding commands', async () => {
   assert.equal(result.code, 0);
   assert.match(result.stdout, /Change commands:/);
   assert.match(result.stdout, /new <slug>\s+Create a new tracked change/);
+  assert.match(result.stdout, /task add <change-slug>\s+Add one tracked task and scaffold its contract through the CLI/);
+  assert.match(result.stdout, /Use `change task add` for the normal one-task path\./);
+  assert.match(result.stdout, /Use `task scaffold new` or `task scaffold batch` only when task ids are already declared in the graph/i);
+});
+
+test('status prints human-readable output without --json', async () => {
+  const sandbox = await makeSandbox('superplan-cli-human-status-');
+  await runCli(['init', '--yes', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+
+  const result = await runCli(['status'], { cwd: sandbox.cwd, env: sandbox.env });
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /No runnable tracked work\./);
+  assert.doesNotMatch(result.stdout, /"ok":\s*true/);
+});
+
+test('run prints human-readable idle output without --json', async () => {
+  const sandbox = await makeSandbox('superplan-cli-human-run-');
+  await runCli(['init', '--yes', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+
+  const result = await runCli(['run'], { cwd: sandbox.cwd, env: sandbox.env });
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /No ready tasks available\./);
+  assert.doesNotMatch(result.stdout, /"ok":\s*true/);
 });
 
 test('task show includes readiness reasons without a separate why command', async () => {
@@ -198,7 +224,7 @@ test('removed task diagnostic commands fail fast and point users to the leaner l
   const whyPayload = parseCliJson(await runCli(['task', 'why', 'T-001', '--json']));
   assert.equal(whyPayload.ok, false);
   assert.equal(whyPayload.error.code, 'INVALID_TASK_COMMAND');
-  assert.match(whyPayload.error.message, /task inspect show <task_id>/);
+  assert.match(whyPayload.error.message, /task inspect show <task_ref>/);
 
   const whyNextPayload = parseCliJson(await runCli(['task', 'why-next', '--json']));
   assert.equal(whyNextPayload.ok, false);
@@ -208,12 +234,12 @@ test('removed task diagnostic commands fail fast and point users to the leaner l
   const startPayload = parseCliJson(await runCli(['task', 'start', 'T-001', '--json']));
   assert.equal(startPayload.ok, false);
   assert.equal(startPayload.error.code, 'INVALID_TASK_COMMAND');
-  assert.match(startPayload.error.message, /run <task_id>/);
+  assert.match(startPayload.error.message, /run <task_ref>/);
 
   const resumePayload = parseCliJson(await runCli(['task', 'resume', 'T-001', '--json']));
   assert.equal(resumePayload.ok, false);
   assert.equal(resumePayload.error.code, 'INVALID_TASK_COMMAND');
-  assert.match(resumePayload.error.message, /run <task_id>/);
+  assert.match(resumePayload.error.message, /run <task_ref>/);
 
   const eventsPayload = parseCliJson(await runCli(['task', 'events', 'T-001', '--json']));
   assert.equal(eventsPayload.ok, false);
@@ -237,7 +263,13 @@ test('overlay show was merged into ensure', async () => {
 test('init in human mode prints a concise success message instead of the full payload', async () => {
   const sandbox = await makeSandbox('superplan-init-human-output-');
   const { routeCommand } = loadDistModule('cli/router.js', {
-    select: async () => 'global',
+    select: async ({ message }) => {
+      // First select: global vs local installation
+      if (message && message.includes('How would you like to install')) {
+        return 'local';
+      }
+      return 'local';
+    },
     confirm: async () => true,
     checkbox: async options => {
       if (!Array.isArray(options?.choices) || options.choices.length === 0) {
@@ -267,7 +299,7 @@ test('init in human mode prints a concise success message instead of the full pa
   }
 
   const combinedOutput = output.join('\n');
-  assert.match(combinedOutput, /Project initialized successfully/);
+  assert.match(combinedOutput, /Local installation complete/);
   assert.doesNotMatch(combinedOutput, /"config_path"/);
   assert.equal(errors.length, 0);
 });
@@ -275,8 +307,16 @@ test('init in human mode prints a concise success message instead of the full pa
 test('init asks for global install and respects the denial', async () => {
   const sandbox = await makeSandbox('superplan-init-global-denial-');
   const { routeCommand } = loadDistModule('cli/router.js', {
+    select: async ({ message }) => {
+      // User chooses global installation
+      if (message && message.includes('How would you like to install')) {
+        return 'global';
+      }
+      return 'global';
+    },
     confirm: async ({ message }) => {
-      if (message && typeof message === 'string' && message.includes('global configuration not found')) {
+      // Deny the global installation prompt
+      if (message && typeof message === 'string' && message.includes('global installation not found')) {
         return false;
       }
       return true;
@@ -293,10 +333,8 @@ test('init asks for global install and respects the denial', async () => {
   try {
     await withSandboxEnv(sandbox, async () => routeCommand(['init']));
     const errorOutput = errors.join('\n');
-    const payload = JSON.parse(errorOutput);
-    assert.equal(payload.ok, false);
-    assert.equal(payload.error.code, 'INSTALL_REQUIRED');
-    assert.equal(payload.error.message, 'Superplan global installation is required to initialize a project.');
+    assert.match(errorOutput, /Superplan global installation is required to initialize a project\./);
+    assert.match(errorOutput, /Next: superplan init --yes --json/);
     assert.equal(process.exitCode, 1);
   } finally {
     console.log = originalConsoleLog;

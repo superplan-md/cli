@@ -79,12 +79,12 @@ Align execution to the CLI that exists today.
 
 Current CLI execution surface:
 
-- `superplan task inspect show <task_id> --json`
+- `superplan task inspect show <task_ref> --json`
 - `superplan run --json`
-- `superplan run <task_id> --json`
-- `superplan task runtime block <task_id> --reason <reason> --json`
-- `superplan task runtime request-feedback <task_id> --message <message> --json`
-- `superplan task review complete <task_id> --json`
+- `superplan run <task_ref> --json`
+- `superplan task runtime block <task_ref> --reason <reason> --json`
+- `superplan task runtime request-feedback <task_ref> --message <message> --json`
+- `superplan task review complete <task_ref> --json`
 - `superplan task repair fix --json`
 - `superplan status --json`
 
@@ -93,14 +93,14 @@ Current CLI truth:
 - readiness is computed from parsed task contracts plus runtime state
 - runtime states currently include `in_progress`, `in_review`, `done`, `blocked`, and `needs_feedback`
 - runtime events are append-only in `.superplan/runtime/events.ndjson`
-- `superplan task inspect show <task_id> --json` includes one task's computed readiness reasons
+- `superplan task inspect show <task_ref> --json` includes one task's computed readiness reasons
 - `superplan status --json` is the current narrow runtime summary surface even though `.superplan/runtime/current.json` is still only a product target
 - review handoff is now represented explicitly as `in_review`
 
 Therefore:
 
 - use CLI transitions instead of hand-editing execution state
-- use `status --json` and `run --json` to inspect the frontier; use `task inspect show <task_id> --json` only when one specific task needs deeper inspection
+- use `status --json` and `run --json` to inspect the frontier; use `task inspect show <task_ref> --json` only when one specific task needs deeper inspection
 - keep approval decisions explicit through `complete`, `approve`, and `reopen`
 - do not end an execution turn after successful implementation proof while the task lifecycle still says `pending` or `in_progress`; either move it through `complete` and the appropriate review state or explicitly report the blocker that prevented that transition
 
@@ -110,17 +110,17 @@ Execution is not permission to wander across CLI commands.
 
 - start from the current task contract, the `superplan run` payload, and one relevant verification path
 - do not call `--help`, neighboring subcommands, or extra diagnostic commands when the next execution command is already known
-- use `superplan task inspect show <task_id> --json` only when one task's detailed readiness or reasons are actually needed
+- use `superplan task inspect show <task_ref> --json` only when one task's detailed readiness or reasons are actually needed
 - use `superplan doctor --json` only for setup or install issues, not normal execution
 - once you know the next command, edit, or blocker transition, stop probing the CLI and act
 
 ## User Communication
 
-Execution updates should report progress, not orchestration meta.
+Execution updates must describe actual work performed, current verification, material risks, and user-impacting decisions. Do not narrate Superplan ceremony.
 
-- do not narrate scheduler behavior, subagent dispatch, runtime transitions, or command history unless that detail changes a user-facing decision
-- avoid status lines that are mostly internal process commentary
-- tell the user what changed in the code or project state, what verification is running, what risk is being checked, or what blocker now needs their input
+- do not mention scheduler behavior, subagent dispatch, runtime transitions, command history, or other Superplan mechanics unless the user needs that fact to understand a blocker, risk, or decision
+- reject updates that are primarily internal process commentary
+- tell the user what changed in the workspace, what verification is being run and for what risk, what decision was made and why, or what concrete blocker needs user input
 
 ## Lifecycle Semantics And Recovery
 
@@ -142,7 +142,7 @@ Recovery rules:
 
 - safe idempotent reruns are acceptable where the CLI already supports them
 - use `superplan task repair fix` for deterministic runtime repair
-- use `superplan task repair reset <task_id>` only as an explicit recovery action, not as the normal path
+- use `superplan task repair reset <task_ref>` only as an explicit recovery action, not as the normal path
 
 See `references/runtime-state.md` and `references/lifecycle-semantics.md`.
 
@@ -174,7 +174,7 @@ See `references/trajectory-changes.md`.
 - dispatch verification in parallel where safe and useful
 - dispatch subagents through existing repo scripts, custom skills, or harnesses when those are the trusted path
 - begin task execution
-- inspect the frontier with `superplan status --json` and `superplan run --json`; use `superplan task inspect show <task_id> --json` when one task needs full detail
+- inspect the frontier with `superplan status --json` and `superplan run --json`; use `superplan task inspect show <task_ref> --json` when one task needs full detail
 - repair invalid runtime drift deterministically with `superplan task repair fix` when warranted
 - surface blocked state
 - surface needs-feedback state
@@ -221,8 +221,8 @@ Expected output categories:
 
 - task started
 - task in progress
-- subagents dispatched
-- verification in progress
+- implementation work started
+- verification started for a named risk
 - blocked with reason
 - needs feedback
 - ready for AC review
@@ -239,8 +239,7 @@ Runtime summary should keep legible:
 - what is waiting for the user
 - what changed in the trajectory
 - what can run next
-- which decisions were recorded
-- which gotchas were learned
+- which user-relevant decisions changed execution
 
 ## Current CLI Loop
 
@@ -248,12 +247,12 @@ Use the runtime-aware CLI as the scheduler:
 
 1. `superplan status --json` to inspect the frontier
 2. `superplan run --json` to continue the current task or claim the next ready task
-3. use the task returned by `superplan run --json`; use `superplan run <task_id> --json` when one known ready or paused task should become active; only call `superplan task inspect show <task_id> --json` when you need one task's full details and readiness reasons
-4. `superplan task runtime block <task_id> --reason "<reason>" --json` when blocked
-5. `superplan task runtime request-feedback <task_id> --message "<message>" --json` when user input is required
-6. `superplan task review complete <task_id> --json` only after the task contract is actually satisfied
+3. use the task returned by `superplan run --json`; use `superplan run <task_ref> --json` when one known ready or paused task should become active; only call `superplan task inspect show <task_ref> --json` when you need one task's full details and readiness reasons
+4. `superplan task runtime block <task_ref> --reason "<reason>" --json` when blocked
+5. `superplan task runtime request-feedback <task_ref> --message "<message>" --json` when user input is required
+6. `superplan task review complete <task_ref> --json` only after the task contract is actually satisfied
 7. `superplan task repair fix --json` if runtime state becomes inconsistent
-8. if overlay support is enabled for the workspace and a launchable companion is installed, expect `superplan task scaffold new`, `superplan task scaffold batch`, `superplan run`, `superplan run <task_id>`, and `superplan task review reopen` to auto-reveal the overlay as work becomes visible; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle or empty
+8. if overlay support is enabled for the workspace and a launchable companion is installed, expect `superplan task scaffold new`, `superplan task scaffold batch`, `superplan run`, `superplan run <task_ref>`, and `superplan task review reopen` to auto-reveal the overlay as work becomes visible; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle or empty
 9. after overlay-triggering commands, inspect the returned overlay payload; if `overlay.companion.launched` is false, surface `overlay.companion.reason` instead of assuming the overlay appeared
 
 Close-out rule:
@@ -293,14 +292,14 @@ Execution handoff to `superplan-review` should name the evidence gathered and th
 
 Current CLI:
 
-- `superplan task inspect show <task_id> --json`
+- `superplan task inspect show <task_ref> --json`
 - `superplan run --json`
-- `superplan run <task_id> --json`
-- `superplan task runtime block <task_id> --reason <reason> --json`
-- `superplan task runtime request-feedback <task_id> --message <message> --json`
-- `superplan task review complete <task_id> --json`
+- `superplan run <task_ref> --json`
+- `superplan task runtime block <task_ref> --reason <reason> --json`
+- `superplan task runtime request-feedback <task_ref> --message <message> --json`
+- `superplan task review complete <task_ref> --json`
 - `superplan task repair fix --json`
-- `superplan task repair reset <task_id> --json`
+- `superplan task repair reset <task_ref> --json`
 - `superplan status --json`
 - `superplan overlay ensure --json`
 - `superplan overlay hide --json`
@@ -326,8 +325,8 @@ Should dispatch subagents in parallel:
 Should use the CLI control plane explicitly:
 
 - `superplan run --json` to select or start work
-- `superplan run <task_id> --json` when one known task should become active explicitly
-- `superplan task inspect show <task_id> --json` when a specific task needs full detail or readiness explanation
+- `superplan run <task_ref> --json` when one known task should become active explicitly
+- `superplan task inspect show <task_ref> --json` when a specific task needs full detail or readiness explanation
 - `superplan task runtime block ... --json` or `superplan task runtime request-feedback ... --json` when execution must pause
 - `superplan task repair fix --json` when runtime state has drifted
 

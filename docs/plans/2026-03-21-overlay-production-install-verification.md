@@ -52,7 +52,7 @@ Current behavior:
 - installs the packaged overlay companion for the current platform when the release artifact exists
 - runs machine-level `superplan setup` automatically
 - asks whether the overlay should be enabled by default on this machine
-- when enabled, `superplan task new`, `superplan task batch`, `superplan run`, `superplan run <task_id>`, and `superplan task reopen` auto-reveal the overlay as work becomes visible
+- when enabled, `superplan task new`, `superplan task batch`, `superplan run`, `superplan run <task_ref>`, and `superplan task reopen` auto-reveal the overlay as work becomes visible
 
 ## Release Artifact Contract
 

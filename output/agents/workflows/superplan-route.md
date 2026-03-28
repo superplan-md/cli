@@ -7,7 +7,7 @@ description: Use when Superplan is active and a repo-work request needs an engag
 
 ## Overview
 
-Decide whether Superplan should engage at all, and if it should, choose the smallest useful structure depth without under-shaping ambiguous work.
+Decide whether Superplan should engage at all, and if it should, choose structure depth aggressively enough to preserve visibility, verification quality, and delegation boundaries.
 
 This skill owns the `should_superplan_engage?` decision and the initial depth choice.
 
@@ -51,7 +51,7 @@ Inputs:
 Assumptions:
 
 - structure depth is a workflow choice, not a philosophical category
-- once Superplan engages, the smallest useful depth is preferred
+- once Superplan engages, the burden of proof is on shallower structure for dense or multi-surface work
 - graph truth, task-contract truth, and runtime truth are distinct
 - context risk can outweigh depth risk in brownfield work
 - routing should usually be possible without CLI command-surface exploration
@@ -61,13 +61,22 @@ Assumptions:
 Use this decision order:
 
 1. Ask whether Superplan should stay out entirely.
-2. If not, ask whether the work is one bounded unit or graph-shaped work.
+2. If not, ask whether the work is truly one bounded executable unit or whether structure loss would hide important surfaces.
 3. Ask whether missing or stale context is the real blocker.
-4. Choose the smallest depth that preserves trust, visibility, and correct downstream shaping.
+4. Choose the shallowest depth that still preserves trust, visibility, verification quality, and correct downstream shaping.
 
-Prefer under-ceremony over over-ceremony only until trust or coordination would be lost.
-If lack of structure would hide real dependencies, choose the next deeper mode.
-If the input is a dense requirement dump, JTBD list, or multi-constraint brief, bias upward rather than pretending it is already a clean task graph.
+Default upward for dense, multi-surface, or multi-step work.
+The burden of proof is on choosing `task`, not on choosing `slice`.
+Prefer lower ceremony only until visibility, delegation quality, or verification quality would be lost.
+If lack of structure would hide real dependencies, parallel-safe splits, or differing acceptance checks, choose the next deeper mode.
+If the input is a dense requirement dump, JTBD list, or multi-constraint brief, treat it as graph-shaped unless there is a strong reason not to.
+
+Hard routing triggers:
+
+- if the request has 3 or more distinct deliverables, surfaces, or verification concerns, it is not `task`; route to at least `slice` unless there is a strong reason for `program`
+- if parallelization would be useful, do not route as a single `task`
+- if different parts of the work will require different acceptance checks, they should usually not share one task contract
+- do not flatten multi-surface work into one task merely because one agent could personally execute it
 
 ## CLI Discipline
 
@@ -89,15 +98,15 @@ Do not expose routing mechanics as progress narration.
 
 - `stay_out`: direct answer, no durable artifact
 - `direct`: engaged but tiny and obvious; always create one lightweight tracked task — task creation is non-optional even for the smallest work; the only exception is work that qualifies for Stay Out (one file, no decisions)
-- `task`: one bounded, reviewable task contract is enough
-- `slice`: bounded multi-step work; usually needs a small implementation plan plus a small task graph, and should add a spec when target truth is still fuzzy
+- `task`: one bounded, reviewable task contract is enough; this is only correct when visibility, verification, and coordination would not improve from further decomposition
+- `slice`: bounded multi-step or multi-surface work; usually needs a small implementation plan plus a small task graph, and should add a spec when target truth is still fuzzy
 - `program`: broad, ambiguous, multi-workstream, or major-interface work; should usually route through clarification plus plan/spec work before final task-graph authoring
 
 Expected artifact pattern by depth:
 
 - `direct`: always `tasks.md` plus one CLI-scaffolded lightweight task contract — always required for visibility, even for tiny work; the only exception is Stay Out (one file, no decisions)
 - `task`: `tasks.md` plus one CLI-scaffolded normal task contract
-- `slice`: usually `plan.md`, `tasks.md`, and CLI-scaffolded `tasks/T-*.md`; add specs when target misunderstanding is the bigger risk than sequencing
+- `slice`: usually `plan.md`, `tasks.md`, and CLI-scaffolded `tasks/T-*.md`; add specs when target misunderstanding is the bigger risk than sequencing; expect multiple tracked tasks, not one overloaded contract
 - `program`: clarification and/or brainstorm output, then `plan.md`, `tasks.md`, CLI-scaffolded `tasks/T-*.md`, and specs where multiple interfaces, expectations, or product truths need durable capture
 
 Graph rule:
@@ -120,6 +129,7 @@ See `references/depth-modes.md`.
 - decide `slice`
 - decide `program`
 - decide whether context work should happen first
+- produce an explicit depth decision that downstream shaping can consume without guesswork
 - produce a short rationale for the decision
 - note the expected artifact pattern for the chosen depth
 
@@ -131,6 +141,8 @@ See `references/depth-modes.md`.
 - forcing spec-first or plan-first ritual
 - over-decomposing small work
 - under-shaping large ambiguous work just to preserve the appearance of low ceremony
+- choosing `task` for dense requirement dumps, multi-surface changes, or divergent verification work without a concrete reason
+- treating "one agent can do it" as evidence that one task is enough
 - routing to context first just because the repo is large
 - treating task files as the whole tracked model
 - choosing `program` just because the request sounds important
@@ -161,6 +173,7 @@ Good candidates to record:
 - a `direct` call for work that sounded bigger than it really was
 - a context-first call where context risk clearly outweighed depth risk
 - a hard `slice` versus `program` judgment
+- a deliberate choice to keep work at `task` despite dense inputs that would normally force `slice`
 
 Do not log routine obvious cases.
 
@@ -177,8 +190,12 @@ See `references/stay-out-cases.md` and `references/gotchas.md`.
 
 Recommended output shape:
 
+- lead with the practical read on the user's intent and the main reason structure is or is not needed
 - engagement decision
 - structure-depth mode
+- explicit reasons the chosen depth will preserve visibility, verification quality, and delegation quality
+- alternate paths considered when they are realistic
+- recommendation and opinionated reason
 - expected artifact pattern
 - context note if relevant
 - short reason
@@ -220,12 +237,15 @@ Should route to `task`:
 
 - one bounded bugfix or feature with clear acceptance criteria
 - one reviewable unit where a normal task contract is enough
+- work where parallelization, visibility, and verification do not materially improve from a split
 
 Should route to `slice`:
 
 - bounded but multi-step work
 - one workstream with meaningful sequencing or decomposition needs
 - work where implementation planning matters more than spec clarification
+- requests with 3 or more distinct deliverables, surfaces, or verification concerns
+- work that would benefit from parallel-safe subtasks or separate acceptance boundaries
 
 Should route to `program`:
 
@@ -247,4 +267,4 @@ Pressure cases:
 
 Pass condition:
 
-The skill chooses the smallest useful depth, preserves stay-out behavior, routes context gaps correctly, does not silently absorb shaping or execution, and does not flatten dense ambiguous work into an under-shaped task graph.
+The skill chooses enough structure to preserve stay-out behavior, visibility, verification quality, and delegation quality, routes context gaps correctly, does not silently absorb shaping or execution, and does not flatten dense ambiguous work into an under-shaped task graph.

@@ -84,7 +84,7 @@ Safe repeated confirmation is acceptable when the CLI already supports it.
 Examples:
 
 - running a task that is already in progress
-- rerunning `run <task_id>` for the same active task
+- rerunning `run <task_ref>` for the same active task
 
 Do not invent idempotency by mutating runtime files manually.
 
@@ -93,7 +93,7 @@ Do not invent idempotency by mutating runtime files manually.
 Prefer:
 
 - `superplan task repair fix` for deterministic runtime cleanup
-- `superplan task repair reset <task_id>` for explicit recovery when state must be cleared
+- `superplan task repair reset <task_ref>` for explicit recovery when state must be cleared
 
 Avoid:
 

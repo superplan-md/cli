@@ -6,6 +6,7 @@ export function getEmptyRuntimeSnapshot(workspacePath = '') {
     workspace_path: workspacePath,
     session_id: workspacePath ? `workspace:${workspacePath}` : 'workspace:unknown',
     updated_at: new Date(0).toISOString(),
+    tracked_changes: [],
     focused_change: null,
     active_task: null,
     board: {
@@ -21,13 +22,24 @@ export function getEmptyRuntimeSnapshot(workspacePath = '') {
 }
 
 export function getBrowserFallbackSnapshot(workspacePath = '/Users/puneetbhatt/cli') {
+  const trackedChange = {
+    change_id: 'compact-overlay-refresh',
+    title: 'Compact overlay refresh',
+    status: 'in_progress',
+    task_total: 5,
+    task_done: 3,
+    updated_at: '2026-03-19T22:10:00.000Z',
+  };
+
   return {
     workspace_path: workspacePath,
     session_id: `workspace:${workspacePath}`,
     updated_at: '2026-03-19T22:10:00.000Z',
-    focused_change: null,
+    tracked_changes: [trackedChange],
+    focused_change: trackedChange,
     active_task: {
       task_id: 'T-412',
+      change_id: 'compact-overlay-refresh',
       title: 'Refine the compact in-progress overlay UX',
       description: 'Tighten the desktop kanban around live progress cues instead of decorative framing.',
       status: 'in_progress',
@@ -41,6 +53,7 @@ export function getBrowserFallbackSnapshot(workspacePath = '/Users/puneetbhatt/c
       in_progress: [
         {
           task_id: 'T-412',
+          change_id: 'compact-overlay-refresh',
           title: 'Refine the compact in-progress overlay UX',
           description: 'Tighten the desktop kanban around live progress cues instead of decorative framing.',
           status: 'in_progress',
@@ -54,6 +67,7 @@ export function getBrowserFallbackSnapshot(workspacePath = '/Users/puneetbhatt/c
       backlog: [
         {
           task_id: 'T-413',
+          change_id: 'compact-overlay-refresh',
           title: 'Tune the compact motion language',
           status: 'backlog',
         },
@@ -61,6 +75,7 @@ export function getBrowserFallbackSnapshot(workspacePath = '/Users/puneetbhatt/c
       done: [
         {
           task_id: 'T-399',
+          change_id: 'compact-overlay-refresh',
           title: 'Define overlay runtime contract',
           status: 'done',
           started_at: '2026-03-19T21:02:00.000Z',
@@ -68,6 +83,7 @@ export function getBrowserFallbackSnapshot(workspacePath = '/Users/puneetbhatt/c
         },
         {
           task_id: 'T-400',
+          change_id: 'compact-overlay-refresh',
           title: 'Emit overlay snapshot from CLI',
           status: 'done',
           started_at: '2026-03-19T21:20:00.000Z',
@@ -75,6 +91,7 @@ export function getBrowserFallbackSnapshot(workspacePath = '/Users/puneetbhatt/c
         },
         {
           task_id: 'T-401',
+          change_id: 'compact-overlay-refresh',
           title: 'Boot the desktop prototype shell',
           status: 'done',
           started_at: '2026-03-19T21:43:00.000Z',
@@ -84,6 +101,7 @@ export function getBrowserFallbackSnapshot(workspacePath = '/Users/puneetbhatt/c
       blocked: [
         {
           task_id: 'T-414',
+          change_id: 'compact-overlay-refresh',
           title: 'Validate fullscreen-space panel behavior',
           status: 'blocked',
           reason: 'Needs fullscreen verification on the real macOS panel path.',

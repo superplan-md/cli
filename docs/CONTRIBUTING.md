@@ -29,12 +29,12 @@ Emits artifacts to `dist/release/overlay/`.
 ## Internals
 
 ### Task Contracts
-Tasks live in `.superplan/changes/<slug>/tasks/T-xxx.md`.
+Tasks live in `~/.config/superplan/changes/<slug>/tasks/T-xxx.md`.
 Required sections: `## Description`, `## Acceptance Criteria`.
 
 ### Runtime Model
-- `.superplan/runtime/tasks.json`: Execution state.
-- `.superplan/runtime/events.ndjson`: Event log.
+- `~/.config/superplan/runtime/tasks.json`: Execution state.
+- `~/.config/superplan/runtime/events.ndjson`: Event log.
 
 ### Visibility Reports
-`superplan visibility report --json` groups runtime events into run boundaries and writes reports to `.superplan/runtime/reports/`.
+`superplan visibility report --json` groups runtime events into run boundaries and writes reports to `~/.config/superplan/runtime/reports/`.

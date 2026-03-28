@@ -17,6 +17,7 @@ import { parse } from './parse';
 import { inspectOverlayCompanionInstall } from '../overlay-companion';
 import { readOverlayPreferences } from '../overlay-preferences';
 import { collectWorkspaceHealthIssues } from '../workspace-health';
+import { getGlobalSuperplanPaths } from '../global-superplan';
 import { getTaskRef, toQualifiedTaskId } from '../task-identity';
 import { commandNextAction, stopNextAction, type NextAction } from '../next-action';
 
@@ -116,7 +117,8 @@ async function collectDeepIssues(cwd: string): Promise<DoctorIssue[]> {
   }
 
   const tasks = parseResult.data.tasks as ParsedTask[];
-  const runtimePath = path.join(cwd, '.superplan', 'runtime', 'tasks.json');
+  const globalPaths = getGlobalSuperplanPaths();
+  const runtimePath = path.join(globalPaths.runtimeDir, 'tasks.json');
   const runtimeState = await readRuntimeState(runtimePath);
   const mergedTasks = tasks.map(task => applyRuntimeStatus(task, runtimeState.tasks[getTaskRef(task)]));
   const taskMap = new Map(tasks.map(task => [getTaskRef(task), task]));
@@ -199,14 +201,15 @@ export async function doctor(args: string[] = []) {
   const configPath = path.join(homeDir, '.config', 'superplan', 'config.toml');
   const skillsPath = path.join(homeDir, '.config', 'superplan', 'skills');
   const deep = args.includes('--deep');
-  const overlayPreferences = await readOverlayPreferences(workspaceRoot);
+  const globalPaths = getGlobalSuperplanPaths();
+  const overlayPreferences = await readOverlayPreferences(globalPaths.superplanRoot);
   const overlayCompanion = await inspectOverlayCompanionInstall();
 
   if (!await pathExists(configPath)) {
     issues.push({
       code: 'CONFIG_MISSING',
       message: 'Global config not found',
-      fix: 'Run superplan install --quiet --json',
+      fix: 'Run superplan init --yes --json',
     });
   }
 
@@ -215,7 +218,7 @@ export async function doctor(args: string[] = []) {
     issues.push({
       code: 'SKILLS_MISSING',
       message: 'Global skills not installed',
-      fix: 'Run superplan install --quiet --json',
+      fix: 'Run superplan init --yes --json',
     });
   }
 
@@ -234,7 +237,7 @@ export async function doctor(args: string[] = []) {
         issues.push({
           code: 'AGENT_SKILLS_MISSING',
           message: `Superplan skills not installed for ${agent.name} agent`,
-          fix: 'Run superplan install --quiet --json',
+          fix: 'Run superplan init --yes --json',
         });
       }
     }
@@ -254,10 +257,10 @@ export async function doctor(args: string[] = []) {
     });
   }
 
-  issues.push(...await collectWorkspaceHealthIssues(workspaceRoot));
+  issues.push(...await collectWorkspaceHealthIssues(globalPaths.superplanRoot));
 
   if (deep) {
-    issues.push(...await collectDeepIssues(workspaceRoot));
+    issues.push(...await collectDeepIssues(globalPaths.superplanRoot));
   }
 
   return {

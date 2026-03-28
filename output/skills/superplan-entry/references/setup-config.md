@@ -6,22 +6,22 @@ Use this reference when entry routing needs to explain where setup state, init s
 
 - CLI install: `superplan` must exist as a machine-level command before normal workflow use
 - host setup: `superplan init` makes Superplan available to the current agent environment
-- workspace init: `superplan init --scope local --yes --json` is the fast agent path that makes the current repo participate in Superplan
+- workspace init: `superplan init --yes --json` is the fast agent path that makes the current repo participate in Superplan
 
 Keep these layers distinct in user guidance.
 
 ## Stable Config Surfaces
 
 - global config: `~/.config/superplan/config.toml`
-- workspace config: `<repo>/.superplan/config.toml`
+- workspace integration markers: repo-managed instruction files such as `AGENTS.md`, `CLAUDE.md`, or agent skill folders
 
-Workspace config overrides global config.
+Workspace integration markers complement global config and let the current repo participate in Superplan.
 
 ## Default Setup Bias
 
 - prefer global host integration by default when it actually matters for the current work
 - treat local-only integration as an advanced path unless the user asks for it
-- keep repo-local state inside `.superplan/`
+- keep tracked Superplan state in `~/.config/superplan/` and repo-local agent instructions in the workspace
 
 ## What Belongs In Config
 
