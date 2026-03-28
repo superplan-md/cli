@@ -1,6 +1,6 @@
 ---
 name: superplan-release
-description: Use when the user asks whether something is ready to ship, publish, or recommend as production-ready and a disciplined release check is needed.
+description: Use when someone asks whether the current product slice is ready to ship, publish, or recommend and the answer depends on a disciplined release-quality check.
 ---
 
 # Release Readiness

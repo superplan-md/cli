@@ -1,6 +1,6 @@
 ---
 name: superplan-plan
-description: Use when the target is understood and Superplan needs an implementation plan or execution sequence before task execution.
+description: Use when the target is understood but the work still needs an execution path, task breakdown, or proof strategy before implementation begins.
 ---
 
 # Writing Plans

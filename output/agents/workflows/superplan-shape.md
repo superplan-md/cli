@@ -1,6 +1,6 @@
 ---
 name: superplan-shape
-description: Use when Superplan has decided to engage and the request needs durable work artifacts created at the right structure depth.
+description: Use when Superplan has decided to engage and the work still needs plans, specs, proof paths, or multiple tracked tasks shaped before bounded execution can start.
 ---
 
 # Shape Work
@@ -14,6 +14,14 @@ It is a trajectory shaper.
 
 Its job is to shape work so the agent can move with bounded autonomy while staying aligned to the user's real expectations.
 It must not collapse graph-shaped work into a single task merely because one agent could carry it alone.
+
+## Phase Ownership Rule
+
+This skill owns artifact creation and execution trajectory, not open-ended analysis.
+
+- shape the minimum durable structure that makes the next execution move safe
+- choose the proof path before broad implementation starts
+- once the executable frontier is clear, stop shaping and hand to execution
 
 ## Trigger
 

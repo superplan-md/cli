@@ -1,6 +1,6 @@
 ---
 name: superplan-postmortem
-description: Use after a task completes, fails, or stalls to capture what went wrong, what almost went wrong, and what should change next time.
+description: Use when completed or failed work exposed a reusable lesson, recurring trap, or process weakness worth capturing for future tasks.
 ---
 
 # Retrospective Postmortem

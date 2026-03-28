@@ -28,6 +28,7 @@ import {
   shouldAutoExpandCompactDetail,
   shouldShowCompactDetail,
 } from './lib/compact-state.js';
+import { getCompactFallbackDescription } from './lib/compact-copy.js';
 
 type OverlayTask = {
   task_id: string;
@@ -113,6 +114,7 @@ let mode: PrototypeMode = 'compact';
 let latestSnapshot: OverlaySnapshot | null = null;
 let latestSnapshots: OverlaySnapshot[] = [];
 let latestControlStates: OverlayControlState[] = [];
+let selectedChangeKey: string | null = null;
 let lastSnapshotText = '';
 let lastControlText = '';
 let lastAppliedVisibility: boolean | null = null;
@@ -175,6 +177,10 @@ function getSnapshotSelectionKey(snapshot: OverlaySnapshot | null | undefined): 
   }
 
   return `${snapshot.session_id}|${snapshot.workspace_path}|${snapshot.updated_at}`;
+}
+
+function getChangeSelectionKey(workspacePath: string, changeId: string): string {
+  return `${workspacePath}::${changeId}`;
 }
 
 function compareSnapshots(left: OverlaySnapshot, right: OverlaySnapshot): number {
@@ -684,102 +690,159 @@ function getSnapshotTasksForChange(snapshot: OverlaySnapshot, changeId: string):
   ].filter(task => task.change_id === changeId);
 }
 
-function taskGroupLabel(status: OverlayTask['status']): string {
-  if (status === 'needs_feedback') {
-    return 'Needs you';
+function getActiveChange(snapshot: OverlaySnapshot | null): OverlayChange | null {
+  if (!snapshot) {
+    return null;
   }
 
-  if (status === 'in_progress') {
-    return 'In progress';
+  if (snapshot.active_task?.change_id) {
+    return getSnapshotTrackedChanges(snapshot).find(change => change.change_id === snapshot.active_task?.change_id) ?? null;
   }
 
-  if (status === 'blocked') {
-    return 'Blocked';
-  }
-
-  if (status === 'done') {
-    return 'Done';
-  }
-
-  return 'Backlog';
+  return snapshot.focused_change ?? getSnapshotTrackedChanges(snapshot)[0] ?? null;
 }
 
-function changeTaskGroupMarkup(status: OverlayTask['status'], tasks: OverlayTask[]): string {
-  if (tasks.length === 0) {
-    return '';
+function getSelectedChangeContext(): { snapshot: OverlaySnapshot; change: OverlayChange } | null {
+  const snapshots = getRenderableSnapshots();
+  const allChanges = snapshots.flatMap(snapshot => (
+    getSnapshotTrackedChanges(snapshot).map(change => ({
+      snapshot,
+      change,
+      key: getChangeSelectionKey(snapshot.workspace_path, change.change_id),
+    }))
+  ));
+
+  if (allChanges.length === 0) {
+    return null;
   }
 
+  const selected = selectedChangeKey
+    ? allChanges.find(entry => entry.key === selectedChangeKey)
+    : null;
+
+  if (selected) {
+    return {
+      snapshot: selected.snapshot,
+      change: selected.change,
+    };
+  }
+
+  const primarySnapshot = getPrimarySnapshot();
+  const activeChange = getActiveChange(primarySnapshot);
+  if (primarySnapshot && activeChange) {
+    selectedChangeKey = getChangeSelectionKey(primarySnapshot.workspace_path, activeChange.change_id);
+    return {
+      snapshot: primarySnapshot,
+      change: activeChange,
+    };
+  }
+
+  selectedChangeKey = allChanges[0].key;
+  return {
+    snapshot: allChanges[0].snapshot,
+    change: allChanges[0].change,
+  };
+}
+
+function changeTaskCardMarkup(task: OverlayTask): string {
   return `
-    <section class="change-card__task-group">
-      <div class="change-card__task-group-header">
-        <span>${escapeHtml(taskGroupLabel(status))}</span>
-        <span>${escapeHtml(String(tasks.length))}</span>
+    <article class="task-card task-card--${task.status}">
+      <div class="task-card__topline">
+        <p class="task-card__eyebrow">${taskLeadMarkup(task)}</p>
       </div>
-      <div class="change-card__task-list">
-        ${tasks.map(task => `
-          <article class="task-card task-card--${task.status}">
-            <div class="task-card__topline">
-              <p class="task-card__eyebrow">${taskLeadMarkup(task)}</p>
-            </div>
-            <strong>${escapeHtml(task.title)}</strong>
-            ${getTaskNote(task) ? `<p class="task-card__note">${escapeHtml(getTaskNote(task)!)}</p>` : ''}
-            ${taskMetaMarkup(task)}
-          </article>
-        `).join('')}
+      <strong>${escapeHtml(task.title)}</strong>
+      ${getTaskNote(task) ? `<p class="task-card__note">${escapeHtml(getTaskNote(task)!)}</p>` : ''}
+      ${taskMetaMarkup(task)}
+    </article>
+  `;
+}
+
+function columnMarkup(title: string, tone: 'default' | 'active' | 'done' | 'blocked' | 'needs-feedback', tasks: OverlayTask[], emptyLabel: string): string {
+  return `
+    <section class="board-column board-column--${tone}">
+      <header class="board-column__header">
+        <div class="board-column__heading">
+          <h3>${escapeHtml(title)}</h3>
+        </div>
+        <span class="board-count-pill">${escapeHtml(String(tasks.length))}</span>
+      </header>
+      <div class="board-column__rule" aria-hidden="true"></div>
+      <div class="board-stack ${tasks.length === 0 ? 'board-stack--empty' : ''}">
+        ${tasks.length === 0
+          ? `<div class="board-empty"><p>${escapeHtml(emptyLabel)}</p></div>`
+          : tasks.map(changeTaskCardMarkup).join('')}
       </div>
     </section>
   `;
 }
 
-function changeCardMarkup(snapshot: OverlaySnapshot, change: OverlayChange): string {
+function buildSelectedChangeBoard(snapshot: OverlaySnapshot, change: OverlayChange): string {
   const tasks = getSnapshotTasksForChange(snapshot, change.change_id);
-  const workspaceName = getWorkspaceName(snapshot.workspace_path);
-  const remainingTasks = Math.max(0, change.task_total - change.task_done);
-
-  const groupedMarkup = ([
-    'needs_feedback',
-    'in_progress',
-    'backlog',
-    'blocked',
-    'done',
-  ] as OverlayTask['status'][]).map(status => (
-    changeTaskGroupMarkup(status, tasks.filter(task => task.status === status))
-  )).join('');
+  const grouped = {
+    needs_feedback: tasks.filter(task => task.status === 'needs_feedback'),
+    in_progress: tasks.filter(task => task.status === 'in_progress'),
+    backlog: tasks.filter(task => task.status === 'backlog'),
+    blocked: tasks.filter(task => task.status === 'blocked'),
+    done: tasks.filter(task => task.status === 'done'),
+  };
 
   return `
-    <article class="change-card change-card--${change.status}">
-      <header class="change-card__header">
-        <div class="change-card__title-block">
-          <div class="change-card__eyebrow-row">
-            <span class="change-card__workspace">${escapeHtml(workspaceName)}</span>
-            <span class="change-card__status">${escapeHtml(changeStatusLabel(change.status))}</span>
-          </div>
-          <h3>${escapeHtml(change.title)}</h3>
-          <p class="change-card__meta">${escapeHtml(snapshot.workspace_path)}</p>
-        </div>
-        <div class="change-card__counts">
-          <span class="change-card__count">${escapeHtml(`${change.task_done}/${change.task_total}`)}</span>
-          <span class="change-card__count-label">${escapeHtml(remainingTasks === 0 ? 'Complete' : `${remainingTasks} left`)}</span>
-        </div>
-      </header>
-      <div class="change-card__chips">
-        <span class="change-card__chip">${escapeHtml(change.change_id)}</span>
-        <span class="change-card__chip">${escapeHtml(`Updated ${new Date(change.updated_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`)}</span>
-      </div>
-      <div class="change-card__body">
-        ${groupedMarkup || '<p class="change-card__empty">No tasks yet for this change.</p>'}
-      </div>
-    </article>
+    <section class="board-grid">
+      ${columnMarkup('Needs You', 'needs-feedback', grouped.needs_feedback, 'Nothing waiting on you')}
+      ${columnMarkup('In Progress', 'active', grouped.in_progress, 'No live task')}
+      ${columnMarkup('Backlog', 'default', grouped.backlog, 'Nothing queued')}
+      ${columnMarkup('Blocked', 'blocked', grouped.blocked, 'Nothing blocked')}
+      ${columnMarkup('Done', 'done', grouped.done, 'Nothing shipped yet')}
+    </section>
   `;
 }
 
-function expandedCardGridMarkup(): string {
-  const snapshots = getRenderableSnapshots();
-  const cards = snapshots.flatMap(snapshot => (
-    getSnapshotTrackedChanges(snapshot).map(change => changeCardMarkup(snapshot, change))
-  ));
+function workspaceFolderMarkup(snapshot: OverlaySnapshot, selectedKey: string | null): string {
+  const workspaceName = getWorkspaceName(snapshot.workspace_path);
+  const changes = getSnapshotTrackedChanges(snapshot);
 
-  if (snapshots.length === 0 || cards.length === 0) {
+  return `
+    <section class="workspace-folder">
+      <header class="workspace-folder__header">
+        <div class="workspace-folder__title-row">
+          <span class="workspace-folder__icon" aria-hidden="true">⌂</span>
+          <span class="workspace-folder__title">${escapeHtml(workspaceName)}</span>
+        </div>
+        <span class="workspace-folder__count">${escapeHtml(String(changes.length))}</span>
+      </header>
+      <div class="workspace-folder__changes">
+        ${changes.map(change => {
+          const key = getChangeSelectionKey(snapshot.workspace_path, change.change_id);
+          const isSelected = key === selectedKey;
+          const isActive = snapshot.active_task?.change_id === change.change_id || change.status === 'in_progress';
+
+          return `
+            <button
+              class="change-thread ${isSelected ? 'change-thread--selected' : ''}"
+              data-change-key="${escapeHtml(key)}"
+              type="button"
+            >
+              <span class="change-thread__main">
+                <span class="change-thread__title-row">
+                  <span class="change-thread__title">${escapeHtml(change.title)}</span>
+                  ${isActive ? '<span class="change-thread__loader" aria-hidden="true"></span>' : ''}
+                </span>
+                <span class="change-thread__meta">${escapeHtml(changeStatusLabel(change.status))}</span>
+              </span>
+              <span class="change-thread__progress">${escapeHtml(`${change.task_done}/${change.task_total}`)}</span>
+            </button>
+          `;
+        }).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function expandedBoardLayoutMarkup(): string {
+  const snapshots = getRenderableSnapshots();
+  const selectedContext = getSelectedChangeContext();
+
+  if (snapshots.length === 0 || !selectedContext) {
     return `
       <section class="change-card-grid change-card-grid--empty">
         <article class="change-card change-card--empty">
@@ -798,19 +861,58 @@ function expandedCardGridMarkup(): string {
     `;
   }
 
+  const { snapshot, change } = selectedContext;
+  const workspaceName = getWorkspaceName(snapshot.workspace_path);
+  const remainingTasks = Math.max(0, change.task_total - change.task_done);
+
   return `
-    <section class="change-card-grid">
-      ${cards.join('')}
+    <section class="board-layout">
+      <aside class="board-sidebar">
+        <div class="board-sidebar__header">
+          <p class="eyebrow">Threads</p>
+          <p class="board-sidebar__subcopy">Workspaces and tracked changes</p>
+        </div>
+        <div class="board-sidebar__folders">
+          ${snapshots.map(item => workspaceFolderMarkup(item, selectedChangeKey)).join('')}
+        </div>
+      </aside>
+
+      <section class="board-detail">
+        <header class="board-detail__header">
+          <div class="board-detail__copy">
+            <p class="eyebrow">${escapeHtml(workspaceName)}</p>
+            <h2>${escapeHtml(change.title)}</h2>
+            <p class="board-detail__meta">${escapeHtml(snapshot.workspace_path)}</p>
+          </div>
+          <div class="board-detail__stats">
+            <span class="board-detail__stat-value">${escapeHtml(`${change.task_done}/${change.task_total}`)}</span>
+            <span class="board-detail__stat-label">${escapeHtml(remainingTasks === 0 ? 'All tasks complete' : `${remainingTasks} tasks left`)}</span>
+          </div>
+        </header>
+
+        ${buildSelectedChangeBoard(snapshot, change)}
+      </section>
     </section>
   `;
 }
 
 function getCompactTaskProgress(snapshot: OverlaySnapshot): { done: number; total: number; ratio: number } {
+  const activeChange = getActiveChange(snapshot);
+  if (activeChange && activeChange.task_total > 0) {
+    return {
+      done: activeChange.task_done,
+      total: activeChange.task_total,
+      ratio: activeChange.task_done / activeChange.task_total,
+    };
+  }
+
   return getSnapshotTaskProgress(snapshot);
 }
 
 function getCompactTaskDescription(task: OverlayTask | null): string {
-  return task?.description?.trim() || 'Active task in progress.';
+  return getCompactFallbackDescription(task, {
+    secondaryLabel: 'Active task in progress.',
+  });
 }
 
 function compactWorkingDescriptionMarkup(task: OverlayTask | null): string {
@@ -824,24 +926,18 @@ function compactWorkingDescriptionMarkup(task: OverlayTask | null): string {
   return escapeHtml(getCompactTaskDescription(task));
 }
 
-function getCompactDetailEyebrow(snapshot: OverlaySnapshot, task: OverlayTask | null, reviewReady: boolean): string {
-  if (snapshot.active_task) {
-    return 'Working now';
+function getCompactTaskContextLabel(snapshot: OverlaySnapshot, task: OverlayTask | null): string {
+  const workspaceName = getWorkspaceName(snapshot.workspace_path);
+  const activeChange = getActiveChange(snapshot);
+  const parts = [workspaceName];
+
+  if (activeChange?.title) {
+    parts.push(activeChange.title);
+  } else if (task?.change_id) {
+    parts.push(task.change_id);
   }
 
-  if (task?.status === 'blocked') {
-    return 'Blocked';
-  }
-
-  if (task?.status === 'done') {
-    return 'Recently finished';
-  }
-
-  if (reviewReady) {
-    return 'Ready for review';
-  }
-
-  return 'Up next';
+  return parts.join(' / ');
 }
 
 function compactDetailDescriptionMarkup(
@@ -870,16 +966,15 @@ function compactDetailDescriptionMarkup(
     }
   }
 
-  const note = task ? getTaskNote(task) ?? task.description?.trim() ?? null : null;
+  const note = task ? getTaskNote(task) : null;
   if (note) {
     return escapeHtml(note);
   }
 
-  if (reviewReady) {
-    return 'Task complete and waiting for approval.';
-  }
-
-  return escapeHtml(viewModel.secondaryLabel);
+  return escapeHtml(getCompactFallbackDescription(task, {
+    reviewReady,
+    secondaryLabel: viewModel.secondaryLabel,
+  }));
 }
 
 function getCompactChangeEyebrow(change: OverlayChange): string {
@@ -927,19 +1022,57 @@ function compactProgressMarkup(snapshot: OverlaySnapshot): string {
 
   return `
     <span class="compact-indicator__progress" aria-hidden="true">
-      <svg viewBox="0 0 44 44" class="compact-indicator__progress-ring">
-        <circle class="compact-indicator__progress-track" cx="22" cy="22" r="${radius}"></circle>
-        <circle
-          class="compact-indicator__progress-value-ring"
-          cx="22"
-          cy="22"
-          r="${radius}"
-          stroke-dasharray="${circumference.toFixed(2)}"
-          stroke-dashoffset="${dashoffset.toFixed(2)}"
-        ></circle>
-      </svg>
-      <span class="compact-indicator__progress-value">${progress.done}/${progress.total}</span>
+      <span class="compact-indicator__progress-visual">
+        <svg viewBox="0 0 44 44" class="compact-indicator__progress-ring">
+          <circle class="compact-indicator__progress-track" cx="22" cy="22" r="${radius}"></circle>
+          <circle
+            class="compact-indicator__progress-value-ring"
+            cx="22"
+            cy="22"
+            r="${radius}"
+            stroke-dasharray="${circumference.toFixed(2)}"
+            stroke-dashoffset="${dashoffset.toFixed(2)}"
+          ></circle>
+        </svg>
+        <span class="compact-indicator__progress-value">${progress.done}/${progress.total}</span>
+      </span>
+      <span class="compact-indicator__progress-caption">done</span>
     </span>
+  `;
+}
+
+function compactWorkingActionsMarkup(boardLabel: string, showCollapseAction: boolean): string {
+  return `
+    <div class="compact-indicator__action-cluster">
+      <button
+        class="compact-indicator__board-button compact-indicator__board-button--working"
+        data-action="open-board"
+        aria-label="${escapeHtml(boardLabel)}"
+        type="button"
+      >
+        ${compactBoardIconMarkup()}
+      </button>
+      ${showCollapseAction
+        ? `
+          <button
+            class="compact-indicator__utility-button compact-indicator__utility-button--collapse"
+            data-action="collapse-working-card"
+            aria-label="Minimize to compact chip"
+            type="button"
+          >
+            ${compactCollapseIconMarkup()}
+          </button>
+        `
+        : ''}
+      <button
+        class="compact-indicator__utility-button compact-indicator__utility-button--close"
+        data-action="hide-overlay"
+        aria-label="Hide overlay"
+        type="button"
+      >
+        ${compactCloseIconMarkup()}
+      </button>
+    </div>
   `;
 }
 
@@ -1071,7 +1204,7 @@ function compactIndicatorMarkup(viewModel: PrototypeViewModel): string {
   if (viewModel.attentionState === 'normal' && presentation?.primaryTask && latestSnapshot && shouldShowDetail) {
     const detailTask = presentation.primaryTask;
     const reviewReady = presentation.isReviewReadyTask;
-    const eyebrow = getCompactDetailEyebrow(latestSnapshot, detailTask, reviewReady);
+    const eyebrow = getCompactTaskContextLabel(latestSnapshot, detailTask);
     const descriptionMarkup = compactDetailDescriptionMarkup(latestSnapshot, viewModel, detailTask, reviewReady);
     const eyebrowClass = latestSnapshot.active_task
       ? 'compact-indicator__eyebrow'
@@ -1092,38 +1225,7 @@ function compactIndicatorMarkup(viewModel: PrototypeViewModel): string {
           </span>
           <div class="compact-indicator__working-actions">
             ${compactProgressMarkup(latestSnapshot)}
-            <div class="compact-indicator__working-rail">
-              <div class="compact-indicator__working-utility">
-                <button
-                  class="compact-indicator__utility-button compact-indicator__utility-button--close"
-                  data-action="hide-overlay"
-                  aria-label="Hide overlay"
-                  type="button"
-                >
-                  ${compactCloseIconMarkup()}
-                </button>
-                ${presentation.showCollapseAction
-                  ? `
-                    <button
-                      class="compact-indicator__utility-button compact-indicator__utility-button--collapse"
-                      data-action="collapse-working-card"
-                      aria-label="Minimize to compact chip"
-                      type="button"
-                    >
-                      ${compactCollapseIconMarkup()}
-                    </button>
-                  `
-                  : ''}
-              </div>
-              <button
-                class="compact-indicator__board-button compact-indicator__board-button--working"
-                data-action="open-board"
-                aria-label="${escapeHtml(boardLabel)}"
-                type="button"
-              >
-                ${compactBoardIconMarkup()}
-              </button>
-            </div>
+            ${compactWorkingActionsMarkup(boardLabel, presentation.showCollapseAction)}
           </div>
         </div>
       </section>
@@ -1494,7 +1596,7 @@ function render(snapshot: OverlaySnapshot): void {
           </div>
         </header>
 
-        ${expandedCardGridMarkup()}
+        ${expandedBoardLayoutMarkup()}
       </section>
       ${boardResizeZonesMarkup()}
     `;
@@ -1527,6 +1629,20 @@ function render(snapshot: OverlaySnapshot): void {
     event.stopPropagation();
     compactWorkingExpanded = false;
     await setMode('expanded');
+  });
+
+  root.querySelectorAll<HTMLElement>('[data-change-key]').forEach(element => {
+    element.addEventListener('click', () => {
+      const changeKey = element.dataset.changeKey;
+      if (!changeKey) {
+        return;
+      }
+
+      selectedChangeKey = changeKey;
+      if (latestSnapshot) {
+        render(latestSnapshot);
+      }
+    });
   });
 
   root.querySelector('[data-action="show-compact-message"]')?.addEventListener('click', (event) => {
@@ -1777,7 +1893,11 @@ async function syncDerivedVisibility(): Promise<void> {
     if (!bootstrapComplete) {
       return;
     }
-    await terminateOverlayApplication();
+
+    // Keep the companion process alive and just hide the window. A transient
+    // poll mismatch or a momentary runtime gap should not fully terminate the
+    // overlay app and force a relaunch loop.
+    await applyVisibility(false);
     return;
   }
 

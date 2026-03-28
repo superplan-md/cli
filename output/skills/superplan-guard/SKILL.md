@@ -1,6 +1,6 @@
 ---
 name: superplan-guard
-description: Use when a behavior changed or a bug was fixed and the agent should add the smallest durable guard so it does not silently regress.
+description: Use when a fix or behavior change needs the smallest durable test, check, or proof so the contract will fail loudly if it regresses.
 ---
 
 # Regression Guarding

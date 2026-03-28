@@ -1,6 +1,6 @@
 ---
 name: superplan-review
-description: Use when a Superplan task claims completion or downstream work depends on verifying its acceptance criteria and completion evidence.
+description: Use when a tracked task appears done and you need to decide whether its acceptance criteria are truly satisfied by fresh evidence.
 ---
 
 # Review Task Against AC
@@ -11,6 +11,10 @@ Decide whether a task is actually complete against its contract.
 
 This is the Superplan-specific completion gate.
 It must judge completion against the task contract, acceptance criteria, and fresh evidence rather than vibes or implementation plausibility.
+
+## Hard Gate
+
+Do not bless completion when the evidence is stale, partial, or weaker than the acceptance criteria require.
 
 ## Trigger
 

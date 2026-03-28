@@ -8,6 +8,7 @@ Read it first. Follow it even if you misread or skip the full skill chain.
 Before implementation, broad repo exploration, repo-specific planning, or repo-specific clarification:
 
 - load and follow `superplan-entry`
+- if a specific phase skill is a plausible next owner, load it before improvising a custom workflow
 - do not jump straight to `superplan status --json`, `superplan run --json`, or task authoring before `superplan-entry` decides Superplan is actually needed
 - do not scaffold tracked work before `superplan-entry` has decided that Superplan should engage
 - do not begin execution for newly requested repo work until routing has produced an explicit depth choice and shaping has produced an executable frontier
@@ -78,3 +79,10 @@ Once `superplan-entry` has decided Superplan should engage:
 - keep workflow routing internal
 - talk to the user about outcomes, blockers, and decisions, not about skill selection or command choreography
 - every substantial update should say what actual work was done, what verification is being run and for what risk, and what decision or blocker matters now
+
+## 7. Skill Trigger Discipline
+
+- skill descriptions are activation signals, not mini-summaries of workflow steps
+- frontmatter descriptions should describe when to load the skill, using concrete triggers, symptoms, and situations
+- do not hide the real trigger behind vague phrases like "when needed" or "for planning"
+- once a specific phase skill clearly applies, prefer that local rule over keeping work under a broad umbrella skill

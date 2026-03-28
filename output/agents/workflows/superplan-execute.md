@@ -1,6 +1,6 @@
 ---
 name: superplan-execute
-description: Use when tracked Superplan work exists and one or more tasks are ready to execute, block, request feedback, or move toward review.
+description: Use when tracked work is already shaped and the next move is to execute, verify, block, or request feedback without replanning from scratch.
 ---
 
 # Execute Task Graph
@@ -19,6 +19,15 @@ Execution should be primarily subagent-driven:
 - dispatch verification in parallel where safe
 - collect evidence and runtime signals
 - decide continue, block, ask, review, or re-shape
+
+## Specific-Owner Rule
+
+Once execution starts, prefer the narrowest execution sub-problem over broad workflow reconsideration.
+
+- use `superplan-debug` when a failure blocks forward motion
+- use `superplan-tdd` when a new behavior or bugfix can be expressed as a proof-first implementation step
+- use `superplan-verify` when success claims are approaching faster than proof
+- use `superplan-review` when the question becomes "is this task actually done?"
 
 ## Trigger
 

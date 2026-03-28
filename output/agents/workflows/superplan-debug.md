@@ -1,6 +1,6 @@
 ---
 name: superplan-debug
-description: Use when tracked work is failing, blocked, flaky, or behaving unexpectedly and the system must find root cause before changing code.
+description: Use when tracked work hits a failing check, flaky result, runtime bug, or unexplained behavior and you need root cause before changing code.
 ---
 
 # Systematic Debugging
@@ -14,6 +14,10 @@ Debug by evidence and hypothesis, not patch roulette.
 Do not start broad fixes before reproducing or characterizing the failure well enough to distinguish symptom from cause.
 
 If the current evidence does not isolate the failure mode, gather more evidence first.
+
+## Hard Gate
+
+Do not propose or apply speculative fixes before Phase 1 has produced a concrete failure model.
 
 ## Trigger
 

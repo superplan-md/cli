@@ -1,6 +1,6 @@
 ---
 name: superplan-route
-description: Use when Superplan is active and a repo-work request needs an engagement or structure-depth decision, especially when stay-out, context gaps, or direct/task/slice/program boundaries are ambiguous.
+description: Use when Superplan may engage and you need to decide whether to stay lightweight, create one tracked task, gather context first, or shape deeper structure before execution begins.
 ---
 
 # Route Work
@@ -14,6 +14,14 @@ This skill owns the `should_superplan_engage?` decision and the initial depth ch
 This skill routes only.
 It does not shape artifacts.
 It does not execute work.
+
+## Fast Routing Rule
+
+Route quickly and get out of the way.
+
+- decide the lightest honest structure that preserves visibility and proof quality
+- once depth is clear, hand off immediately instead of lingering in routing
+- prefer a specific next owner over extra routing analysis
 
 ## Trigger
 

@@ -1,6 +1,6 @@
 ---
 name: superplan-brainstorm
-description: Support skill. Use only after Superplan entry routing has already established that design clarification is the next blocker because expectations, constraints, taste, or acceptance intent remain ambiguous.
+description: Use when routed repo work still has meaningful ambiguity about behavior, constraints, taste, or acceptance intent, and that ambiguity would make planning or execution unsafe.
 ---
 
 # Brainstorming

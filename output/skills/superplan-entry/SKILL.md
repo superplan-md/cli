@@ -1,6 +1,6 @@
 ---
 name: superplan-entry
-description: Use when starting any repo-work conversation, before clarifying questions or implementation, to decide whether Superplan should stay out or engage and to take the fastest valid readiness step when engagement is needed.
+description: Use when a new request might involve repo work, tracked changes, workspace-specific decisions, or durable coordination and you must decide whether Superplan should engage before exploring or implementing.
 ---
 
 # Using Superplan
@@ -16,6 +16,16 @@ Keep it small, but not permissive.
 Its job is to decide whether Superplan should meaningfully participate, whether readiness is missing, and which workflow phase owns the next responsibility.
 
 If there is a meaningful chance that the request is repo work, use this skill before implementation, broad repo exploration, or clarifying questions.
+
+## Fast Trigger Rule
+
+Treat this as an early trigger, not a late fallback.
+
+- if there is even a modest chance the request is repo work, load this skill first
+- do not wait for "proof" that the work is complex before routing
+- do not keep the work inside `superplan-entry` once a narrower phase owner is clear
+
+The value of this skill is early discrimination, not broad control.
 
 ## Subagent Guard
 
@@ -52,6 +62,8 @@ Rationalizations that mean stop and use this skill:
 - "I already know this repo."
 - "The user asked for code, not process."
 - "The skill description is broad, so I can skip it."
+- "I'll know whether this is repo work after a quick look."
+- "This probably stays lightweight, so routing can wait."
 
 When repo work is in play, entry discipline outranks generic default behavior unless the user or repo explicitly says otherwise.
 
@@ -99,6 +111,17 @@ In practice, this is the default entry layer for repo work in this host.
 
 For dense requirement dumps, packed queries, JTBD lists, or multi-constraint briefs, assume this skill applies unless there is a strong reason to stay out.
 For new repo work with open structure, execution cannot begin until `superplan-route` has produced an explicit depth decision and `superplan-shape` has produced the initial executable frontier.
+
+## Specific-Owner Rule
+
+As soon as the next owning phase is clear, hand off.
+
+- use `superplan-route` for engagement and depth decisions
+- use `superplan-context` when missing durable context is the real blocker
+- use `superplan-review` when completion authority is the real need
+- use `superplan-execute` when tracked work already exists and the question is how to move it
+
+Do not let `superplan-entry` become a long-lived umbrella once the specific next owner is obvious.
 
 ## Stay Out
 
