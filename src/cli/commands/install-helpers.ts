@@ -585,6 +585,18 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
           path.join(baseDir, '.github', 'copilot-instructions.md'),
         ],
       },
+      {
+        name: 'windsurf',
+        path: path.join(baseDir, '.windsurf'),
+        source_subdirs: ['windsurf', 'windsurf-plugin', 'hooks'],
+        install_path: path.join(baseDir, '.windsurf', 'skills'),
+        install_kind: 'skills_namespace',
+        bootstrap_strength: 'skills_only',
+        cleanup_paths: [
+          path.join(baseDir, '.windsurf', 'commands', 'superplan.md'),
+          // Note: .windsurf/skills/ is the install_path, don't clean it up
+        ],
+      },
     ];
   }
 
@@ -670,6 +682,18 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
         path.join(baseDir, '.github', 'copilot-instructions.md'),
       ],
     },
+    {
+      name: 'windsurf',
+      path: path.join(baseDir, '.windsurf'),
+      source_subdirs: ['windsurf', 'windsurf-plugin', 'hooks'],
+      install_path: path.join(baseDir, '.windsurf', 'skills'),
+      install_kind: 'skills_namespace',
+      bootstrap_strength: 'skills_only',
+      cleanup_paths: [
+        path.join(baseDir, '.windsurf', 'commands', 'superplan.md'),
+        // Note: .windsurf/skills/ is the install_path, don't clean it up
+      ],
+    },
   ];
 }
 
@@ -688,6 +712,7 @@ export async function detectVSCodeExtensions(): Promise<Set<string>> {
       if (name.startsWith('google.gemini-cli-vscode')) detected.add('gemini');
       if (name.startsWith('openai.chatgpt')) detected.add('codex');
       if (name.startsWith('github.copilot')) detected.add('copilot');
+      if (name.startsWith('codeium.windsurf')) detected.add('windsurf');
     }
   } catch {
     // Ignore errors if directory doesn't exist
