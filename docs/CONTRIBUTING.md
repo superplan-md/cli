@@ -24,7 +24,13 @@ curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/alpha
 ```bash
 npm run overlay:release
 ```
-Emits artifacts to `dist/release/overlay/`.
+Emits a packaged artifact for the current host platform to `dist/release/overlay/`.
+
+### Overlay GitHub Releases
+```bash
+npm run overlay:release:github -- --tag <release-tag>
+```
+Dispatches the GitHub Actions matrix release workflow, which builds native overlay artifacts for macOS, Linux, and Windows on matching runners and uploads them to the requested GitHub release tag.
 
 ## Internals
 
