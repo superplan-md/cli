@@ -42,10 +42,6 @@ jobs:
             runs_on: macos-14
             platform: darwin
             arch: arm64
-          - label: macOS x64
-            runs_on: macos-13
-            platform: darwin
-            arch: x64
           - label: Linux x64
             runs_on: ubuntu-22.04
             platform: linux
