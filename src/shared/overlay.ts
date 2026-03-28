@@ -1,4 +1,5 @@
 import * as path from 'path';
+import * as os from 'os';
 
 export type OverlayTaskStatus =
   | 'in_progress'
@@ -101,6 +102,12 @@ export interface CreateOverlayControlStateInput {
 }
 
 const OVERLAY_EVENT_KINDS: OverlayEventKind[] = ['needs_feedback', 'all_tasks_done'];
+const GLOBAL_SUPERPLAN_DIR = path.join(os.homedir(), '.config', 'superplan');
+
+export function getWorkspaceOverlayKey(workspacePath: string): string {
+  const workspaceName = path.basename(workspacePath).toLowerCase().replace(/[^a-z0-9]/g, '-');
+  return `workspace-${workspaceName || 'root'}`;
+}
 
 export function createEmptyOverlayBoard(): OverlayBoard {
   return {
@@ -146,7 +153,11 @@ export function createOverlaySnapshot(input: CreateOverlaySnapshotInput): Overla
 }
 
 export function getOverlayRuntimePaths(workspacePath: string): OverlayRuntimePaths {
-  const runtimeDir = path.join(workspacePath, '.superplan', 'runtime');
+  const runtimeDir = path.join(
+    GLOBAL_SUPERPLAN_DIR,
+    'runtime',
+    getWorkspaceOverlayKey(workspacePath),
+  );
 
   return {
     runtime_dir: runtimeDir,

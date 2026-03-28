@@ -35,7 +35,8 @@ These often belong in `direct`, not `stay_out`.
 
 For ambiguous cases:
 
-- prefer the smallest useful depth
+- prefer the lightest depth that still preserves visibility and does not hide real work
+- default upward if multiple deliverables, surfaces, or verification concerns would be hidden by one task
 - but do not choose `stay_out` if real work is expected and a lightweight trace would help
 
 ## Rule Of Thumb

@@ -10,6 +10,7 @@ Before implementation, broad repo exploration, repo-specific planning, or repo-s
 - load and follow `superplan-entry`
 - do not jump straight to `superplan status --json`, `superplan run --json`, or task authoring before `superplan-entry` decides Superplan is actually needed
 - do not scaffold tracked work before `superplan-entry` has decided that Superplan should engage
+- do not begin execution for newly requested repo work until routing has produced an explicit depth choice and shaping has produced an executable frontier
 
 ## 2. `superplan-entry` Owns The Engagement Decision
 
@@ -19,6 +20,7 @@ Before implementation, broad repo exploration, repo-specific planning, or repo-s
 - whether the repo is ready enough to proceed
 - whether missing repo init should be created now
 - which workflow phase owns the next step
+- whether the request must be routed upward because one task would hide visibility, verification, or delegation boundaries
 
 If `superplan-entry` says stay out:
 
@@ -36,6 +38,8 @@ Once Superplan is engaged, task creation is how users see what the agent is doin
 
 **The multi-step rule:** Work with 3 or more distinct steps requires a complete task graph before execution begins. Do not start executing multi-step work from a single task or no task.
 
+**The anti-collapse rule:** If the request has 3 or more distinct deliverables, surfaces, or verification concerns, or if parallelization would be useful, do not flatten it into a single task merely because one agent could execute it alone.
+
 Rationalizations that mean stop and create a task first:
 
 - "This is just a small fix."
@@ -43,6 +47,8 @@ Rationalizations that mean stop and create a task first:
 - "It's only two steps."
 - "The user just wants the code."
 - "This doesn't need structure."
+- "I can hold this all in my head."
+- "One agent can just do the whole thing."
 
 ## 4. Fastest Path For Missing Repo Init
 
@@ -71,3 +77,4 @@ Once `superplan-entry` has decided Superplan should engage:
 - do not assume overlay visibility unless the current workflow phase has verified it
 - keep workflow routing internal
 - talk to the user about outcomes, blockers, and decisions, not about skill selection or command choreography
+- every substantial update should say what actual work was done, what verification is being run and for what risk, and what decision or blocker matters now

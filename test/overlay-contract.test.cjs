@@ -91,13 +91,14 @@ test('overlay snapshot factory preserves explicit event and board payloads', () 
   });
 });
 
-test('overlay runtime paths live under the repo runtime directory', () => {
-  const { getOverlayRuntimePaths } = loadDistModule('shared/overlay.js');
+test('overlay runtime paths live under global workspace-scoped runtime storage', () => {
+  const { getOverlayRuntimePaths, getWorkspaceOverlayKey } = loadDistModule('shared/overlay.js');
+  const workspaceKey = getWorkspaceOverlayKey('/tmp/workspace');
 
   assert.deepEqual(getOverlayRuntimePaths('/tmp/workspace'), {
-    runtime_dir: path.join('/tmp/workspace', '.superplan', 'runtime'),
-    snapshot_path: path.join('/tmp/workspace', '.superplan', 'runtime', 'overlay.json'),
-    control_path: path.join('/tmp/workspace', '.superplan', 'runtime', 'overlay-control.json'),
+    runtime_dir: path.join(process.env.HOME, '.config', 'superplan', 'runtime', workspaceKey),
+    snapshot_path: path.join(process.env.HOME, '.config', 'superplan', 'runtime', workspaceKey, 'overlay.json'),
+    control_path: path.join(process.env.HOME, '.config', 'superplan', 'runtime', workspaceKey, 'overlay-control.json'),
   });
 });
 

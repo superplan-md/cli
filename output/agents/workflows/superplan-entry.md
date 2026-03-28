@@ -12,7 +12,7 @@ Internal category: `workflow-control` / `execution-orchestration`.
 
 This skill replaces the entry discipline that `using-superpowers` used to provide.
 
-Keep it small.
+Keep it small, but not permissive.
 Its job is to decide whether Superplan should meaningfully participate, whether readiness is missing, and which workflow phase owns the next responsibility.
 
 If there is a meaningful chance that the request is repo work, use this skill before implementation, broad repo exploration, or clarifying questions.
@@ -41,6 +41,8 @@ Treat entry routing as mandatory first-contact discipline, not optional advice.
 - do not start broad repo exploration first and claim routing can happen after
 - do not ask clarifying questions first when the real first question is whether Superplan should engage
 - do not rationalize that a dense request is "probably just one task" without checking
+- do not let "smallest useful depth" become a reason to skip an explicit route result
+- do not begin execution for newly requested repo work until the route and shape chain is complete
 
 Rationalizations that mean stop and use this skill:
 
@@ -96,6 +98,7 @@ Use when:
 In practice, this is the default entry layer for repo work in this host.
 
 For dense requirement dumps, packed queries, JTBD lists, or multi-constraint briefs, assume this skill applies unless there is a strong reason to stay out.
+For new repo work with open structure, execution cannot begin until `superplan-route` has produced an explicit depth decision and `superplan-shape` has produced the initial executable frontier.
 
 ## Stay Out
 
@@ -228,6 +231,7 @@ Apply this order:
 5. check readiness layers: CLI availability, init, and context
 6. if the request targets already shaped work, resume the owning workflow phase directly
 7. if the request is new or the structure decision is still open, route to `superplan-route`
+8. if routing chose engaged work for a new request, continue until `superplan-shape` has made the next executable frontier explicit
 
 Do not bounce already shaped work back through `superplan-route` just because the current message is short.
 
@@ -239,7 +243,8 @@ Completion rule:
 - if a readiness command fails, surface the failure concretely and stop
 - if the owning phase is already known, hand off directly in the same turn
 - if the request is dense, packed, or structurally ambiguous, do not stop at "this should route"; continue until the owning next phase is explicit
-- if `superplan-route` is invoked and returns `direct`, `task`, `slice`, or `program`, the work is not done until the next workflow owner is explicit, normally `superplan-shape`
+- if `superplan-route` is invoked and returns `direct`, `task`, `slice`, or `program`, the work is not done until the route result is explicit and the next workflow owner is explicit, normally `superplan-shape`
+- if the request is new and still structurally open, do not stop after routing; execution remains blocked until shaping has created an executable frontier
 
 ## Routing Model
 
@@ -275,6 +280,7 @@ Process-first rule:
 - choose the owning workflow phase first
 - only then let that phase invoke the right support discipline
 - do not end the turn with a vague recommendation to "use Superplan" when a specific owning phase is already knowable
+- do not treat an internal hunch like a route result; the depth choice must be explicit enough for downstream shaping to consume
 
 ## Direct Resume Routes
 
@@ -300,6 +306,8 @@ See `references/routing-boundaries.md`.
 - forcing engagement when Superplan adds no value
 - acting on repo work without a tracked task when the one-file/no-decisions carve-out does not apply
 - starting execution for work with 3 or more distinct steps without a complete task graph
+- starting execution for new tracked work before `superplan-route` has produced an explicit depth choice and `superplan-shape` has produced a concrete executable frontier
+- collapsing dense multi-surface work into one task just because a single agent could personally carry it
 - using entry routing as cover for CLI command-surface exploration once the next workflow owner is already clear
 - calling `--help`, neighboring subcommands, or repeated `status`/`task inspect show`/`doctor` checks without a concrete routing need
 
@@ -341,6 +349,7 @@ One of:
 The output should be brief and legible.
 
 For packed or ambiguous repo-work, "brief" does not mean vague. The output must still make the owning next phase explicit.
+For newly requested engaged work, the output is not complete unless the route result is explicit enough for shaping and the owning next phase is named.
 
 ## Handoff
 
@@ -377,6 +386,7 @@ Should trigger:
 - any repo work request in a host configured for Superplan
 - "Continue the next ready task."
 - "Is T-003 actually done?"
+- dense PRDs, implementation checklists, or multi-surface requirement dumps even when one agent could probably execute them alone
 
 Should stay out:
 
@@ -401,3 +411,8 @@ Ambiguous:
 - "Fix this tiny typo."
 - "Can you look into this bug?" with no clear need for structure yet
 - "Write a quick recommendation doc" where the doc itself may be the deliverable
+
+Hard escalation cases:
+
+- if the request has 3 or more distinct deliverables, surfaces, or verification concerns, do not skip explicit routing
+- if parallelization would be useful, do not let entry hand the work straight to execution as a single task

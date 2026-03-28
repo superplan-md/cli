@@ -1,7 +1,8 @@
 # Depth Modes
 
 Structure depth is a workflow choice.
-Choose the smallest mode that preserves trust, visibility, and correct downstream shaping.
+Choose the shallowest mode that still preserves trust, visibility, verification quality, and correct downstream shaping.
+The burden of proof is on shallower structure for dense or multi-surface work.
 Do not use "smallest" as an excuse to skip clarification, spec, or plan work when ambiguity is the real blocker.
 
 ## `stay_out`
@@ -49,6 +50,7 @@ Use when:
 - one bounded, reviewable unit is enough
 - the work needs a normal task contract and clear acceptance criteria
 - graph structure is not the main coordination problem
+- visibility, delegation, and verification would not materially improve from a split
 
 Examples:
 
@@ -69,6 +71,8 @@ Use when:
 - sequencing or decomposition matters
 - one workstream contains multiple meaningful steps
 - the request is clear enough that a small plan and graph can be trusted without broader clarification
+- the request has 3 or more distinct deliverables, surfaces, or verification concerns
+- parallel-safe work or separate acceptance boundaries would be lost in one task
 
 Examples:
 
@@ -82,6 +86,7 @@ Result:
 - `tasks.md`
 - `tasks/T-*.md`
 - specs only when target misunderstanding is the bigger risk than sequencing
+- expect multiple tracked tasks, not one overloaded contract
 
 ## `program`
 

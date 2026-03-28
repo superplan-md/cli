@@ -7,12 +7,13 @@ description: Use when Superplan has decided to engage and the request needs dura
 
 ## Overview
 
-Create the minimum useful durable artifact structure and execution trajectory for the chosen depth.
+Create the minimum durable artifact structure and execution trajectory that preserves visibility, verification quality, and bounded execution.
 
 This skill is not a task generator.
 It is a trajectory shaper.
 
 Its job is to shape work so the agent can move with bounded autonomy while staying aligned to the user's real expectations.
+It must not collapse graph-shaped work into a single task merely because one agent could carry it alone.
 
 ## Trigger
 
@@ -55,6 +56,25 @@ Assumptions:
 - the right shaping output is often a trajectory, not a frozen perfect plan
 - shaping should stop once the minimum useful artifact set and next executable frontier are clear
 - **multi-step work** means work with 3 or more distinct steps, or work where sequencing across files or components matters; do not rationalize 3-step work as "only two steps" to skip graph shaping
+- dense PRDs, JTBD dumps, implementation checklists, or multi-surface requests should default to multiple tracked tasks unless they truly collapse to one bounded executable unit
+- if different parts of the work need different acceptance checks, they should usually not share one task contract
+- when useful workspace or global skills already exist for planning, brainstorming, review, debugging, or verification, shaping should route execution toward them instead of inventing an ad hoc loop
+
+## Hard Shaping Triggers
+
+Shape multiple tracked tasks when any of the following are true:
+
+- the request has 3 or more distinct deliverables, surfaces, or verification concerns
+- parallelization would be useful
+- different files or components can be owned safely by different workers
+- different acceptance checks apply to different parts of the work
+- one task would reduce visibility into progress, blockers, or verification quality
+
+Anti-collapse rules:
+
+- do not flatten multi-surface work into one task merely because one agent can personally execute it
+- do not use one task when doing so would hide sequencing, parallel-safe work, or different reviewer evidence
+- if the graph split feels optional but would materially improve delegation or verification, make the split
 
 ## Artifact Distinction Rule
 
@@ -136,6 +156,7 @@ Agents should spend their shaping effort deciding what tracked work exists, then
 - `superplan change task add <change-slug> --title "..." ... --json` for additional tracked tasks
 - `superplan change plan set <change-slug> --stdin --json` for change plans
 - `superplan change spec set <change-slug> --name <spec-slug> --stdin --json` for change specs
+- prefer CLI-created task fronts that make parallel-safe delegation obvious instead of relying on one overloaded task contract
 
 Prefer these commands because they are the fastest way to stay helpful without teaching the model bad `.superplan` editing habits.
 
@@ -214,8 +235,9 @@ Keep shaping internals out of routine user updates.
 
 - do not narrate artifact choreography, skill usage, or command sequencing unless the user asked for that level of detail
 - do not send updates that mainly report internal motion such as "shaping the change", "minting task contracts", or lists of explored files and commands
-- communicate the user-relevant result instead: what structure is being added, what ambiguity is being reduced, what acceptance boundary is being defined, or what remains intentionally deferred
+- communicate the user-relevant result instead: what structure is being added, what ambiguity is being reduced, what acceptance boundary is being defined, what can now run in parallel, or what remains intentionally deferred
 - if a plan or task split matters, explain it in project terms rather than Superplan jargon
+- every substantial update should make the actual work legible, not just the existence of structure
 
 ## Workspace Precedence Rule
 
@@ -242,6 +264,7 @@ Treat the workspace's existing setup as the default operating surface.
 - shape against graph invariants such as uniqueness, single membership, acyclicity, and exclusive-group legality
 - identify likely diagnostic risks before execution begins
 - choose the best available verification loop using repo resources first
+- choose workspace-native or global support skills before inventing a custom reasoning loop; if the workspace has no fit, prefer Superplan support skills such as planning, brainstorming, review, debugging, or verification
 - explicitly identify when the shaped work depends on CLI contract expansion rather than just better decomposition
 - migrate legacy task-only work toward root graph ownership when reshaping existing tracked changes
 - define multi-agent write boundaries when the graph is large enough to need them
@@ -255,6 +278,7 @@ Treat the workspace's existing setup as the default operating surface.
   - `autopilot`
   - `checkpointed autopilot`
   - `human-gated`
+- delegate as much as safely possible once ownership boundaries and verification surfaces are clear
 - define re-shape triggers
 - define interruption points
 - identify which shaping decisions should be written to durable decision memory

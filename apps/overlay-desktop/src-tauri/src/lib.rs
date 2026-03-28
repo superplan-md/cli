@@ -14,11 +14,28 @@ use tauri_nspanel::{
 };
 
 fn overlay_runtime_file_path_for_workspace(workspace_root: &Path, file_name: &str) -> PathBuf {
-    workspace_root.join(".superplan/runtime").join(file_name)
+    overlay_runtime_dir_for_workspace(workspace_root).join(file_name)
 }
 
 fn overlay_runtime_dir_for_workspace(workspace_root: &Path) -> PathBuf {
-    workspace_root.join(".superplan/runtime")
+    let workspace_name = workspace_root
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("root")
+        .to_lowercase()
+        .chars()
+        .map(|character| if character.is_ascii_alphanumeric() { character } else { '-' })
+        .collect::<String>();
+
+    let home_dir = env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    home_dir
+        .join(".config")
+        .join("superplan")
+        .join("runtime")
+        .join(format!("workspace-{}", if workspace_name.is_empty() { "root" } else { &workspace_name }))
 }
 
 #[derive(Default)]
@@ -136,7 +153,7 @@ fn apply_secondary_launch(
 #[tauri::command]
 fn load_overlay_snapshot(app_handle: tauri::AppHandle) -> Result<String, String> {
     let snapshot_path = resolve_overlay_snapshot_path(&app_handle)?.ok_or_else(|| {
-        "failed to locate .superplan/runtime/overlay.json from explicit launch workspace, SUPERPLAN_OVERLAY_WORKSPACE, current working directory, or app manifest ancestors".to_string()
+        "failed to locate the global workspace-scoped overlay snapshot from explicit launch workspace, SUPERPLAN_OVERLAY_WORKSPACE, current working directory, or app manifest ancestors".to_string()
     })?;
 
     fs::read_to_string(&snapshot_path).map_err(|error| {
@@ -611,7 +628,7 @@ mod tests {
     }
 
     fn create_runtime_file(workspace_root: &Path, file_name: &str) -> PathBuf {
-        let runtime_file = workspace_root.join(".superplan/runtime").join(file_name);
+        let runtime_file = super::overlay_runtime_file_path_for_workspace(workspace_root, file_name);
         fs::create_dir_all(runtime_file.parent().expect("runtime file parent"))
             .expect("create runtime dir");
         fs::write(&runtime_file, "{\"visible\":true}").expect("write runtime file");

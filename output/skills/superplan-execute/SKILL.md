@@ -116,11 +116,11 @@ Execution is not permission to wander across CLI commands.
 
 ## User Communication
 
-Execution updates should report progress, not orchestration meta.
+Execution updates must describe actual work performed, current verification, material risks, and user-impacting decisions. Do not narrate Superplan ceremony.
 
-- do not narrate scheduler behavior, subagent dispatch, runtime transitions, or command history unless that detail changes a user-facing decision
-- avoid status lines that are mostly internal process commentary
-- tell the user what changed in the code or project state, what verification is running, what risk is being checked, or what blocker now needs their input
+- do not mention scheduler behavior, subagent dispatch, runtime transitions, command history, or other Superplan mechanics unless the user needs that fact to understand a blocker, risk, or decision
+- reject updates that are primarily internal process commentary
+- tell the user what changed in the workspace, what verification is being run and for what risk, what decision was made and why, or what concrete blocker needs user input
 
 ## Lifecycle Semantics And Recovery
 
@@ -221,8 +221,8 @@ Expected output categories:
 
 - task started
 - task in progress
-- subagents dispatched
-- verification in progress
+- implementation work started
+- verification started for a named risk
 - blocked with reason
 - needs feedback
 - ready for AC review
@@ -239,8 +239,7 @@ Runtime summary should keep legible:
 - what is waiting for the user
 - what changed in the trajectory
 - what can run next
-- which decisions were recorded
-- which gotchas were learned
+- which user-relevant decisions changed execution
 
 ## Current CLI Loop
 

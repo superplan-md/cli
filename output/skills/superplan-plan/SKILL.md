@@ -30,6 +30,19 @@ Use when:
 - keep specs and plans distinct: specs capture target truth, plans capture trajectory
 - when the plan already defines two or more new task contracts that are ready to author now, prefer handing off one `superplan task scaffold batch <change-slug> --stdin --json` scaffold step instead of repeated `superplan task scaffold new` calls
 
+## Public-Facing Planning Rules
+
+Make the useful reasoning visible to the user without narrating Superplan ceremony.
+
+- lead with a brief read on what the user appears to want and what makes that intent matter
+- state a recommendation, not just a neutral recap
+- when multiple viable paths exist, present `2-3` concrete approaches with trade-offs before locking into one
+- explain why the recommended path is better for this repo or request right now
+- surface real opinions, risks, and sequencing judgments instead of flattening them into generic intent summaries
+- keep internal phase names, command choreography, and storage details out of the foreground unless they directly affect the user's decision
+
+If there is only one credible path, say that plainly and explain why alternatives are not worth carrying forward.
+
 ## Plan Discipline
 
 Each plan step should be small enough to execute and verify cleanly.
@@ -66,6 +79,17 @@ When writing a change plan through `superplan change plan set`, encode enough de
 - next handoff to `superplan-shape` or `superplan-execute`
 
 Vague sequencing is not planning.
+
+## User-Facing Output Shape
+
+When planning is user-visible, prefer this public shape:
+
+- lead: concise summary of the user's apparent goal, constraints, or acceptance intent
+- approaches: only when real alternatives exist; make the trade-offs explicit
+- recommendation: the path you think should be taken and why
+- execution path: the concrete sequence of work, proof, and handoff
+
+Do not reduce the response to "here is the plan" if the more helpful answer is "here is what I think you want, the realistic options, and the path I recommend."
 
 ## Recommended Step Shape
 

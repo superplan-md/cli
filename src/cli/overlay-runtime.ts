@@ -18,7 +18,7 @@ import {
 import { loadChangeGraph } from './graph';
 import { getTaskRef, toQualifiedTaskId } from './task-identity';
 import { formatTitleFromSlug } from './commands/scaffold';
-import { resolveWorkspaceRoot } from './workspace-root';
+import { resolveSuperplanRoot, resolveWorkspaceRoot } from './workspace-root';
 
 type TaskPriority = 'high' | 'medium' | 'low';
 
@@ -275,37 +275,45 @@ async function collectTrackedChanges(
   workspacePath: string,
   tasks: OverlayTaskSource[],
 ): Promise<OverlayTrackedChange[]> {
-  const changesRoot = path.join(workspacePath, '.superplan', 'changes');
-  let changeEntries: Array<{ isDirectory(): boolean; name: string }> = [];
+  const changesRoots = [
+    path.join(resolveSuperplanRoot(), 'changes'),
+    path.join(workspacePath, '.superplan', 'changes'),
+  ];
+  const changeDirs = new Map<string, string>();
 
-  try {
-    changeEntries = await fs.readdir(changesRoot, { withFileTypes: true });
-  } catch {
-    return [];
+  for (const changesRoot of changesRoots) {
+    let changeEntries: Array<{ isDirectory(): boolean; name: string }> = [];
+    try {
+      changeEntries = await fs.readdir(changesRoot, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of changeEntries) {
+      if (!entry.isDirectory() || changeDirs.has(entry.name)) {
+        continue;
+      }
+      changeDirs.set(entry.name, path.join(changesRoot, entry.name));
+    }
   }
 
   const taskMap = new Map(tasks.map(task => [getTaskRef(task), task]));
   const trackedChanges: OverlayTrackedChange[] = [];
 
-  for (const entry of changeEntries) {
-    if (!entry.isDirectory()) {
-      continue;
-    }
-
-    const changeDir = path.join(changesRoot, entry.name);
+  for (const [changeId, changeDir] of changeDirs.entries()) {
     const [graphResult, taskIds] = await Promise.all([
       loadChangeGraph(changeDir),
       getTrackedChangeTaskIds(changeDir),
     ]);
     const matchedTasks = taskIds
-      .map(taskId => taskMap.get(toQualifiedTaskId(entry.name, taskId)))
+      .map(taskId => taskMap.get(toQualifiedTaskId(changeId, taskId)))
       .filter((task): task is OverlayTaskSource => task !== undefined);
     const taskTotal = taskIds.length;
     const taskDone = matchedTasks.filter(task => task.status === 'done').length;
-    const title = graphResult.graph?.title?.trim() || formatTitleFromSlug(entry.name);
+    const title = graphResult.graph?.title?.trim() || formatTitleFromSlug(changeId);
 
     trackedChanges.push({
-      change_id: entry.name,
+      change_id: changeId,
       title,
       status: getTrackedChangeStatus(taskTotal, matchedTasks),
       task_total: taskTotal,
