@@ -139,7 +139,7 @@ jobs:
             prerelease_flag="--prerelease"
           fi
 
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.id')"
             gh api \
               --method PATCH \
@@ -147,10 +147,11 @@ jobs:
               -f name="$release_name" \
               -F draft="$DRAFT" \
               -F prerelease="$PRERELEASE" >/dev/null
-            gh release upload "$RELEASE_TAG" release-assets/* --clobber
+            gh release upload "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --clobber
           else
             gh release create "$RELEASE_TAG" \
               release-assets/* \
+              --repo "$GITHUB_REPOSITORY" \
               --target "$SOURCE_REF" \
               --title "$release_name" \
               --generate-notes \
