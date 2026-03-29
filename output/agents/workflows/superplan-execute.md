@@ -88,6 +88,7 @@ Align execution to the CLI that exists today.
 
 Current CLI execution surface:
 
+- `superplan quick "Task title" --priority high` - One-shot task creation
 - `superplan task inspect show <task_ref> --json`
 - `superplan run --json`
 - `superplan run <task_ref> --json`
@@ -140,7 +141,24 @@ Use the CLI as the transition gate for runtime state.
 - `needs_feedback` means the task cannot proceed without a human decision
 - `in_review` means implementation is complete enough for acceptance review and waiting on approval or reopen
 
-Strictness rules:
+## When to Mark Done vs Request Feedback
+
+**Mark task done when:**
+- Component built and tests pass
+- Code written and verified working
+- Routine implementation complete with proof
+- All acceptance criteria satisfied with evidence
+- No user decision required
+
+**Request feedback only for genuine blockers:**
+- Requirements unclear — need user decision on specific tradeoff
+- Two valid approaches — which convention or path do you prefer?
+- External dependency changed — need new credentials or config
+- Conflicting patterns found — which codebase convention to follow?
+- Unexpected technical constraint — need scope or approach adjustment
+- User verification required before proceeding
+
+Do not use `needs_feedback` for routine work completion. Completion with passing verification should transition through `review complete`, not feedback request.
 
 - impossible transitions should fail hard
 - invalid or stale task contracts should block safe forward motion

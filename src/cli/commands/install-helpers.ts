@@ -389,6 +389,58 @@ export async function installWindsurfRules(skillsDir: string, targetDir: string)
   }
 }
 
+export async function installWindsurfEnforcementFiles(agentPath: string, globalSkillsDir: string): Promise<void> {
+  const claudeMdPath = path.join(agentPath, 'CLAUDE.md');
+  const workflowsDir = path.join(agentPath, 'workflows');
+  const gatePath = path.join(workflowsDir, 'superplan-gate.md');
+
+  const claudeMdContent = `# Superplan Hard Constraints
+
+## CRITICAL RULES - NO EXCEPTIONS
+
+- **I CANNOT edit files without first running \`superplan status --json\`**
+- **I CANNOT proceed without an active Superplan task**
+- **Single-file edits are the ONLY exception**
+- **If I violate this, I MUST stop and restart correctly**
+
+## Mandatory Workflow
+
+Before ANY repo work:
+1. Run \`superplan status --json\`
+2. If no active task, load \`superplan-entry\` skill and create one
+3. Only proceed after task is active
+
+## Task Creation Rule
+
+Any work that changes files, runs commands, or modifies state must be tracked as a Superplan task first — even small work.
+
+## Entry Point
+
+Load and follow \`superplan-entry\` from:
+- \`${path.join(globalSkillsDir, 'superplan-entry', 'SKILL.md')}\`
+
+## Global Skills
+
+\`${globalSkillsDir}\`
+`;
+
+  const gateContent = `---
+description: Mandatory gate before any repo work
+---
+
+# Superplan Pre-Flight Check
+
+1. Run \`superplan status --json\`
+2. If no active task, STOP and run superplan-entry workflow
+3. Confirm task reference before any edits
+4. Violations require immediate workflow restart
+`;
+
+  await fs.writeFile(claudeMdPath, claudeMdContent, 'utf-8');
+  await fs.mkdir(workflowsDir, { recursive: true });
+  await fs.writeFile(gatePath, gateContent, 'utf-8');
+}
+
 export async function installAmazonQMemoryBank(skillsDir: string, rulesDir: string): Promise<void> {
   const memoryBankDir = path.join(rulesDir, 'memory-bank');
   await fs.mkdir(memoryBankDir, { recursive: true });
@@ -473,6 +525,7 @@ export async function installAgentSkills(skillsDir: string, agents: ExtendedAgen
         await installAmazonQMemoryBank(globalSkillsDir, agent.install_path);
       } else if (agent.install_kind === 'windsurf_rules') {
         await installWindsurfRules(globalSkillsDir, agent.install_path);
+        await installWindsurfEnforcementFiles(agent.path, globalSkillsDir);
       } else if (agent.install_kind === 'antigravity_workflows') {
         await installAntigravityWorkflows(globalSkillsDir, agent.install_path);
       }
@@ -617,11 +670,12 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       {
         name: 'windsurf',
         path: path.join(baseDir, '.windsurf'),
-        install_path: path.join(baseDir, '.windsurf', 'rules'),
+        install_path: path.join(baseDir, '.windsurf', 'workflows'),
         install_kind: 'windsurf_rules',
         bootstrap_strength: 'rule_bootstrap',
         cleanup_paths: [
           path.join(baseDir, '.windsurf', 'skills'),
+          path.join(baseDir, '.windsurf', 'rules'),
           path.join(baseDir, '.windsurfrules'),
         ],
       },

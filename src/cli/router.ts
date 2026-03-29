@@ -4,6 +4,7 @@ import { doctor } from "./commands/doctor";
 import { parse } from "./commands/parse";
 import { init } from "./commands/init";
 import { task } from "./commands/task";
+import { quick } from "./commands/quick";
 import { removeCli } from "./commands/remove";
 import { uninstallCli } from "./commands/uninstall";
 import { run } from "./commands/run";
@@ -320,6 +321,7 @@ export const router: Record<string, CommandHandler> = {
     quiet: options.quiet,
     yes: options.yes,
   }),
+  quick: async (args) => quick(args),
   remove: async (args, options) => removeCli(args, {
     json: options.json,
     quiet: options.quiet,
