@@ -36,6 +36,7 @@ jobs:
       - name: Ensure target release exists
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           RELEASE_NAME: ${{ inputs.release_name }}
           DRAFT: ${{ inputs.draft }}
@@ -43,7 +44,7 @@ jobs:
         run: |
           set -euo pipefail
           title="${RELEASE_NAME:-$RELEASE_TAG}"
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+          if gh release view "$RELEASE_TAG" --repo "$REPO" >/dev/null 2>&1; then
             echo "Release $RELEASE_TAG already exists."
             exit 0
           fi
@@ -56,7 +57,7 @@ jobs:
             args+=( --prerelease )
           fi
 
-          gh release create "${args[@]}"
+          gh release create "${args[@]}" --repo "$REPO"
 
   build:
     needs: prepare-release
@@ -102,7 +103,8 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
-          gh release upload "$RELEASE_TAG" dist/release/overlay/* --clobber
+          gh release upload "$RELEASE_TAG" dist/release/overlay/* --clobber --repo "$REPO"
