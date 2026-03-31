@@ -3,7 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 
-const { makeSandbox } = require('./helpers.cjs');
+const {
+  makeSandbox,
+  getSuperplanRoot,
+} = require('./helpers.cjs');
 const { writeVisibilityExamples } = require('../scripts/visibility-scenarios.js');
 
 test('visibility examples harness writes paired scenario markdown and json artifacts', async () => {

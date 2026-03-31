@@ -5,6 +5,7 @@ dist/
 *.log
 npm-debug.log*
 AGENTS.MD
+CLAUDE.MD
 .superplan
 changes
 .agents
@@ -16,9 +17,14 @@ changes
 .gemini
 .cursor
 .opencode
-.github
-
+.github/*
+!.github/workflows/
+!.github/workflows/*.yml
+.windsurf
 # Superplan - AI agent configurations
 .agents/
 .amazonq/
 AGENTS.md
+
+# Superplan - AI agent configurations
+.github/skills/

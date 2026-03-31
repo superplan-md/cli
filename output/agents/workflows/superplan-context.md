@@ -1,6 +1,6 @@
 ---
 name: superplan-context
-description: Use when brownfield or long-running work needs durable workspace context created, indexed, or updated under .superplan/context.
+description: Use when brownfield or long-running repo work lacks durable context about architecture, conventions, or recurring gotchas that future tasks will need again.
 ---
 
 # Context Bootstrap Sync

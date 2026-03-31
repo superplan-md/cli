@@ -1,6 +1,6 @@
 ---
 name: superplan-tdd
-description: Use when implementing a feature or bugfix and the workspace supports tests or checks that can express the task contract before broad code changes.
+description: Use when a feature, bugfix, or behavior change has a testable contract and implementation is about to begin.
 ---
 
 # Test-Driven Development
@@ -16,6 +16,10 @@ Write the minimal code to pass.
 No production code without a failing test or failing check first.
 
 If code was written before the proof path, delete the shortcut and start from the failing test.
+
+## Hard Gate
+
+Do not treat "I can add tests after" as equivalent. If the proof was not red first, it is not guiding the implementation.
 
 ## Trigger
 

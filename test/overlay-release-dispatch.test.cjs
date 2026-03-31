@@ -2,7 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
-const { REPO_ROOT } = require('./helpers.cjs');
+const {
+  REPO_ROOT,
+  getSuperplanRoot,
+} = require('./helpers.cjs');
 
 test('overlay release dispatch parses explicit options', () => {
   const { parseArgs } = require(path.join(REPO_ROOT, 'scripts', 'overlay-release-dispatch.js'));
@@ -102,4 +105,71 @@ test('overlay release dispatch includes release name and repo when provided', ()
     '-f',
     'release_name=Alpha 101',
   ]);
+});
+
+test('overlay release dispatch uses the target repo default branch for cross-repo defaults', () => {
+  const { resolveDispatchOptions } = require(path.join(REPO_ROOT, 'scripts', 'overlay-release-dispatch.js'));
+
+  const resolved = resolveDispatchOptions({
+    releaseTag: 'alpha.22',
+    releaseName: '',
+    sourceRef: '',
+    workflowRef: '',
+    workflowFile: 'overlay-release.yml',
+    publish: true,
+    prerelease: false,
+    repo: 'superplan-md/superplan-plugin',
+  }, {
+    getCurrentRepoSlug: () => 'superplan-md/cli',
+    getDefaultSourceRef: () => '07016e7fc7007a6aaf937f54ae10649e86e59d51',
+    getDefaultWorkflowRef: () => 'dev',
+    getRepoDefaultBranch: repo => {
+      assert.equal(repo, 'superplan-md/superplan-plugin');
+      return 'main';
+    },
+  });
+
+  assert.deepEqual(resolved, {
+    releaseTag: 'alpha.22',
+    releaseName: '',
+    sourceRef: 'main',
+    workflowRef: 'main',
+    workflowFile: 'overlay-release.yml',
+    publish: true,
+    prerelease: false,
+    repo: 'superplan-md/superplan-plugin',
+  });
+});
+
+test('overlay release dispatch keeps local defaults when the target repo matches origin', () => {
+  const { resolveDispatchOptions } = require(path.join(REPO_ROOT, 'scripts', 'overlay-release-dispatch.js'));
+
+  const resolved = resolveDispatchOptions({
+    releaseTag: 'alpha.23',
+    releaseName: '',
+    sourceRef: '',
+    workflowRef: '',
+    workflowFile: 'overlay-release.yml',
+    publish: false,
+    prerelease: false,
+    repo: 'https://github.com/superplan-md/cli.git',
+  }, {
+    getCurrentRepoSlug: () => 'superplan-md/cli',
+    getDefaultSourceRef: () => 'deadbeef',
+    getDefaultWorkflowRef: () => 'dev',
+    getRepoDefaultBranch: () => {
+      throw new Error('should not query the remote default branch for same-repo dispatch');
+    },
+  });
+
+  assert.deepEqual(resolved, {
+    releaseTag: 'alpha.23',
+    releaseName: '',
+    sourceRef: 'deadbeef',
+    workflowRef: 'dev',
+    workflowFile: 'overlay-release.yml',
+    publish: false,
+    prerelease: false,
+    repo: 'superplan-md/cli',
+  });
 });

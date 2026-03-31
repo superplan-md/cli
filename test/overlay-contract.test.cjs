@@ -2,7 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
-const { loadDistModule } = require('./helpers.cjs');
+const {
+  loadDistModule,
+  getSuperplanRoot,
+} = require('./helpers.cjs');
 
 test('overlay snapshot factory supplies stable defaults', () => {
   const { createOverlaySnapshot } = loadDistModule('shared/overlay.js');
@@ -101,9 +104,9 @@ test('overlay runtime paths live under global workspace-scoped runtime storage',
   const workspaceKey = getWorkspaceOverlayKey('/tmp/workspace');
 
   assert.deepEqual(getOverlayRuntimePaths('/tmp/workspace'), {
-    runtime_dir: path.join(process.env.HOME, '.config', 'superplan', 'runtime', workspaceKey),
-    snapshot_path: path.join(process.env.HOME, '.config', 'superplan', 'runtime', workspaceKey, 'overlay.json'),
-    control_path: path.join(process.env.HOME, '.config', 'superplan', 'runtime', workspaceKey, 'overlay-control.json'),
+    runtime_dir: path.join(process.env.HOME, '.config', 'superplan', workspaceKey, 'runtime'),
+    snapshot_path: path.join(process.env.HOME, '.config', 'superplan', workspaceKey, 'runtime', 'overlay.json'),
+    control_path: path.join(process.env.HOME, '.config', 'superplan', workspaceKey, 'runtime', 'overlay-control.json'),
   });
 });
 

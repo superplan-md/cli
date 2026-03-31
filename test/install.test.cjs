@@ -8,6 +8,7 @@ const {
   REPO_ROOT,
   makeSandbox,
   parseCliJson,
+  getSuperplanRoot,
 } = require('./helpers.cjs');
 
 function runCommand(command, args, options = {}) {
@@ -88,7 +89,7 @@ test('install script installs superplan from a local source snapshot into a cust
   assert.equal(installMetadata.install_prefix, prefixDir);
   assert.equal(installMetadata.install_bin, path.join(prefixDir, 'bin'));
   assert.equal(installMetadata.source_dir, REPO_ROOT);
-  assert.equal(installMetadata.ref, 'main');
+  assert.equal(installMetadata.ref, 'dev');
   assert.equal(await fs.stat(path.join(sandbox.home, '.config', 'superplan', 'config.toml')).then(() => true, () => false), true);
   assert.equal(await fs.stat(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-entry', 'SKILL.md')).then(() => true, () => false), true);
 
@@ -227,6 +228,9 @@ test('windows powershell installer resolves the latest release and overlay artif
   assert.match(installerSource, /Resolved latest Superplan overlay release:/);
   assert.match(installerSource, /Installed Superplan overlay to/);
   assert.match(installerSource, /Run `superplan init` in/);
+  assert.match(installerSource, /Enable desktop overlay by default on this machine\? \[Y\/n\]/);
+  assert.match(installerSource, /overlay enable --global --json/);
+  assert.match(installerSource, /overlay disable --global --json/);
   assert.match(installerSource, /Installation successful\./);
 });
 

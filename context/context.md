@@ -23,11 +23,13 @@ The current documented top-level command surface is:
 - `change`
 - `init`
 - `install`
+- `quick`
 - `context`
 - `validate`
 - `sync`
 - `update`
 - `remove`
+- `uninstall`
 - `doctor`
 - `parse`
 - `run`
@@ -58,11 +60,13 @@ Important install note:
 - `src/cli/router.ts`: Maps top-level commands to command handlers and normalizes CLI responses.
 - `src/cli/commands/change.ts`: Creates new change scaffolding under `.superplan/changes/<slug>/`.
 - `src/cli/commands/init.ts`: Creates `.superplan/` scaffolding (config, context, runtime, changes) and handles agent integration setup. Interactive mode scans for agent environments, presents a checklist of found agents, and installs selected entries across global, local, both, and skip flows.
+- `src/cli/commands/quick.ts`: Fast-path command that creates a change, scaffolds a task, and activates it in one step. Usage: `superplan quick "Task title" --priority high`.
 - `src/cli/commands/install.ts`: Installs the Superplan CLI globally on the machine.
 - `src/cli/commands/context.ts`: Manages durable workspace context artifacts (bootstrap, status).
 - `src/cli/commands/validate.ts`: Validates `tasks.md` graph and task-contract consistency.
 - `src/cli/commands/update.ts`: Reruns the bundled installer for normal installed copies of the CLI using recorded install metadata, then refreshes existing skill installs.
 - `src/cli/commands/remove.ts`: Removes or purges Superplan installation state. Machine-level removal also uninstalls the managed CLI package/bin, symlinked dev installs that can be inferred from the invoked `superplan` bin path, and overlay artifacts when they are recorded or inferable, and local removal targets the nearest parent Superplan workspace rather than only the exact current directory.
+- `src/cli/commands/uninstall.ts`: Completely uninstalls Superplan including the CLI, skills, overlay, and all agent integrations. More thorough than `remove`. Use `--yes` for non-interactive mode.
 - `src/cli/commands/doctor.ts`: Validates setup state and, in deep mode, inspects parsed tasks plus runtime consistency.
 - `src/cli/commands/parse.ts`: Parses markdown task contracts, returns structured task data, and emits diagnostics.
 - `src/cli/commands/scaffold.ts`: Shared helpers for generating canonical change and task artifacts.

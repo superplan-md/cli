@@ -1,0 +1,592 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+@import '@fontsource-variable/roboto';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: 'Roboto Variable', sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  color-scheme: light;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.553 0.195 38.402);
+  --primary-foreground: oklch(0.98 0.016 73.684);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.28 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.833 0.145 321.434);
+  --chart-2: oklch(0.667 0.295 322.15);
+  --chart-3: oklch(0.591 0.293 322.896);
+  --chart-4: oklch(0.518 0.253 323.949);
+  --chart-5: oklch(0.452 0.211 324.591);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.646 0.222 41.116);
+  --sidebar-primary-foreground: oklch(0.98 0.016 73.684);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.47 0.157 37.304);
+  --primary-foreground: oklch(0.98 0.016 73.684);
+  --secondary: oklch(0.274 0.006 286.033);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.833 0.145 321.434);
+  --chart-2: oklch(0.667 0.295 322.15);
+  --chart-3: oklch(0.591 0.293 322.896);
+  --chart-4: oklch(0.518 0.253 323.949);
+  --chart-5: oklch(0.452 0.211 324.591);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.705 0.213 47.604);
+  --sidebar-primary-foreground: oklch(0.98 0.016 73.684);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply box-border border-border outline-ring/50;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    min-height: 100%;
+  }
+
+  body {
+    @apply text-foreground antialiased;
+    margin: 0;
+    width: 100%;
+    min-height: 100vh;
+    overflow: hidden;
+    background: transparent;
+  }
+
+  #root {
+    width: 100%;
+  }
+
+  html {
+    @apply font-sans;
+  }
+}
+
+/* ============================================================
+   OVERLAY ANIMATION SYSTEM
+   Focused, purposeful animations for the overlay card.
+   All animations respect prefers-reduced-motion.
+   ============================================================ */
+
+/* Card entrance — slides up 6px and fades in */
+@keyframes overlay-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Content cross-fade — used when primary item identity changes */
+@keyframes overlay-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Row stagger-enter for secondary items */
+@keyframes overlay-row-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Status dot — status-specific glow pulse (replaces generic animate-pulse) */
+@keyframes status-dot-running {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgb(125 211 252 / 0); }
+  50% { opacity: 0.7; box-shadow: 0 0 0 3px rgb(125 211 252 / 0.18); }
+}
+@keyframes status-dot-feedback {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgb(251 191 36 / 0); }
+  50% { opacity: 0.75; box-shadow: 0 0 0 3px rgb(251 191 36 / 0.2); }
+}
+@keyframes status-dot-blocked {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* Radar sweep for 'running' — rotates a highlight arc around the ring */
+@keyframes ring-sweep {
+  from { transform: rotate(-90deg); }
+  to { transform: rotate(270deg); }
+}
+
+/* Chip icon activity pulse */
+@keyframes chip-activity-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.65; transform: scale(0.88); }
+}
+
+/* Island transition — chip grows from a compact pill into card scale */
+@keyframes overlay-island-enter {
+  from {
+    opacity: 0;
+    transform: translateY(3px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Done outro — card row fades out, shrinks height to zero */
+@keyframes overlay-row-exit {
+  0% { opacity: 1; transform: scaleY(1) translateX(0); max-height: 60px; }
+  40% { opacity: 0; transform: scaleY(0.85) translateX(8px); max-height: 60px; }
+  100% { opacity: 0; transform: scaleY(0.85) translateX(8px); max-height: 0; padding-top: 0; padding-bottom: 0; }
+}
+
+/* Done progress bar — depletes right-to-left over the timeout */
+@keyframes done-progress-bar {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+
+/* Ring spin — continuous slow rotation for the progress arc in running state */
+@keyframes ring-spin {
+  from { transform: rotate(-90deg); }
+  to   { transform: rotate(270deg); }
+}
+
+/* Shimmer — sweeps a highlight across from left to right (avatar running state) */
+@keyframes shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+/* Secondary running chip — soft opacity pulse to indicate active work */
+@keyframes secondary-running-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
+/* Chip shimmer — sweeps a highlight across the chip for running state */
+@keyframes chip-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+/* ============================================================
+   UTILITY CLASSES
+   ============================================================ */
+
+@layer utilities {
+  .animate-overlay-card-enter {
+    animation: overlay-card-enter 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .animate-overlay-content-in {
+    animation: overlay-content-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .animate-overlay-row-enter {
+    animation: overlay-row-enter 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .animate-status-dot-running {
+    animation: status-dot-running 2.4s ease-in-out infinite;
+    border-radius: 9999px;
+  }
+
+  .animate-status-dot-feedback {
+    animation: status-dot-feedback 3s ease-in-out infinite;
+    border-radius: 9999px;
+  }
+
+  .animate-status-dot-blocked {
+    animation: status-dot-blocked 1.6s ease-in-out infinite;
+    border-radius: 9999px;
+  }
+
+  .animate-ring-sweep {
+    animation: ring-sweep 2.8s linear infinite;
+    transform-origin: center;
+  }
+
+  .animate-chip-activity {
+    animation: chip-activity-pulse 1.8s ease-in-out infinite;
+  }
+
+  .animate-overlay-island-enter {
+    animation: overlay-island-enter 220ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+    transform-origin: top left;
+  }
+
+  .animate-overlay-row-exit {
+    animation: overlay-row-exit 600ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+    overflow: hidden;
+    transform-origin: top;
+  }
+
+  .animate-done-progress-bar {
+    animation: done-progress-bar linear forwards;
+    transform-origin: left;
+  }
+
+  .animate-ring-spin {
+    animation: ring-spin 6s linear infinite;
+  }
+
+  .animate-shimmer {
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
+
+  .animate-secondary-running-pulse {
+    animation: secondary-running-pulse 2s ease-in-out infinite;
+  }
+
+  .animate-chip-shimmer {
+    animation: chip-shimmer 1.8s ease-in-out infinite;
+  }
+
+  /* When user prefers reduced motion, kill all overlay animations */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-overlay-card-enter,
+    .animate-overlay-content-in,
+    .animate-overlay-row-enter,
+    .animate-overlay-row-exit,
+    .animate-status-dot-running,
+    .animate-status-dot-feedback,
+    .animate-status-dot-blocked,
+    .animate-ring-sweep,
+    .animate-ring-spin,
+    .animate-shimmer,
+    .animate-secondary-running-pulse,
+    .animate-chip-shimmer,
+    .animate-chip-activity,
+    .animate-overlay-island-enter,
+    .animate-done-progress-bar {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* app-shell: base translucent shell over Electron vibrancy.
+     Dark: medium-dark slate tint (~0.55) — desktop visible through panels.
+     Light: fully transparent — each panel sets its own background. */
+  .app-shell {
+    background: transparent;
+  }
+
+  .dark .app-shell {
+    background: transparent;
+  }
+
+  /* Dialog / modal surface — dark charcoal in dark mode, near-white in light mode */
+  .dialog-surface {
+    background: oklch(0.97 0 0);
+  }
+
+  .dark .dialog-surface {
+    background: oklch(0.18 0 0);
+  }
+
+  /* Overlay surface — transparent so macOS native vibrancy shows through */
+  .overlay-surface {
+    background: transparent;
+  }
+
+  .dark .overlay-surface {
+    background: transparent;
+  }
+
+  /* === LIGHT MODE panels ===
+     Sidebar: bright macOS-style white glass with a uniform tint.
+     Keep it flat instead of using a top-to-bottom gradient so it does not
+     read like a dark-mode artifact leaking through.
+     Right panel: fully opaque white — solid, no bleed. */
+  .panel-surface {
+    background: #ffffff;
+  }
+
+    html:not(.dark) aside.panel-surface {
+      position: relative;
+      background: transparent;
+      overflow: hidden;
+    }
+  
+  html:not(.dark) aside.panel-surface::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: rgba(255, 255, 255, 0.14);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border: 0;
+    box-shadow: none;
+  }
+  
+    html:not(.dark) aside.panel-surface>* {
+      position: relative;
+      z-index: 1;
+    }
+
+  html:not(.dark) section.panel-surface {
+    background: #ffffff;
+  }
+
+  /* === DARK MODE panels ===
+     Sidebar: lighter translucent — ~0.45 dark overlay so desktop shows through more (like Codex left panel).
+     Section/right panel: opaque dark — solid charcoal, no vibrancy bleed. */
+  html.dark aside.panel-surface {
+    background: rgba(20, 24, 28, 0.55);
+  }
+
+  html.dark section.panel-surface {
+    background: rgba(20, 24, 28, 1);
+  }
+
+  .panel-topbar {
+    position: relative;
+    z-index: 10;
+    /* Inherit from panel-surface so the drag region matches the panel background.
+       In light mode the parent panel-surface is opaque white, so transparent is fine
+       as long as panel-surface itself is opaque — which it now is. */
+    background: transparent;
+  }
+
+  .dark .panel-topbar {
+    background: transparent;
+  }
+
+  .macos-window-controls-gap {
+    position: relative;
+    justify-content: flex-start;
+  }
+
+  .sidebar-toggle {
+    color: rgba(15, 23, 42, 0.72);
+  }
+
+  .sidebar-toggle:hover {
+    color: rgba(15, 23, 42, 0.88);
+    background: transparent;
+  }
+
+  html.dark .sidebar-toggle {
+    color: rgba(255, 255, 255, 0.54);
+  }
+
+  html.dark .sidebar-toggle:hover {
+    color: rgba(255, 255, 255, 0.78);
+    background: transparent;
+  }
+
+  .macos-traffic-inline-button {
+    position: absolute;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    border-radius: 0;
+  }
+
+  .macos-traffic-inline-button svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .macos-traffic-inline-button:hover {
+    background: transparent;
+  }
+
+
+
+  .panel-resize-handle {
+    position: relative;
+    flex-shrink: 0;
+    display: flex;
+    width: 1px;
+    align-items: center;
+    justify-content: center;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    opacity: 0;
+    outline: none !important;
+    cursor: col-resize;
+    transition:
+      background-color 140ms ease,
+      opacity 140ms ease;
+  }
+
+  .panel-resize-handle:hover,
+  .panel-resize-handle:focus-visible,
+  .panel-resize-handle[data-separator='hover'] {
+    opacity: 1;
+    background: rgba(148, 163, 184, 0.55);
+  }
+
+  .panel-resize-handle[data-separator='drag'] {
+    opacity: 1;
+    background: rgba(100, 116, 139, 0.7);
+  }
+
+  .panel-resize-handle::before {
+    display: none;
+  }
+
+  html.dark .panel-resize-handle:hover,
+  html.dark .panel-resize-handle:focus-visible,
+  html.dark .panel-resize-handle[data-separator='hover'],
+  html.dark .panel-resize-handle[data-separator='drag'] {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.22);
+  }
+
+  .drag-region {
+    app-region: drag;
+    -webkit-app-region: drag;
+  }
+
+  .no-drag {
+    app-region: no-drag;
+    -webkit-app-region: no-drag;
+  }
+
+  /* Light mode: hide scrollbars entirely so no dark gutter line remains. */
+  html:not(.dark) {
+    scrollbar-width: none;
+  }
+
+  html:not(.dark) ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    background: transparent;
+  }
+
+  html:not(.dark) ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  html:not(.dark) ::-webkit-scrollbar-thumb {
+    background: transparent;
+    border: none;
+  }
+
+  /* Dark mode keeps a subtle visible scrollbar. */
+  html.dark {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  }
+
+  html.dark ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  html.dark ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  html.dark ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 3px;
+  }
+
+  html.dark ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.32);
+  }
+}

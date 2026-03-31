@@ -195,8 +195,8 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
       });
       installScope = scopeChoice as 'global' | 'local';
     } else {
-      // Default to local in quiet mode
-      installScope = 'local';
+      // Default to global in quiet/default mode
+      installScope = 'global';
     }
 
     // Handle global installation
@@ -251,7 +251,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
       const newAgents = globalAgentsToInstall.filter(a => !installedAgents.includes(a.name));
 
       // Agents that must always be local
-      const localOnlyAgents = new Set(['amazonq', 'antigravity']);
+      const localOnlyAgents = new Set(['amazonq', 'antigravity', 'windsurf']);
 
       if (!isQuiet && globalAgentsToInstall.length > 0) {
         // Show which agents already have superplan globally
@@ -335,7 +335,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
     const installedAgents = await getInstalledAgentsFromRegistry();
     
     // Filter agents: skip if already installed globally (unless local-only)
-    const localOnlyAgents = new Set(['amazonq', 'antigravity']);
+    const localOnlyAgents = new Set(['amazonq', 'antigravity', 'windsurf']);
     const agentsNeedingInstall = detectedProjectAgents.filter(a => {
       // Local-only agents always need local install
       if (localOnlyAgents.has(a.name)) return a.detected;

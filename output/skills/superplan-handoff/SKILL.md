@@ -1,6 +1,6 @@
 ---
 name: superplan-handoff
-description: Use when work is about to pause, transfer, or survive context loss and the next agent needs a concise, high-signal checkpoint.
+description: Use when work is pausing, switching owners, or at risk of context loss and the next agent will need a concise restart point with the current truth.
 ---
 
 # Handoff Checkpointing

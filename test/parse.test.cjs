@@ -10,6 +10,7 @@ const {
   runCli,
   writeChangeGraph,
   writeFile,
+  getSuperplanRoot,
 } = require('./helpers.cjs');
 
 test('parse defaults to .superplan/changes and reports missing directory gracefully', async () => {
@@ -36,7 +37,7 @@ test('parse from a nested repo directory resolves the repo-root superplan worksp
       { task_id: 'T-001', title: 'Parse from nested cwd' },
     ],
   });
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'feature-a', 'tasks', 'T-001.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'feature-a', 'tasks', 'T-001.md'), `---
 task_id: T-001
 status: pending
 priority: high
@@ -61,7 +62,7 @@ Parse from nested cwd
 
 test('parse extracts task fields, dependencies, priority, and acceptance criteria from a task file', async () => {
   const sandbox = await makeSandbox('superplan-parse-file-');
-  const taskPath = path.join(sandbox.cwd, '.superplan', 'changes', 'feature-a', 'tasks', 'T-001.md');
+  const taskPath = path.join(getSuperplanRoot(sandbox), 'changes', 'feature-a', 'tasks', 'T-001.md');
 
   await writeChangeGraph(sandbox.cwd, 'feature-a', {
     title: 'Feature A',
@@ -119,7 +120,7 @@ Ship the parser
 
 test('parse accepts multi-line yaml-style dependency lists in frontmatter', async () => {
   const sandbox = await makeSandbox('superplan-parse-multiline-');
-  const taskPath = path.join(sandbox.cwd, '.superplan', 'changes', 'feature-b', 'tasks', 'T-002.md');
+  const taskPath = path.join(getSuperplanRoot(sandbox), 'changes', 'feature-b', 'tasks', 'T-002.md');
 
   await writeChangeGraph(sandbox.cwd, 'feature-b', {
     title: 'Feature B',
@@ -179,7 +180,7 @@ test('parse reports duplicate ids and invalid task diagnostics across a change s
     ],
   });
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-001.md'), `---
 task_id: T-001
 status: pending
 ---
@@ -191,7 +192,7 @@ Valid enough
 - [ ] A
 `);
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-002.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-002.md'), `---
 task_id: T-001
 status: draft
 ---

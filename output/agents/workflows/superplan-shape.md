@@ -1,6 +1,6 @@
 ---
 name: superplan-shape
-description: Use when Superplan has decided to engage and the request needs durable work artifacts created at the right structure depth.
+description: Use when Superplan has decided to engage and the work still needs plans, specs, proof paths, or multiple tracked tasks shaped before bounded execution can start.
 ---
 
 # Shape Work
@@ -14,6 +14,14 @@ It is a trajectory shaper.
 
 Its job is to shape work so the agent can move with bounded autonomy while staying aligned to the user's real expectations.
 It must not collapse graph-shaped work into a single task merely because one agent could carry it alone.
+
+## Phase Ownership Rule
+
+This skill owns artifact creation and execution trajectory, not open-ended analysis.
+
+- shape the minimum durable structure that makes the next execution move safe
+- choose the proof path before broad implementation starts
+- once the executable frontier is clear, stop shaping and hand to execution
 
 ## Trigger
 
@@ -138,7 +146,7 @@ Therefore:
 
 - for tracked work, define plans, specs, graph tasks, and workspace memory through CLI commands instead of editing Superplan state files directly
 - when Superplan is staying out, do not create graph artifacts
-- manual creation of anything under `~/.config/superplan/changes/<slug>/` is off limits
+- manual creation of anything under the shared Superplan project state root is off limits; from the repo root the CLI may surface those paths as `.superplan/changes/<slug>/...`
 - use `superplan change new --single-task` or repeated `superplan change task add` calls to define tracked work quickly and correctly
 - keep dependency truth in the CLI-owned change graph and task-contract truth in the CLI-owned task files
 - choose current CLI validation commands explicitly during shaping
@@ -148,7 +156,7 @@ See `references/cli-authoring-now.md`.
 
 ## Task Authoring Rule
 
-Manual creation of files under `~/.config/superplan/changes/<slug>/` is off limits.
+Manual creation of files under the shared Superplan project state root is off limits.
 
 Agents should spend their shaping effort deciding what tracked work exists, then use CLI commands that place artifacts correctly:
 
@@ -170,7 +178,7 @@ Today the CLI validates and executes:
 - task-contract markdown with frontmatter such as `task_id`, `change_id`, `title`, `status`, and `priority`
 - `Description`
 - `Acceptance Criteria`
-- runtime state such as `in_progress`, `done`, `blocked`, and `needs_feedback`
+- runtime state such as `in_progress`, `in_review`, `done`, `blocked`, and `needs_feedback`
 
 It does **not** yet fully execute every future graph/program feature:
 
@@ -233,11 +241,13 @@ Shaping is not permission to explore the CLI surface.
 
 Keep shaping internals out of routine user updates.
 
+- This skill runs in `control-plane mode`.
 - do not narrate artifact choreography, skill usage, or command sequencing unless the user asked for that level of detail
 - do not send updates that mainly report internal motion such as "shaping the change", "minting task contracts", or lists of explored files and commands
 - communicate the user-relevant result instead: what structure is being added, what ambiguity is being reduced, what acceptance boundary is being defined, what can now run in parallel, or what remains intentionally deferred
 - if a plan or task split matters, explain it in project terms rather than Superplan jargon
 - every substantial update should make the actual work legible, not just the existence of structure
+- if the next real need is approach selection, trade-off discussion, or execution-path explanation, switch to planning mode through the planning owner instead of stretching shaping updates into a plan
 
 ## Workspace Precedence Rule
 

@@ -10,6 +10,7 @@ Use these scenarios to test whether `superplan-route` chooses enough structure t
 - `04-slice-bounded-multistep.md`
 - `05-program-multi-workstream.md`
 - `06-context-first-brownfield.md`
+- `07-tiny-one-task-change.md`
 
 ## Pass Criteria
 
@@ -21,6 +22,7 @@ Use these scenarios to test whether `superplan-route` chooses enough structure t
 
 ## Failure Signs
 
+- mistakes tiny but real repo work for `stay_out`
 - over-shapes simple work into `slice` or `program`
 - under-shapes graph-shaped work into `task`
 - treats "one agent can do it" as a reason to avoid graph structure

@@ -133,6 +133,7 @@ export function commandMatchesExecutablePath(commandLine: string, executablePath
   // product name rather than the full executable path.  Accept both the
   // canonical Tauri binary names so we don't start a second instance.
   const macosBundleNames = [
+    'Superplan',
     'Superplan Overlay Desktop',
     'superplan-overlay-desktop',
   ];
@@ -147,6 +148,11 @@ export function commandMatchesExecutablePath(commandLine: string, executablePath
 export function commandMatchesWorkspacePath(commandLine: string, workspacePath: string): boolean {
   const escapedWorkspacePath = escapeRegExp(workspacePath);
   return new RegExp(`(^|\\s)--workspace(?:\\s+|=)"?${escapedWorkspacePath}"?(?=\\s|$)`).test(commandLine);
+}
+
+export function commandRequestsOverlaySurface(commandLine: string): boolean {
+  return /(^|\s)--overlay(?=\s|$)/.test(commandLine)
+    || /(^|\s)--workspace(?:\s|=)/.test(commandLine);
 }
 
 function parseRunningProcessEntry(line: string): RunningProcessEntry | null {
@@ -414,8 +420,12 @@ export function getMacosOverlayBundleLaunchPlan(input: {
   const matchingCommands = runningCommandLines.filter(commandLine => (
     commandMatchesExecutablePath(commandLine, input.executablePath)
   ));
+  const matchingOverlayCommands = matchingCommands.filter(commandRequestsOverlaySurface);
+  const matchingWorkspaceOverlayCommands = matchingOverlayCommands.filter(commandLine => (
+    commandMatchesWorkspacePath(commandLine, input.workspacePath)
+  ));
 
-  if (matchingCommands.some(commandLine => commandMatchesWorkspacePath(commandLine, input.workspacePath))) {
+  if (matchingWorkspaceOverlayCommands.length > 0) {
     return {
       mode: 'reuse_running',
       command: null,
@@ -425,17 +435,31 @@ export function getMacosOverlayBundleLaunchPlan(input: {
 
   if (matchingCommands.length > 0) {
     return {
-      mode: 'handoff_existing_instance',
-      command: input.executablePath,
-      args: ['--workspace', input.workspacePath],
+      mode: 'reuse_running',
+      command: null,
+      args: [],
     };
   }
 
   return {
     mode: 'open_bundle',
     command: '/usr/bin/open',
-    args: ['-a', input.appBundlePath, '--args', '--workspace', input.workspacePath],
+    args: ['-a', input.appBundlePath, '--args', '--overlay', '--workspace', input.workspacePath],
   };
+}
+
+function isPersistentDesktopShellCompanion(status: Pick<OverlayCompanionStatus, 'install_path' | 'executable_path'>): boolean {
+  const installPath = normalizeConfiguredPath(status.install_path)?.toLowerCase() ?? '';
+  const executablePath = normalizeConfiguredPath(status.executable_path)?.toLowerCase() ?? '';
+  const installBase = installPath ? path.basename(installPath) : '';
+  const executableBase = executablePath ? path.basename(executablePath) : '';
+
+  return installBase === 'superplan.app'
+    || installBase === 'superplan-overlay.appimage'
+    || installBase === 'superplan-overlay.exe'
+    || executableBase === 'superplan'
+    || executableBase === 'superplan-overlay.appimage'
+    || executableBase === 'superplan-overlay.exe';
 }
 
 async function resolveOverlayCompanionStatusFromPaths(input: {
@@ -574,11 +598,16 @@ export async function launchInstalledOverlayCompanion(
     const matchingProcesses = runningProcesses && companionStatus.executable_path
       ? getMatchingOverlayProcesses(runningProcesses, companionStatus.executable_path)
       : [];
-    const matchingWorkspaceProcesses = matchingProcesses.filter(processEntry => (
+    const matchingOverlayProcesses = matchingProcesses.filter(processEntry => (
+      commandRequestsOverlaySurface(processEntry.command)
+    ));
+    const matchingWorkspaceOverlayProcesses = matchingOverlayProcesses.filter(processEntry => (
       commandMatchesWorkspacePath(processEntry.command, resolvedWorkspacePath)
     ));
+    const persistentDesktopShellRunning = isPersistentDesktopShellCompanion(companionStatus)
+      && matchingProcesses.length > 0;
 
-    if (matchingWorkspaceProcesses.length > 0) {
+    if (matchingWorkspaceOverlayProcesses.length > 0 || persistentDesktopShellRunning) {
       return {
         ...companionStatus,
         attempted: false,
@@ -607,7 +636,7 @@ export async function launchInstalledOverlayCompanion(
       ? {
           mode: 'handoff_existing_instance' as const,
           command: companionStatus.executable_path,
-          args: ['--workspace', resolvedWorkspacePath],
+          args: ['--overlay', '--workspace', resolvedWorkspacePath],
         }
       : macosAppBundlePath
         ? (runningProcesses
@@ -620,11 +649,11 @@ export async function launchInstalledOverlayCompanion(
           : {
               mode: 'handoff_existing_instance' as const,
               command: companionStatus.executable_path,
-              args: ['--workspace', resolvedWorkspacePath],
+              args: ['--overlay', '--workspace', resolvedWorkspacePath],
             })
         : {
             command: companionStatus.executable_path,
-            args: ['--workspace', resolvedWorkspacePath],
+            args: ['--overlay', '--workspace', resolvedWorkspacePath],
           };
 
     if (!launchPlan.command) {
@@ -697,6 +726,20 @@ export async function terminateInstalledOverlayCompanion(workspacePath?: string)
   for (const processEntry of matchingProcesses) {
     await terminateProcess(processEntry.pid);
   }
+}
+
+export async function hideInstalledOverlayCompanion(workspacePath?: string): Promise<void> {
+  const companionStatus = await inspectOverlayCompanionInstall();
+
+  if (!companionStatus.launchable || !companionStatus.executable_path) {
+    return;
+  }
+
+  if (isPersistentDesktopShellCompanion(companionStatus)) {
+    return;
+  }
+
+  await terminateInstalledOverlayCompanion(workspacePath);
 }
 
 async function findRecentLaunchFailure(workspacePath: string): Promise<string | null> {

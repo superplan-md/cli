@@ -1,8 +1,13 @@
 # Writing Plans Evals
 
+## Eval Set
+
+- `01-detailed-plan-options-request.md`
+
 ## Pressure Scenario
 
 - approved design for multi-step work with dependencies, partial uncertainty, and a real verification path
+- user explicitly asks for a detailed plan with options before implementation
 
 ## Pass Condition
 

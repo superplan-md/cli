@@ -17,9 +17,11 @@
   },
   "scripts": {
     "build": "tsc && node ./scripts/copy-skills.js && ./scripts/generate-outputs.sh",
-    "overlay:bundle": "npm --prefix apps/overlay-desktop run tauri build",
+    "desktop:build": "pnpm --dir apps/desktop build",
+    "desktop:dev": "pnpm --dir apps/desktop dev",
+    "overlay:bundle": "node ./scripts/overlay-release.js build",
     "overlay:package": "node ./scripts/overlay-release.js package",
-    "overlay:release": "npm --prefix apps/overlay-desktop run tauri build && node ./scripts/overlay-release.js package",
+    "overlay:release": "node ./scripts/overlay-release.js build-package",
     "overlay:release:github": "node ./scripts/overlay-release-dispatch.js",
     "start": "node ./dist/cli/main.js",
     "test": "npm run build && node --test test/*.test.cjs",

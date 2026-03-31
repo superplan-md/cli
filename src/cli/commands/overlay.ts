@@ -12,7 +12,10 @@ import {
   createSkippedCompanionLaunchResult,
   hasRenderableSnapshotContent,
 } from '../overlay-visibility';
-import { terminateInstalledOverlayCompanion, type OverlayCompanionLaunchResult } from '../overlay-companion';
+import {
+  hideInstalledOverlayCompanion,
+  type OverlayCompanionLaunchResult,
+} from '../overlay-companion';
 import { recordVisibilityEvent } from '../visibility-runtime';
 import { stopNextAction, type NextAction } from '../next-action';
 
@@ -170,7 +173,7 @@ async function hideOverlay(): Promise<OverlayResult> {
   const [{ paths, control }, preferences] = await Promise.all([
     setOverlayVisibilityRequest('hide'),
     readOverlayPreferences(),
-    terminateInstalledOverlayCompanion(),
+    hideInstalledOverlayCompanion(process.cwd()),
   ]);
   await recordVisibilityEvent({
     type: 'overlay.hide',
@@ -223,7 +226,7 @@ async function setOverlayEnabled(enabled: boolean, scope: OverlayPreferenceScope
   const [{ config_path }, { paths }] = await Promise.all([
     writeOverlayPreference(enabled, { scope }),
     setOverlayVisibilityRequest('hide'),
-    terminateInstalledOverlayCompanion(),
+    hideInstalledOverlayCompanion(process.cwd()),
   ]);
   const nextPreferences = await readOverlayPreferences();
 

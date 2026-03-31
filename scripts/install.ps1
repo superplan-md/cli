@@ -100,8 +100,8 @@ function Copy-LocalSourceSnapshot {
   )
 
   $excludedPaths = @(
-    (Join-Path $SourceDir 'apps/overlay-desktop/node_modules'),
-    (Join-Path $SourceDir 'apps/overlay-desktop/src-tauri/target')
+    (Join-Path $SourceDir 'apps/desktop/node_modules'),
+    (Join-Path $SourceDir 'apps/desktop/dist')
   ) | ForEach-Object { [System.IO.Path]::GetFullPath($_) }
 
   New-Item -ItemType Directory -Force -Path $DestinationDir | Out-Null
@@ -181,7 +181,7 @@ function Resolve-InstallRef {
   }
 
   if (-not [string]::IsNullOrWhiteSpace($SuperplanSourceDir)) {
-    $script:SuperplanResolvedRef = 'main'
+    $script:SuperplanResolvedRef = 'dev'
     return
   }
 
@@ -252,8 +252,15 @@ function Resolve-PackagedOverlaySource {
     return $true
   }
 
-  $localBuildPath = Join-Path $SourceWorktree 'apps/overlay-desktop/src-tauri/target/release/superplan-overlay-desktop.exe'
-  if (Test-Path -LiteralPath $localBuildPath -PathType Leaf) {
+  $localDesktopDist = Join-Path $SourceWorktree 'apps/desktop/dist'
+  $localBuildPath = $null
+  if (Test-Path -LiteralPath $localDesktopDist -PathType Container) {
+    $localBuildPath = Get-ChildItem -LiteralPath $localDesktopDist -Filter '*portable*.exe' -File -ErrorAction SilentlyContinue |
+      Sort-Object Name |
+      Select-Object -First 1 -ExpandProperty FullName
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($localBuildPath) -and (Test-Path -LiteralPath $localBuildPath -PathType Leaf)) {
     $script:SuperplanOverlaySourcePath = $localBuildPath
     $script:OverlayInstallMethod = 'copied_prebuilt'
     return $true
@@ -320,6 +327,25 @@ function Ensure-WritablePrefix {
   $script:SuperplanInstallPrefix = $fallbackPrefix
 }
 
+function Should-EnableOverlayByDefault {
+  $override = To-Lower ([string] $SuperplanEnableOverlay)
+
+  if ($override -in @('1', 'y', 'yes', 'true', 'on')) {
+    return $true
+  }
+
+  if ($override -in @('0', 'n', 'no', 'false', 'off')) {
+    return $false
+  }
+
+  if ($Host.Name -notin @('ServerRemoteHost', 'ServerHost')) {
+    $answer = Read-Host 'Enable desktop overlay by default on this machine? [Y/n]'
+    return [string]::IsNullOrWhiteSpace($answer) -or (To-Lower $answer) -in @('y', 'yes')
+  }
+
+  return $true
+}
+
 function Run-MachineSetup {
   param([string] $SuperplanCommandPath)
 
@@ -347,6 +373,24 @@ function Run-MachineSetup {
     Pop-Location
   }
   $script:SetupCompleted = $true
+
+  if (-not [string]::IsNullOrWhiteSpace($script:OverlayInstallPath)) {
+    if (Should-EnableOverlayByDefault) {
+      Say 'Enabling desktop overlay by default'
+      & $SuperplanCommandPath overlay enable --global --json | Out-Null
+      if ($LASTEXITCODE -ne 0) {
+        Fail 'failed to enable overlay by default'
+      }
+    } else {
+      Say 'Leaving desktop overlay disabled by default'
+      & $SuperplanCommandPath overlay disable --global --json | Out-Null
+      if ($LASTEXITCODE -ne 0) {
+        Fail 'failed to persist overlay preference'
+      }
+    }
+  } else {
+    Say 'Overlay not installed; skipping overlay preference setup'
+  }
 }
 
 Require-Command node

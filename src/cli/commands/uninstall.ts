@@ -8,6 +8,7 @@ import { ALL_SUPERPLAN_SKILL_NAMES } from '../skill-names';
 import { stopNextAction, type NextAction } from '../next-action';
 import { terminateInstalledOverlayCompanion } from '../overlay-companion';
 import { removeAgentsFromRegistry, getInstalledAgentsFromRegistry } from '../global-superplan';
+import { remove } from './remove';
 
 interface AgentEnvironment {
   name: string;
@@ -480,9 +481,18 @@ function resolveInstalledOverlayTargets(installMetadata: InstallMetadata | null)
     targets.add(path.normalize(overlay.executable_path));
   }
 
-  // Standard macOS bundle location if not in metadata or if we want to be thorough
   if (process.platform === 'darwin') {
+    targets.add('/Applications/Superplan.app');
+    targets.add(path.join(os.homedir(), '.local', 'share', 'superplan', 'overlay', 'Superplan.app'));
     targets.add('/Applications/Superplan Overlay Desktop.app');
+  }
+
+  if (process.platform === 'linux') {
+    targets.add(path.join(os.homedir(), '.local', 'share', 'superplan', 'overlay', 'superplan-overlay.AppImage'));
+  }
+
+  if (process.platform === 'win32') {
+    targets.add(path.join(os.homedir(), '.config', 'superplan', 'overlay', 'superplan-overlay.exe'));
   }
 
   return Array.from(targets);
@@ -525,6 +535,12 @@ async function uninstallCommand(
           },
         };
       }
+    }
+
+    // First, run remove --scope global to clean up agent integrations
+    const removeResult = await remove({ scope: 'global', yes: true, json: options.json, quiet: options.quiet });
+    if (!removeResult.ok && !options.json) {
+      console.warn(`Warning: Global remove step encountered an issue: ${removeResult.error.message}`);
     }
 
     const removedPaths: string[] = [];
@@ -583,6 +599,9 @@ async function uninstallCommand(
     // Clean up overlay application support files on macOS
     if (process.platform === 'darwin') {
       const appSupportDir = path.join(homeDir, 'Library', 'Application Support');
+      await removePath(path.join(appSupportDir, 'Superplan'), removedPaths);
+      await removePath(path.join(appSupportDir, 'superplan-desktop'), removedPaths);
+      await removePath(path.join(appSupportDir, 'com.superplan.desktop'), removedPaths);
       await removePath(path.join(appSupportDir, 'superplan-overlay-desktop'), removedPaths);
       await removePath(path.join(appSupportDir, 'Superplan Overlay Desktop'), removedPaths);
       await removePath(path.join(appSupportDir, 'com.superplan.overlay'), removedPaths);

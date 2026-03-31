@@ -3,10 +3,9 @@ import * as path from 'path';
 import * as os from 'os';
 import {
   ensureWorkspaceArtifacts,
-  getWorkspaceArtifactPaths,
   ensureChangeArtifacts,
-  getChangeArtifactPaths,
 } from './workspace-artifacts';
+import { resolveSuperplanRoot, getWorkspaceDirName, resolveWorkspaceRoot } from './workspace-root';
 
 const GLOBAL_SUPERPLAN_DIR = path.join(os.homedir(), '.config', 'superplan');
 const AGENTS_REGISTRY_FILE = path.join(GLOBAL_SUPERPLAN_DIR, 'agents.json');
@@ -29,15 +28,17 @@ export interface GlobalSuperplanPaths {
 }
 
 export function getGlobalSuperplanPaths(): GlobalSuperplanPaths {
+  // Delegate to the workspace-specific superplan root to maintain compatibility with calling code
+  const workspaceRoot = resolveSuperplanRoot();
   return {
-    superplanRoot: GLOBAL_SUPERPLAN_DIR,
-    changesDir: path.join(GLOBAL_SUPERPLAN_DIR, 'changes'),
-    runtimeDir: path.join(GLOBAL_SUPERPLAN_DIR, 'runtime'),
-    contextDir: path.join(GLOBAL_SUPERPLAN_DIR, 'context'),
+    superplanRoot: workspaceRoot,
+    changesDir: path.join(workspaceRoot, 'changes'),
+    runtimeDir: path.join(workspaceRoot, 'runtime'),
+    contextDir: path.join(workspaceRoot, 'context'),
     agentsRegistryPath: AGENTS_REGISTRY_FILE,
-    decisionsPath: path.join(GLOBAL_SUPERPLAN_DIR, 'decisions.md'),
-    gotchasPath: path.join(GLOBAL_SUPERPLAN_DIR, 'gotchas.md'),
-    contextIndexPath: path.join(GLOBAL_SUPERPLAN_DIR, 'context', 'INDEX.md'),
+    decisionsPath: path.join(workspaceRoot, 'decisions.md'),
+    gotchasPath: path.join(workspaceRoot, 'gotchas.md'),
+    contextIndexPath: path.join(workspaceRoot, 'context', 'INDEX.md'),
   };
 }
 
@@ -52,6 +53,7 @@ export async function pathExists(targetPath: string): Promise<boolean> {
 
 export async function ensureGlobalSuperplanDir(): Promise<void> {
   const paths = getGlobalSuperplanPaths();
+  await fs.mkdir(GLOBAL_SUPERPLAN_DIR, { recursive: true });
   await fs.mkdir(paths.superplanRoot, { recursive: true });
   await fs.mkdir(paths.changesDir, { recursive: true });
   await fs.mkdir(paths.runtimeDir, { recursive: true });
@@ -112,7 +114,7 @@ export function getCurrentDirName(): string {
 
 export async function ensureGlobalWorkspaceArtifacts(): Promise<string[]> {
   await ensureGlobalSuperplanDir();
-  return await ensureWorkspaceArtifacts(GLOBAL_SUPERPLAN_DIR);
+  return await ensureWorkspaceArtifacts(resolveSuperplanRoot());
 }
 
 export async function ensureGlobalChangeArtifacts(changeSlug: string, title: string): Promise<string[]> {

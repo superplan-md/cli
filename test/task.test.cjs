@@ -14,6 +14,7 @@ const {
   writeChangeGraph,
   writeFile,
   writeJson,
+  getSuperplanRoot,
 } = require('./helpers.cjs');
 
 function getRuntimeTask(runtimeState, taskRef) {
@@ -40,7 +41,7 @@ test('task selector returns the selected task contract and status reflects prior
     ],
   });
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-001.md'), `---
 task_id: T-001
 status: pending
 priority: low
@@ -53,7 +54,7 @@ Low priority task
 - [ ] A
 `);
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-002.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-002.md'), `---
 task_id: T-002
 status: pending
 priority: high
@@ -66,7 +67,7 @@ High priority task
 - [ ] A
 `);
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-003.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-003.md'), `---
 task_id: T-003
 status: pending
 ---
@@ -106,7 +107,7 @@ Default priority task
   assert.equal(statusPayload.error, null);
 });
 
-test('run starts the next task and then continues it on the next invocation', async () => {
+test('run starts the next task, but bare reruns require explicit intent to continue active work', async () => {
   const sandbox = await makeSandbox('superplan-run-loop-');
 
   await writeChangeGraph(sandbox.cwd, 'demo', {
@@ -116,7 +117,7 @@ test('run starts the next task and then continues it on the next invocation', as
     ],
   });
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-100.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-100.md'), `---
 task_id: T-100
 status: pending
 priority: high
@@ -163,20 +164,271 @@ Run me
   assert.equal(firstRunPayload.data.active_task_context.execution_handoff.workflow_surfaces.verification_surfaces.includes('package script: npm test'), true);
   assert.equal(firstRunPayload.error, null);
 
-  const runtimeState = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'));
+  const runtimeState = await readJson(path.join(getSuperplanRoot(sandbox), 'runtime', 'tasks.json'));
   assert.equal(getRuntimeTask(runtimeState, 'demo/T-100').status, 'in_progress');
   assert.ok(getRuntimeTask(runtimeState, 'demo/T-100').started_at);
 
   const secondRunResult = await runCli(['run', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const secondRunPayload = parseCliJson(secondRunResult);
   assert.equal(secondRunPayload.ok, true);
-  assert.equal(secondRunPayload.data.task_id, 'demo/T-100');
-  assert.equal(secondRunPayload.data.action, 'continue');
-  assert.equal(secondRunPayload.data.reason, 'Task is currently in progress');
-  assert.equal(secondRunPayload.data.task.task_id, 'T-100');
-  assert.equal(secondRunPayload.data.task.status, 'in_progress');
-  assert.equal(secondRunPayload.data.active_task_context.environment.SUPERPLAN_ACTIVE_TASK, 'demo/T-100');
+  assert.equal(secondRunPayload.data.task_id, null);
+  assert.equal(secondRunPayload.data.action, 'idle');
+  assert.equal(secondRunPayload.data.status, null);
+  assert.equal(secondRunPayload.data.task, null);
+  assert.match(secondRunPayload.data.reason, /demo\/T-100/);
+  assert.equal(secondRunPayload.data.next_action.type, 'stop');
+  assert.match(secondRunPayload.data.next_action.outcome, /superplan run demo\/T-100 --json/);
   assert.equal(secondRunPayload.error, null);
+
+  const explicitContinuePayload = parseCliJson(await runCli(['run', 'demo/T-100', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  assert.equal(explicitContinuePayload.ok, true);
+  assert.equal(explicitContinuePayload.data.task_id, 'demo/T-100');
+  assert.equal(explicitContinuePayload.data.action, 'continue');
+  assert.equal(explicitContinuePayload.data.reason, 'Task is already in progress');
+  assert.equal(explicitContinuePayload.data.task.task_id, 'T-100');
+  assert.equal(explicitContinuePayload.data.task.status, 'in_progress');
+  assert.equal(explicitContinuePayload.data.active_task_context.environment.SUPERPLAN_ACTIVE_TASK, 'demo/T-100');
+});
+
+test('bare run does not auto-resume or replace competing in-progress work from another change', async () => {
+  const sandbox = await makeSandbox('superplan-run-competing-active-');
+
+  await writeChangeGraph(sandbox.cwd, 'alpha', {
+    title: 'Alpha',
+    entries: [
+      { task_id: 'T-001', title: 'Alpha active task' },
+    ],
+  });
+  await writeChangeGraph(sandbox.cwd, 'beta', {
+    title: 'Beta',
+    entries: [
+      { task_id: 'T-002', title: 'Beta ready task' },
+    ],
+  });
+
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'alpha', 'tasks', 'T-001.md'), `---
+task_id: T-001
+status: pending
+priority: high
+---
+
+## Description
+Alpha active task
+
+## Acceptance Criteria
+- [ ] A
+`);
+
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'beta', 'tasks', 'T-002.md'), `---
+task_id: T-002
+status: pending
+priority: high
+---
+
+## Description
+Beta ready task
+
+## Acceptance Criteria
+- [ ] B
+`);
+
+  const alphaStartPayload = parseCliJson(await runCli(['run', 'alpha/T-001', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  assert.equal(alphaStartPayload.ok, true);
+  assert.equal(alphaStartPayload.data.action, 'start');
+
+  const competingRunPayload = parseCliJson(await runCli(['run', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  assert.equal(competingRunPayload.ok, true);
+  assert.equal(competingRunPayload.data.task_id, null);
+  assert.equal(competingRunPayload.data.action, 'idle');
+  assert.match(competingRunPayload.data.reason, /alpha\/T-001/);
+  assert.equal(competingRunPayload.data.next_action.type, 'stop');
+  assert.match(competingRunPayload.data.next_action.outcome, /superplan run alpha\/T-001 --json/);
+
+  const runtimeStateAfterCompetingRun = await readJson(path.join(getSuperplanRoot(sandbox), 'runtime', 'tasks.json'));
+  assert.equal(getRuntimeTask(runtimeStateAfterCompetingRun, 'alpha/T-001').status, 'in_progress');
+  assert.equal(getRuntimeTask(runtimeStateAfterCompetingRun, 'beta/T-002'), undefined);
+});
+
+test('session focus stays local to the chat, but it does not bypass existing active work in another change', async () => {
+  const sandbox = await makeSandbox('superplan-session-focus-');
+  const sessionAEnv = {
+    ...sandbox.env,
+    SUPERPLAN_SESSION_ID: 'session-A',
+  };
+  const sessionBEnv = {
+    ...sandbox.env,
+    SUPERPLAN_SESSION_ID: 'session-B',
+  };
+  const superplanRoot = getSuperplanRoot(sandbox);
+
+  await fs.mkdir(path.join(superplanRoot, 'changes'), { recursive: true });
+
+  await writeChangeGraph(sandbox.cwd, 'alpha', {
+    title: 'Alpha',
+    entries: [
+      { task_id: 'T-001', title: 'Alpha task' },
+    ],
+  });
+
+  await writeFile(path.join(superplanRoot, 'changes', 'alpha', 'tasks', 'T-001.md'), `---
+task_id: T-001
+status: pending
+priority: high
+---
+
+## Description
+Alpha task
+
+## Acceptance Criteria
+- [ ] A
+`);
+
+  const alphaStartPayload = parseCliJson(await runCli(['run', 'alpha/T-001', '--json'], {
+    cwd: sandbox.cwd,
+    env: sessionAEnv,
+  }));
+  assert.equal(alphaStartPayload.ok, true);
+  assert.equal(alphaStartPayload.data.action, 'start');
+  assert.equal(alphaStartPayload.data.task_id, 'alpha/T-001');
+
+  const betaChangePayload = parseCliJson(await runCli([
+    'change',
+    'new',
+    'beta',
+    '--title',
+    'Beta',
+    '--single-task',
+    'Beta task',
+    '--json',
+  ], {
+    cwd: sandbox.cwd,
+    env: sessionBEnv,
+  }));
+  assert.equal(betaChangePayload.ok, true);
+  assert.equal(betaChangePayload.data.change_id, 'beta');
+
+  const betaBareRunPayload = parseCliJson(await runCli(['run', '--json'], {
+    cwd: sandbox.cwd,
+    env: sessionBEnv,
+  }));
+  assert.equal(betaBareRunPayload.ok, true);
+  assert.equal(betaBareRunPayload.data.task_id, null);
+  assert.equal(betaBareRunPayload.data.action, 'idle');
+  assert.match(betaBareRunPayload.data.reason, /alpha\/T-001/);
+  assert.equal(betaBareRunPayload.data.next_action.type, 'stop');
+  assert.match(betaBareRunPayload.data.next_action.outcome, /superplan run alpha\/T-001 --json/);
+
+  const alphaBareRunPayload = parseCliJson(await runCli(['run', '--json'], {
+    cwd: sandbox.cwd,
+    env: sessionAEnv,
+  }));
+  assert.equal(alphaBareRunPayload.ok, true);
+  assert.equal(alphaBareRunPayload.data.task_id, 'alpha/T-001');
+  assert.equal(alphaBareRunPayload.data.action, 'continue');
+  assert.match(alphaBareRunPayload.data.reason, /current session focus/);
+
+  const focusState = await readJson(path.join(superplanRoot, 'runtime', 'session-focus.json'));
+  assert.equal(focusState.sessions['session-A'].focused_change_id, 'alpha');
+  assert.equal(focusState.sessions['session-A'].focused_task_ref, 'alpha/T-001');
+  assert.equal(focusState.sessions['session-B'].focused_change_id, 'beta');
+  assert.equal(focusState.sessions['session-B'].focused_task_ref, 'beta/T-001');
+
+  const takeoverPayload = parseCliJson(await runCli(['run', 'alpha/T-001', '--json'], {
+    cwd: sandbox.cwd,
+    env: sessionBEnv,
+  }));
+  assert.equal(takeoverPayload.ok, true);
+  assert.equal(takeoverPayload.data.task_id, 'alpha/T-001');
+  assert.equal(takeoverPayload.data.action, 'continue');
+
+  const sessionBBareRunAfterTakeover = parseCliJson(await runCli(['run', '--json'], {
+    cwd: sandbox.cwd,
+    env: sessionBEnv,
+  }));
+  assert.equal(sessionBBareRunAfterTakeover.ok, true);
+  assert.equal(sessionBBareRunAfterTakeover.data.task_id, 'alpha/T-001');
+  assert.equal(sessionBBareRunAfterTakeover.data.action, 'continue');
+
+  const focusStateAfterTakeover = await readJson(path.join(superplanRoot, 'runtime', 'session-focus.json'));
+  assert.equal(focusStateAfterTakeover.sessions['session-B'].focused_change_id, 'alpha');
+  assert.equal(focusStateAfterTakeover.sessions['session-B'].focused_task_ref, 'alpha/T-001');
+});
+
+test('run --fresh bypasses same-session focus while explicit continue still resumes the old task', async () => {
+  const sandbox = await makeSandbox('superplan-run-fresh-same-session-');
+  const sessionEnv = {
+    ...sandbox.env,
+    SUPERPLAN_SESSION_ID: 'session-A',
+  };
+  const superplanRoot = getSuperplanRoot(sandbox);
+
+  await writeChangeGraph(sandbox.cwd, 'alpha', {
+    title: 'Alpha',
+    entries: [
+      { task_id: 'T-001', title: 'Alpha task' },
+    ],
+  });
+
+  await writeFile(path.join(superplanRoot, 'changes', 'alpha', 'tasks', 'T-001.md'), `---
+task_id: T-001
+status: pending
+priority: high
+---
+
+## Description
+Alpha task
+
+## Acceptance Criteria
+- [ ] A
+`);
+
+  const alphaStartPayload = parseCliJson(await runCli(['run', 'alpha/T-001', '--json'], {
+    cwd: sandbox.cwd,
+    env: sessionEnv,
+  }));
+  assert.equal(alphaStartPayload.ok, true);
+  assert.equal(alphaStartPayload.data.task_id, 'alpha/T-001');
+  assert.equal(alphaStartPayload.data.action, 'start');
+
+  const betaChangePayload = parseCliJson(await runCli([
+    'change',
+    'new',
+    'beta',
+    '--title',
+    'Beta',
+    '--single-task',
+    'Beta task',
+    '--json',
+  ], {
+    cwd: sandbox.cwd,
+    env: sessionEnv,
+  }));
+  assert.equal(betaChangePayload.ok, true);
+  assert.equal(betaChangePayload.data.change_id, 'beta');
+
+  const freshRunPayload = parseCliJson(await runCli(['run', '--fresh', '--json'], {
+    cwd: sandbox.cwd,
+    env: sessionEnv,
+  }));
+  assert.equal(freshRunPayload.ok, true);
+  assert.equal(freshRunPayload.data.task_id, null);
+  assert.equal(freshRunPayload.data.action, 'idle');
+  assert.match(freshRunPayload.data.reason, /alpha\/T-001/);
+  assert.doesNotMatch(freshRunPayload.data.reason, /current session focus/);
+  assert.equal(freshRunPayload.data.next_action.type, 'stop');
+  assert.match(freshRunPayload.data.next_action.outcome, /superplan run alpha\/T-001 --json/);
+
+  const explicitContinuePayload = parseCliJson(await runCli(['run', 'alpha/T-001', '--json'], {
+    cwd: sandbox.cwd,
+    env: sessionEnv,
+  }));
+  assert.equal(explicitContinuePayload.ok, true);
+  assert.equal(explicitContinuePayload.data.task_id, 'alpha/T-001');
+  assert.equal(explicitContinuePayload.data.action, 'continue');
+
+  const focusState = await readJson(path.join(superplanRoot, 'runtime', 'session-focus.json'));
+  assert.equal(focusState.sessions['session-A'].focused_change_id, 'alpha');
+  assert.equal(focusState.sessions['session-A'].focused_task_ref, 'alpha/T-001');
 });
 
 test('run with an explicit task id writes runtime state at the repo root workspace', async () => {
@@ -191,7 +443,7 @@ test('run with an explicit task id writes runtime state at the repo root workspa
       { task_id: 'T-150', title: 'Start from nested cwd' },
     ],
   });
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-150.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-150.md'), `---
 task_id: T-150
 status: pending
 priority: high
@@ -211,7 +463,7 @@ Start from nested cwd
 
   assert.equal(startPayload.data.action, 'start');
   assert.equal(startPayload.data.status, 'in_progress');
-  assert.equal(getRuntimeTask(await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json')), 'demo/T-150').status, 'in_progress');
+  assert.equal(getRuntimeTask(await readJson(path.join(getSuperplanRoot(sandbox), 'runtime', 'tasks.json')), 'demo/T-150').status, 'in_progress');
   assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
 });
 
@@ -231,7 +483,7 @@ test('qualified task refs remain runnable when multiple changes reuse the same l
     ],
   });
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'alpha', 'tasks', 'T-001.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'alpha', 'tasks', 'T-001.md'), `---
 task_id: T-001
 status: pending
 priority: high
@@ -244,7 +496,7 @@ Alpha task
 - [ ] A
 `);
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'beta', 'tasks', 'T-001.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'beta', 'tasks', 'T-001.md'), `---
 task_id: T-001
 status: pending
 priority: high
@@ -263,7 +515,7 @@ Beta task
   }));
   assert.equal(qualifiedRunPayload.ok, true);
   assert.equal(qualifiedRunPayload.data.task_id, 'alpha/T-001');
-  assert.equal(getRuntimeTask(await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json')), 'alpha/T-001').status, 'in_progress');
+  assert.equal(getRuntimeTask(await readJson(path.join(getSuperplanRoot(sandbox), 'runtime', 'tasks.json')), 'alpha/T-001').status, 'in_progress');
 
   const ambiguousRunPayload = parseCliJson(await runCli(['run', 'T-001', '--json'], {
     cwd: sandbox.cwd,
@@ -283,7 +535,7 @@ test('runtime auto-migrates a uniquely resolvable legacy bare runtime id on firs
     ],
   });
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-100.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-100.md'), `---
 task_id: T-100
 status: pending
 priority: high
@@ -296,7 +548,7 @@ Repair me
 - [ ] A
 `);
 
-  await writeJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'), {
+  await writeJson(path.join(getSuperplanRoot(sandbox), 'runtime', 'tasks.json'), {
     tasks: {
       'T-100': {
         status: 'in_progress',
@@ -312,7 +564,7 @@ Repair me
   }));
   assert.equal(statusPayload.ok, true);
 
-  const runtimeState = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'));
+  const runtimeState = await readJson(path.join(getSuperplanRoot(sandbox), 'runtime', 'tasks.json'));
   assert.equal(getRuntimeTask(runtimeState, 'demo/T-100').status, 'in_progress');
 });
 
@@ -332,7 +584,7 @@ test('ambiguous legacy bare runtime ids do not shadow qualified change-scoped ex
     ],
   });
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'alpha', 'tasks', 'T-001.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'alpha', 'tasks', 'T-001.md'), `---
 task_id: T-001
 status: pending
 priority: high
@@ -345,7 +597,7 @@ Alpha task
 - [ ] A
 `);
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'beta', 'tasks', 'T-001.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'beta', 'tasks', 'T-001.md'), `---
 task_id: T-001
 status: pending
 priority: high
@@ -358,7 +610,7 @@ Beta task
 - [ ] B
 `);
 
-  await writeJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'), {
+  await writeJson(path.join(getSuperplanRoot(sandbox), 'runtime', 'tasks.json'), {
     tasks: {
       'T-001': {
         status: 'in_progress',
@@ -375,7 +627,7 @@ Beta task
   assert.equal(runPayload.ok, true);
   assert.equal(runPayload.data.task_id, 'alpha/T-001');
 
-  const runtimeState = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'));
+  const runtimeState = await readJson(path.join(getSuperplanRoot(sandbox), 'runtime', 'tasks.json'));
   assert.equal(getRuntimeTask(runtimeState, 'alpha/T-001').status, 'in_progress');
   assert.equal(getRuntimeTask(runtimeState, 'beta/T-001'), undefined);
 });
@@ -390,7 +642,7 @@ test('task inspect show surfaces authored execution and verification recipes', a
     ],
   });
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-175.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-175.md'), `---
 task_id: T-175
 title: Add recipe guidance
 status: pending
@@ -447,7 +699,7 @@ test('task inspect show infers repo-native verification commands when the task d
     ],
   });
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-176.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-176.md'), `---
 task_id: T-176
 title: Improve overlay verification
 status: pending
@@ -487,7 +739,7 @@ test('task lifecycle supports block, explicit run resume, request-feedback, and 
     ],
   });
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-200.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-200.md'), `---
 task_id: T-200
 status: pending
 priority: high
@@ -551,10 +803,10 @@ Lifecycle task
   assert.equal(resetPayload.data.next_action.command, 'superplan status --json');
   assert.equal(resetPayload.error, null);
 
-  const eventsContent = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'));
+  const eventsContent = await readJson(path.join(getSuperplanRoot(sandbox), 'runtime', 'tasks.json'));
   assert.deepEqual(eventsContent, { changes: {} });
 
-  const eventsFile = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'runtime', 'events.ndjson'), 'utf-8');
+  const eventsFile = await fs.readFile(path.join(getSuperplanRoot(sandbox), 'runtime', 'events.ndjson'), 'utf-8');
   const eventTypes = eventsFile
     .trim()
     .split(/\r?\n/)
@@ -584,7 +836,7 @@ test('task complete auto-finishes routine work and reopen returns it to implemen
     ],
   });
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-300.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-300.md'), `---
 task_id: T-300
 status: pending
 ---
@@ -597,7 +849,7 @@ Complete me
 - [x] B
 `);
 
-  await writeJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'), {
+  await writeJson(path.join(getSuperplanRoot(sandbox), 'runtime', 'tasks.json'), {
     tasks: {
       'demo/T-300': {
         status: 'in_progress',
@@ -651,7 +903,7 @@ Complete me
   assert.equal(reopenedStatusPayload.data.next_action.type, 'command');
   assert.equal(reopenedStatusPayload.data.next_action.command, 'superplan run demo/T-300 --json');
 
-  const eventsFile = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'runtime', 'events.ndjson'), 'utf-8');
+  const eventsFile = await fs.readFile(path.join(getSuperplanRoot(sandbox), 'runtime', 'events.ndjson'), 'utf-8');
   const allEventTypes = eventsFile
     .trim()
     .split(/\r?\n/)
@@ -687,7 +939,7 @@ test('approve and reopen reject invalid review lifecycle transitions', async () 
     ],
   });
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-301.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-301.md'), `---
 task_id: T-301
 status: pending
 ---
@@ -726,7 +978,7 @@ test('task fix repairs runtime conflicts and doctor deep reports the remaining s
     ],
   });
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-401.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-401.md'), `---
 task_id: T-401
 status: pending
 ---
@@ -738,7 +990,7 @@ Valid task
 - [ ] A
 `);
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-402.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-402.md'), `---
 task_id: T-402
 status: pending
 ---
@@ -750,8 +1002,7 @@ Broken dependency task
 - [ ] A
 `);
 
-  // Use global superplan path for runtime state
-  await writeJson(path.join(sandbox.home, '.config', 'superplan', 'runtime', 'tasks.json'), {
+  await writeJson(path.join(getSuperplanRoot(sandbox), 'runtime', 'tasks.json'), {
     tasks: {
       'demo/T-401': {
         status: 'in_progress',
@@ -787,8 +1038,7 @@ Broken dependency task
   assert.equal(fixPayload.data.next_action.command, 'superplan run --json');
   assert.equal(fixPayload.error, null);
 
-  // Use global superplan path for runtime state
-  const runtimeState = await readJson(path.join(sandbox.home, '.config', 'superplan', 'runtime', 'tasks.json'));
+  const runtimeState = await readJson(path.join(getSuperplanRoot(sandbox), 'runtime', 'tasks.json'));
   assert.deepEqual(runtimeState, {
     changes: {
       demo: {
@@ -825,7 +1075,7 @@ test('status and run route inconsistent runtime state to repair fix', async () =
     ],
   });
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-401.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-401.md'), `---
 task_id: T-401
 status: pending
 priority: high
@@ -838,7 +1088,7 @@ First task
 - [ ] A
 `);
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-402.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-402.md'), `---
 task_id: T-402
 status: pending
 priority: high
@@ -851,7 +1101,7 @@ Second task
 - [ ] B
 `);
 
-  await writeJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'), {
+  await writeJson(path.join(getSuperplanRoot(sandbox), 'runtime', 'tasks.json'), {
     tasks: {
       'demo/T-401': {
         status: 'in_progress',

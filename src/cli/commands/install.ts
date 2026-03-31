@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import { execFileSync } from 'node:child_process';
 import { 
   pathExists, 
   directoryHasAtLeastOneFile,
@@ -57,71 +58,160 @@ async function ensureGlobalConfig(configPath: string): Promise<void> {
   await fs.writeFile(configPath, initialConfig, 'utf-8');
 }
 
+function normalizeOverlayArch(rawArch: string = process.arch): 'x64' | 'arm64' | null {
+  if (rawArch === 'x64' || rawArch === 'arm64') {
+    return rawArch;
+  }
+
+  if (rawArch === 'x86_64' || rawArch === 'amd64') {
+    return 'x64';
+  }
+
+  if (rawArch === 'aarch64') {
+    return 'arm64';
+  }
+
+  return null;
+}
+
+function getOverlayReleaseArtifactName(platform: NodeJS.Platform, arch: 'x64' | 'arm64' | null): string | null {
+  if (!arch) {
+    return null;
+  }
+
+  if (platform === 'darwin') {
+    return `superplan-overlay-darwin-${arch}.tar.gz`;
+  }
+
+  if (platform === 'linux') {
+    return `superplan-overlay-linux-${arch}.AppImage`;
+  }
+
+  if (platform === 'win32') {
+    return `superplan-overlay-windows-${arch}.exe`;
+  }
+
+  return null;
+}
+
+async function findMacOverlayBundle(desktopDistDir: string): Promise<string | null> {
+  if (!await pathExists(desktopDistDir)) {
+    return null;
+  }
+
+  const entries = await fs.readdir(desktopDistDir, { withFileTypes: true });
+  const matches: string[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith('mac')) {
+      continue;
+    }
+
+    const candidate = path.join(desktopDistDir, entry.name, 'Superplan.app');
+    if (await pathExists(candidate)) {
+      matches.push(candidate);
+    }
+  }
+
+  matches.sort((left, right) => left.localeCompare(right));
+  return matches[0] ?? null;
+}
+
+async function findLinuxOverlayAppImage(desktopDistDir: string): Promise<string | null> {
+  if (!await pathExists(desktopDistDir)) {
+    return null;
+  }
+
+  const entries = await fs.readdir(desktopDistDir, { withFileTypes: true });
+  const matches = entries
+    .filter(entry => entry.isFile() && entry.name.endsWith('.AppImage'))
+    .map(entry => path.join(desktopDistDir, entry.name))
+    .sort((left, right) => left.localeCompare(right));
+
+  return matches[0] ?? null;
+}
+
+async function findWindowsOverlayPortable(desktopDistDir: string): Promise<string | null> {
+  if (!await pathExists(desktopDistDir)) {
+    return null;
+  }
+
+  const entries = await fs.readdir(desktopDistDir, { withFileTypes: true });
+  const matches = entries
+    .filter(entry => entry.isFile() && entry.name.endsWith('.exe') && /portable/i.test(entry.name))
+    .map(entry => path.join(desktopDistDir, entry.name))
+    .sort((left, right) => left.localeCompare(right));
+
+  return matches[0] ?? null;
+}
+
+function extractTarArchive(archivePath: string, destinationDir: string): string {
+  const archiveListing = execFileSync('tar', ['-tzf', archivePath], {
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
+  const archiveRoot = archiveListing
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => line.replace(/^\.?\//, '').split('/')[0])
+    .find(Boolean);
+
+  if (!archiveRoot) {
+    throw new Error(`Failed to determine archive root for ${archivePath}`);
+  }
+
+  execFileSync('tar', ['-xzf', archivePath, '-C', destinationDir], {
+    stdio: 'inherit',
+  });
+
+  return path.join(destinationDir, archiveRoot);
+}
+
 async function installOverlayCompanion(globalConfigDir: string): Promise<void> {
   const repoRoot = path.resolve(__dirname, '../../..');
   const platform = process.platform;
+  const arch = normalizeOverlayArch();
+  const releaseArtifactName = getOverlayReleaseArtifactName(platform, arch);
+  const releaseArtifactPath = releaseArtifactName
+    ? path.join(repoRoot, 'dist', 'release', 'overlay', releaseArtifactName)
+    : null;
+  const desktopDistDir = path.join(repoRoot, 'apps', 'desktop', 'dist');
   let sourceBundlePath: string | null = null;
+  let sourceArtifactPath: string | null = releaseArtifactPath && await pathExists(releaseArtifactPath)
+    ? releaseArtifactPath
+    : null;
   let targetBundleName: string | null = null;
   let executableRelativePath: string | null = null;
 
   if (platform === 'darwin') {
-    sourceBundlePath = path.join(
-      repoRoot,
-      'apps',
-      'overlay-desktop',
-      'src-tauri',
-      'target',
-      'release',
-      'bundle',
-      'macos',
-      'Superplan Overlay Desktop.app',
-    );
-    targetBundleName = 'Superplan Overlay Desktop.app';
-    executableRelativePath = 'Contents/MacOS/superplan-overlay-desktop';
+    sourceBundlePath = await findMacOverlayBundle(desktopDistDir);
+    targetBundleName = 'Superplan.app';
+    executableRelativePath = 'Contents/MacOS/Superplan';
   } else if (platform === 'linux') {
-    const appImageDir = path.join(
-      repoRoot,
-      'apps',
-      'overlay-desktop',
-      'src-tauri',
-      'target',
-      'release',
-      'bundle',
-      'appimage',
-    );
-    if (await pathExists(appImageDir)) {
-      const entries = await fs.readdir(appImageDir);
-      const appImage = entries.find(e => e.endsWith('.AppImage'));
-      if (appImage) {
-        sourceBundlePath = path.join(appImageDir, appImage);
-        targetBundleName = 'superplan-overlay.AppImage';
-      }
-    }
+    sourceBundlePath = await findLinuxOverlayAppImage(desktopDistDir);
+    targetBundleName = 'superplan-overlay.AppImage';
   } else if (platform === 'win32') {
-    sourceBundlePath = path.join(
-      repoRoot,
-      'apps',
-      'overlay-desktop',
-      'src-tauri',
-      'target',
-      'release',
-      'superplan-overlay-desktop.exe',
-    );
-    targetBundleName = 'superplan-overlay-desktop.exe';
+    sourceBundlePath = await findWindowsOverlayPortable(desktopDistDir);
+    targetBundleName = 'superplan-overlay.exe';
   }
 
-  if (sourceBundlePath && await pathExists(sourceBundlePath)) {
+  if (sourceArtifactPath || sourceBundlePath) {
     const binDir = path.join(globalConfigDir, 'bin');
     await fs.mkdir(binDir, { recursive: true });
     const targetPath = path.join(binDir, targetBundleName!);
-
     await fs.rm(targetPath, { recursive: true, force: true });
 
-    if (platform === 'darwin') {
-      await fs.cp(sourceBundlePath, targetPath, { recursive: true });
+    let installPath = targetPath;
+    const sourcePath = sourceArtifactPath ?? sourceBundlePath!;
+
+    if (platform === 'darwin' && sourceArtifactPath?.endsWith('.tar.gz')) {
+      installPath = extractTarArchive(sourceArtifactPath, binDir);
+    } else if (platform === 'darwin') {
+      await fs.cp(sourcePath, targetPath, { recursive: true });
     } else {
-      await fs.copyFile(sourceBundlePath, targetPath);
-      await fs.chmod(targetPath, 0o755);
+      await fs.copyFile(sourcePath, targetPath);
+      await fs.chmod(targetPath, 0o755).catch(() => undefined);
     }
 
     const installMetadataPath = getInstallMetadataPath();
@@ -130,8 +220,14 @@ async function installOverlayCompanion(globalConfigDir: string): Promise<void> {
       ...existingMetadata,
       overlay: {
         install_method: 'copied_prebuilt',
-        install_path: targetPath,
-        executable_path: executableRelativePath ? path.join(targetPath, executableRelativePath) : targetPath,
+        source_path: sourcePath,
+        asset_name: path.basename(sourcePath),
+        install_dir: binDir,
+        install_path: installPath,
+        executable_path: executableRelativePath ? path.join(installPath, executableRelativePath) : installPath,
+        executable_relative_path: executableRelativePath ?? undefined,
+        platform: platform === 'win32' ? 'windows' : platform,
+        arch: arch ?? process.arch,
         installed_at: new Date().toISOString(),
       },
     };

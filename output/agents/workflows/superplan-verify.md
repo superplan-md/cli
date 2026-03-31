@@ -1,6 +1,6 @@
 ---
 name: superplan-verify
-description: Use when work appears complete and the system must gather real evidence from the current workspace harness before claiming success.
+description: Use when you are about to say work is complete, fixed, passing, or ready and need fresh proof from the real workspace harness first.
 ---
 
 # Verification Before Completion
@@ -15,6 +15,10 @@ It is not the same as Superplan's final AC review, but it feeds that review.
 ## Gate Law
 
 No claim of complete, fixed, passing, or ready for handoff without running the relevant proof first.
+
+## Hard Gate
+
+Do not use confidence, code inspection, or stale output as a substitute for fresh verification evidence.
 
 ## Trigger
 

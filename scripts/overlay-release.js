@@ -1,20 +1,13 @@
 #!/usr/bin/env node
 
-const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
+const { createHash } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
-const DEFAULT_BUNDLE_ROOT = path.join(
-  REPO_ROOT,
-  'apps',
-  'overlay-desktop',
-  'src-tauri',
-  'target',
-  'release',
-  'bundle',
-);
+const DEFAULT_APP_DIR = path.join(REPO_ROOT, 'apps', 'desktop');
+const DEFAULT_BUNDLE_ROOT = path.join(DEFAULT_APP_DIR, 'dist');
 const DEFAULT_OUTPUT_DIR = path.join(REPO_ROOT, 'dist', 'release', 'overlay');
 
 function normalizePlatform(rawPlatform) {
@@ -59,7 +52,6 @@ function getOverlayReleaseTarget(rawPlatform = process.platform, rawArch = proce
       arch,
       artifactName: `superplan-overlay-${platform}-${arch}.tar.gz`,
       artifactKind: 'tar.gz',
-      bundleDirectory: 'macos',
       bundleExtension: '.app',
     };
   }
@@ -70,9 +62,7 @@ function getOverlayReleaseTarget(rawPlatform = process.platform, rawArch = proce
       arch,
       artifactName: `superplan-overlay-${platform}-${arch}.exe`,
       artifactKind: 'file',
-      bundleDirectory: null,
       bundleExtension: '.exe',
-      binaryName: 'superplan-overlay-desktop.exe',
     };
   }
 
@@ -81,7 +71,6 @@ function getOverlayReleaseTarget(rawPlatform = process.platform, rawArch = proce
     arch,
     artifactName: `superplan-overlay-${platform}-${arch}.AppImage`,
     artifactKind: 'file',
-    bundleDirectory: 'appimage',
     bundleExtension: '.AppImage',
   };
 }
@@ -95,36 +84,113 @@ async function pathExists(targetPath) {
   }
 }
 
-async function findBundleInput(bundleRoot, target) {
+async function ensureDirectory(targetPath) {
+  await fsp.mkdir(targetPath, { recursive: true });
+}
+
+async function writeSha256File(targetPath) {
+  const hash = createHash('sha256');
+  hash.update(await fsp.readFile(targetPath));
+  const digest = hash.digest('hex');
+  const checksumPath = `${targetPath}.sha256`;
+  await fsp.writeFile(checksumPath, `${digest}  ${path.basename(targetPath)}\n`, 'utf8');
+  return checksumPath;
+}
+
+function getPnpmCommand() {
+  return process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+}
+
+function runPnpm(args, appDir) {
+  execFileSync(getPnpmCommand(), ['--dir', appDir, ...args], {
+    stdio: 'inherit',
+  });
+}
+
+function getElectronBuilderArgs(target) {
+  const args = ['exec', 'electron-builder', '--publish', 'never'];
+
+  if (target.arch === 'x64') {
+    args.push('--x64');
+  } else if (target.arch === 'arm64') {
+    args.push('--arm64');
+  }
+
+  if (target.platform === 'darwin') {
+    args.push('--mac', '--dir');
+    return args;
+  }
+
   if (target.platform === 'windows') {
-    const binaryPath = path.join(bundleRoot, '..', target.binaryName);
-    if (!await pathExists(binaryPath)) {
-      throw new Error(`Expected Windows overlay binary is missing: ${binaryPath}`);
+    args.push('--win', 'portable');
+    return args;
+  }
+
+  args.push('--linux', 'AppImage');
+  return args;
+}
+
+async function findMacosBundleInput(bundleRoot) {
+  const entries = await fsp.readdir(bundleRoot, { withFileTypes: true });
+  const matches = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith('mac')) {
+      continue;
     }
 
-    return binaryPath;
+    const appBundlePath = path.join(bundleRoot, entry.name, 'Superplan.app');
+    if (await pathExists(appBundlePath)) {
+      matches.push(appBundlePath);
+    }
   }
 
-  const platformBundleDir = path.join(bundleRoot, target.bundleDirectory);
-  if (!await pathExists(platformBundleDir)) {
-    throw new Error(`Expected overlay bundle directory is missing: ${platformBundleDir}`);
-  }
-
-  const entries = await fsp.readdir(platformBundleDir, { withFileTypes: true });
-  const matches = entries
-    .filter(entry => entry.name.endsWith(target.bundleExtension))
-    .map(entry => path.join(platformBundleDir, entry.name))
-    .sort((left, right) => left.localeCompare(right));
-
+  matches.sort((left, right) => left.localeCompare(right));
   if (matches.length === 0) {
-    throw new Error(`No ${target.bundleExtension} overlay bundle found in ${platformBundleDir}`);
+    throw new Error(`No Superplan.app overlay bundle found under ${bundleRoot}`);
   }
 
   return matches[0];
 }
 
-async function ensureDirectory(targetPath) {
-  await fsp.mkdir(targetPath, { recursive: true });
+async function findLinuxBundleInput(bundleRoot) {
+  const entries = await fsp.readdir(bundleRoot, { withFileTypes: true });
+  const matches = entries
+    .filter(entry => entry.isFile() && entry.name.endsWith('.AppImage'))
+    .map(entry => path.join(bundleRoot, entry.name))
+    .sort((left, right) => left.localeCompare(right));
+
+  if (matches.length === 0) {
+    throw new Error(`No .AppImage overlay bundle found in ${bundleRoot}`);
+  }
+
+  return matches[0];
+}
+
+async function findWindowsBundleInput(bundleRoot) {
+  const entries = await fsp.readdir(bundleRoot, { withFileTypes: true });
+  const matches = entries
+    .filter(entry => entry.isFile() && entry.name.endsWith('.exe') && /portable/i.test(entry.name))
+    .map(entry => path.join(bundleRoot, entry.name))
+    .sort((left, right) => left.localeCompare(right));
+
+  if (matches.length === 0) {
+    throw new Error(`No portable Windows overlay build found in ${bundleRoot}`);
+  }
+
+  return matches[0];
+}
+
+async function findBundleInput(bundleRoot, target) {
+  if (target.platform === 'darwin') {
+    return findMacosBundleInput(bundleRoot);
+  }
+
+  if (target.platform === 'windows') {
+    return findWindowsBundleInput(bundleRoot);
+  }
+
+  return findLinuxBundleInput(bundleRoot);
 }
 
 function adHocSignMacosBundleIfSupported(bundleInputPath, target) {
@@ -135,6 +201,23 @@ function adHocSignMacosBundleIfSupported(bundleInputPath, target) {
   execFileSync('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', '--timestamp=none', bundleInputPath], {
     stdio: 'inherit',
   });
+}
+
+async function buildOverlayRelease(options = {}) {
+  const target = getOverlayReleaseTarget(
+    options.platform ?? process.platform,
+    options.arch ?? process.arch,
+  );
+  const appDir = path.resolve(options.appDir ?? DEFAULT_APP_DIR);
+
+  runPnpm(['run', 'build'], appDir);
+  runPnpm(getElectronBuilderArgs(target), appDir);
+
+  return {
+    ...target,
+    appDir,
+    bundleRoot: path.join(appDir, 'dist'),
+  };
 }
 
 async function packageOverlayRelease(options = {}) {
@@ -157,14 +240,32 @@ async function packageOverlayRelease(options = {}) {
     });
   } else {
     await fsp.copyFile(bundleInputPath, artifactPath);
-    await fsp.chmod(artifactPath, 0o755);
+    await fsp.chmod(artifactPath, 0o755).catch(() => {});
   }
+
+  const checksumPath = await writeSha256File(artifactPath);
 
   return {
     ...target,
     bundleInputPath,
     artifactPath,
+    checksumPath,
     outputDir,
+  };
+}
+
+async function buildAndPackageOverlayRelease(options = {}) {
+  const buildResult = await buildOverlayRelease(options);
+  const packageResult = await packageOverlayRelease({
+    ...options,
+    platform: buildResult.platform,
+    arch: buildResult.arch,
+    bundleRoot: buildResult.bundleRoot,
+  });
+
+  return {
+    ...packageResult,
+    appDir: buildResult.appDir,
   };
 }
 
@@ -173,7 +274,9 @@ function printUsage() {
 
 Usage:
   node scripts/overlay-release.js target [--platform <platform>] [--arch <arch>]
+  node scripts/overlay-release.js build [--platform <platform>] [--arch <arch>] [--app-dir <path>]
   node scripts/overlay-release.js package [--platform <platform>] [--arch <arch>] [--bundle-root <path>] [--output-dir <path>] [--bundle-input <path>]
+  node scripts/overlay-release.js build-package [--platform <platform>] [--arch <arch>] [--app-dir <path>] [--output-dir <path>]
 `);
 }
 
@@ -182,6 +285,7 @@ function parseArgs(argv) {
     command: argv[2],
     platform: undefined,
     arch: undefined,
+    appDir: undefined,
     bundleRoot: undefined,
     outputDir: undefined,
     bundleInputPath: undefined,
@@ -199,6 +303,12 @@ function parseArgs(argv) {
 
     if (arg === '--arch' && next) {
       parsed.arch = next;
+      index += 1;
+      continue;
+    }
+
+    if (arg === '--app-dir' && next) {
+      parsed.appDir = next;
       index += 1;
       continue;
     }
@@ -240,12 +350,35 @@ async function main() {
     return;
   }
 
+  if (args.command === 'build') {
+    const result = await buildOverlayRelease({
+      platform: args.platform,
+      arch: args.arch,
+      appDir: args.appDir,
+    });
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
   if (args.command === 'package') {
     const result = await packageOverlayRelease({
       platform: args.platform,
       arch: args.arch,
       bundleRoot: args.bundleRoot,
       outputDir: args.outputDir,
+      bundleInputPath: args.bundleInputPath,
+    });
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  if (args.command === 'build-package') {
+    const result = await buildAndPackageOverlayRelease({
+      platform: args.platform,
+      arch: args.arch,
+      appDir: args.appDir,
+      outputDir: args.outputDir,
+      bundleRoot: args.bundleRoot,
       bundleInputPath: args.bundleInputPath,
     });
     console.log(JSON.stringify(result, null, 2));
@@ -263,8 +396,14 @@ if (require.main === module) {
 }
 
 module.exports = {
+  DEFAULT_APP_DIR,
   DEFAULT_BUNDLE_ROOT,
   DEFAULT_OUTPUT_DIR,
+  REPO_ROOT,
+  buildAndPackageOverlayRelease,
+  buildOverlayRelease,
+  getElectronBuilderArgs,
   getOverlayReleaseTarget,
   packageOverlayRelease,
+  parseArgs,
 };

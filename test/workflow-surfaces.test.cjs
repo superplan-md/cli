@@ -8,6 +8,7 @@ const {
   makeSandbox,
   withSandboxEnv,
   writeFile,
+  getSuperplanRoot,
 } = require('./helpers.cjs');
 
 test('workflow surface detection summarizes repo-native planning, execution, and verification surfaces', async () => {

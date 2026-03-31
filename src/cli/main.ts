@@ -5,6 +5,7 @@ import { getContextCommandHelpMessage } from './commands/context';
 import { getTaskCommandHelpMessage } from './commands/task';
 import { getOverlayCommandHelpMessage } from './commands/overlay';
 import { getVisibilityCommandHelpMessage } from './commands/visibility';
+import { getWorktreeCommandHelpMessage } from './commands/worktree';
 import { getRemoveCommandHelpMessage } from './commands/remove';
 import { getInitCommandHelpMessage } from './commands/init';
 import { stopNextAction, type NextAction } from './next-action';
@@ -55,8 +56,9 @@ Commands:
 
   Execution:
     status     Show active, ready, review, blocked, and feedback-needed queues
-    run        Start, resume, or continue tracked work
+    run        Start session-focused or fresh work, or explicitly resume known tracked work
     task       Inspect or transition one tracked task
+    worktree   Manage execution roots for concurrent change work
 
   Diagnostics:
     parse      Parse task contracts and return diagnostics
@@ -165,6 +167,22 @@ async function main() {
 
   if (command === 'visibility' && (args.includes('--help') || args[1] === 'help')) {
     const helpText = getVisibilityCommandHelpMessage({});
+    if (json || quiet) {
+      printJsonResult({
+        ok: true,
+        data: {
+          help: helpText,
+        },
+        error: null,
+      });
+    } else {
+      console.log(helpText);
+    }
+    return;
+  }
+
+  if (command === 'worktree' && (args.includes('--help') || args[1] === 'help')) {
+    const helpText = getWorktreeCommandHelpMessage();
     if (json || quiet) {
       printJsonResult({
         ok: true,

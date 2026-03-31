@@ -3,7 +3,6 @@ import * as os from 'os';
 import * as path from 'path';
 import { confirm, select } from '@inquirer/prompts';
 import { AgentInstallKind } from '../agent-integrations';
-import { readInstallMetadata, type InstallMetadata } from '../install-metadata';
 import { ALL_SUPERPLAN_SKILL_NAMES } from '../skill-names';
 import { stopNextAction, type NextAction } from '../next-action';
 import { terminateInstalledOverlayCompanion } from '../overlay-companion';
@@ -35,9 +34,6 @@ export interface RemoveOptions {
 }
 
 interface RemoveDeps {
-  readInstallMetadata?: () => Promise<InstallMetadata | null>;
-  currentPackageRoot?: string;
-  invokedEntryPath?: string;
 }
 
 export type RemoveResult =
@@ -179,6 +175,17 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
           path.join(baseDir, '.agents'),
         ],
       },
+      {
+        name: 'windsurf',
+        path: path.join(baseDir, '.windsurf'),
+        install_path: path.join(baseDir, '.windsurf', 'workflows'),
+        install_kind: 'windsurf_rules',
+        cleanup_paths: [
+          path.join(baseDir, '.windsurf', 'skills'),
+          path.join(baseDir, '.windsurf', 'rules'),
+          path.join(baseDir, '.windsurfrules'),
+        ],
+      },
     ];
   }
 
@@ -223,6 +230,17 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
       install_path: path.join(baseDir, '.gemini', 'GEMINI.md'),
       install_kind: 'managed_global_rule',
     },
+    {
+      name: 'windsurf',
+      path: path.join(baseDir, '.windsurf'),
+      install_path: path.join(baseDir, '.windsurf', 'workflows'),
+      install_kind: 'windsurf_rules',
+      cleanup_paths: [
+        path.join(baseDir, '.windsurf', 'skills'),
+        path.join(baseDir, '.windsurf', 'rules'),
+        path.join(baseDir, '.windsurfrules'),
+      ],
+    },
   ];
 }
 
@@ -251,6 +269,13 @@ function getManagedInstallPaths(agent: AgentEnvironment, managedSkillNames: stri
       path.join(agent.install_path, 'memory-bank', 'product.md'),
       path.join(agent.install_path, 'memory-bank', 'guidelines.md'),
       path.join(agent.install_path, 'memory-bank', 'tech.md'),
+      ...(agent.cleanup_paths ?? []),
+    ];
+  }
+
+  if (agent.install_kind === 'windsurf_rules') {
+    return [
+      ...managedSkillNames.map(skillName => path.join(agent.install_path, `${skillName}.md`)),
       ...(agent.cleanup_paths ?? []),
     ];
   }
@@ -318,6 +343,31 @@ async function removePath(targetPath: string, removedPaths: string[]): Promise<v
   }
 
   await fs.rm(targetPath, { recursive: true, force: true });
+  removedPaths.push(targetPath);
+}
+
+async function removePathIfEmpty(targetPath: string, removedPaths: string[]): Promise<void> {
+  if (!targetPath || !await pathExists(targetPath)) {
+    return;
+  }
+
+  let stats;
+  try {
+    stats = await fs.stat(targetPath);
+  } catch {
+    return;
+  }
+
+  if (!stats.isDirectory()) {
+    return;
+  }
+
+  const entries = await fs.readdir(targetPath);
+  if (entries.length > 0) {
+    return;
+  }
+
+  await fs.rmdir(targetPath);
   removedPaths.push(targetPath);
 }
 
@@ -423,8 +473,7 @@ async function removeAgentInstalls(
       for (const cleanupPath of agent.cleanup_paths ?? []) {
         await removePath(cleanupPath, removedPaths);
       }
-      // Also remove the agent's base directory
-      await removePath(agent.path, removedPaths);
+      await removePathIfEmpty(agent.path, removedPaths);
       continue;
     }
 
@@ -437,99 +486,23 @@ async function removeAgentInstalls(
       continue;
     }
 
+    if (agent.install_kind === 'windsurf_rules') {
+      // Remove windsurf rules directory
+      for (const managedSkillName of managedSkillNames) {
+        await removePath(path.join(agent.install_path, `${managedSkillName}.md`), removedPaths);
+      }
+      for (const cleanupPath of agent.cleanup_paths ?? []) {
+        await removePath(cleanupPath, removedPaths);
+      }
+      await removePathIfEmpty(agent.path, removedPaths);
+      continue;
+    }
+
     for (const managedPath of getManagedInstallPaths(agent, managedSkillNames)) {
       await removePath(managedPath, removedPaths);
     }
-    // Also remove the agent's base directory if it exists
-    await removePath(agent.path, removedPaths);
+    await removePathIfEmpty(agent.path, removedPaths);
   }
-}
-
-function inferInstalledCliTargetsFromPackageRoot(packageRoot: string): string[] {
-  const normalizedRoot = path.normalize(packageRoot);
-  if (path.basename(normalizedRoot) !== 'superplan') {
-    return [];
-  }
-
-  const nodeModulesDir = path.dirname(normalizedRoot);
-  if (path.basename(nodeModulesDir) !== 'node_modules') {
-    return [];
-  }
-
-  const libDir = path.dirname(nodeModulesDir);
-  if (path.basename(libDir) !== 'lib') {
-    return [];
-  }
-
-  const installPrefix = path.dirname(libDir);
-  return [
-    normalizedRoot,
-    path.join(installPrefix, 'bin', 'superplan'),
-  ];
-}
-
-function inferInstalledCliTargetsFromInvokedEntryPath(invokedEntryPath: string): string[] {
-  const normalizedEntryPath = path.normalize(invokedEntryPath);
-  if (path.basename(normalizedEntryPath) !== 'superplan') {
-    return [];
-  }
-
-  const binDir = path.dirname(normalizedEntryPath);
-  if (path.basename(binDir) !== 'bin') {
-    return [];
-  }
-
-  const installPrefix = path.dirname(binDir);
-  return [
-    path.join(installPrefix, 'lib', 'node_modules', 'superplan'),
-    normalizedEntryPath,
-  ];
-}
-
-function resolveInstalledCliTargets(
-  installMetadata: InstallMetadata | null,
-  currentPackageRoot: string,
-  invokedEntryPath: string,
-): string[] {
-  const targets = new Set<string>();
-
-  if (installMetadata?.install_bin) {
-    targets.add(path.join(installMetadata.install_bin, 'superplan'));
-  }
-
-  if (installMetadata?.install_prefix) {
-    targets.add(path.join(installMetadata.install_prefix, 'lib', 'node_modules', 'superplan'));
-  }
-
-  for (const inferredTarget of inferInstalledCliTargetsFromPackageRoot(currentPackageRoot)) {
-    targets.add(inferredTarget);
-  }
-
-  for (const inferredTarget of inferInstalledCliTargetsFromInvokedEntryPath(invokedEntryPath)) {
-    targets.add(inferredTarget);
-  }
-
-  return Array.from(targets);
-}
-
-function resolveInstalledOverlayTargets(installMetadata: InstallMetadata | null): string[] {
-  const targets = new Set<string>();
-  const overlay = installMetadata?.overlay;
-
-  if (overlay?.install_path) {
-    targets.add(path.normalize(overlay.install_path));
-  }
-
-  if (overlay?.executable_path) {
-    targets.add(path.normalize(overlay.executable_path));
-  }
-
-  // Standard macOS bundle location if not in metadata or if we want to be thorough
-  if (process.platform === 'darwin') {
-    targets.add('/Applications/Superplan Overlay Desktop.app');
-  }
-
-  return Array.from(targets);
 }
 
 async function removeCommand(
@@ -607,14 +580,6 @@ async function removeCommand(
     }
 
     const removedPaths: string[] = [];
-    const installMetadataReader = deps.readInstallMetadata ?? readInstallMetadata;
-    const installMetadata = await installMetadataReader();
-    const installedCliTargets = resolveInstalledCliTargets(
-      installMetadata,
-      deps.currentPackageRoot ?? path.resolve(__dirname, '../../..'),
-      deps.invokedEntryPath ?? process.argv[1] ?? '',
-    );
-    const installedOverlayTargets = resolveInstalledOverlayTargets(installMetadata);
     const globalAgents = scope === 'global'
       ? await detectAgents(homeDir, 'global', managedSkillNames)
       : [];

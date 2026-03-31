@@ -1,6 +1,6 @@
 ---
 name: superplan-docs
-description: Use when code, commands, install flow, or product behavior changed and the README, context, or help output may now be stale.
+description: Use when code, commands, install flow, help text, or user-visible behavior changed and docs or durable context may now be inaccurate.
 ---
 
 # Docs Sync

@@ -9,11 +9,12 @@ const {
   pathExists,
   runCli,
   writeChangeGraph,
+  getSuperplanRoot,
 } = require('./helpers.cjs');
 
 test('change new creates a canonical change skeleton', async () => {
   const sandbox = await makeSandbox('superplan-change-new-');
-  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+  await fs.mkdir(path.join(getSuperplanRoot(sandbox), 'changes'), { recursive: true });
 
   const result = await runCli(['change', 'new', 'improve-planning', '--title', 'Improve Planning', '--json'], {
     cwd: sandbox.cwd,
@@ -35,12 +36,12 @@ test('change new creates a canonical change skeleton', async () => {
   assert.equal(payload.data.next_action.type, 'stop');
   assert.equal(payload.error, null);
 
-  const tasksIndexPath = path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks.md');
+  const tasksIndexPath = path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'tasks.md');
   assert.equal(await pathExists(tasksIndexPath), true);
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks')), true);
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'plan.md')), true);
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'specs', 'README.md')), true);
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'metrics.json')), true);
+  assert.equal(await pathExists(path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'tasks')), true);
+  assert.equal(await pathExists(path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'plan.md')), true);
+  assert.equal(await pathExists(path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'specs', 'README.md')), true);
+  assert.equal(await pathExists(path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'metrics.json')), true);
 
   const tasksIndexContent = await fs.readFile(tasksIndexPath, 'utf-8');
   assert.match(tasksIndexContent, /# Task Graph/);
@@ -58,10 +59,10 @@ test('change new creates a canonical change skeleton', async () => {
 test('change new from a nested repo directory uses the repo-root superplan workspace', async () => {
   const sandbox = await makeSandbox('superplan-change-new-nested-');
   const nestedCwd = path.join(sandbox.cwd, 'apps', 'overlay-desktop');
-  const changeRoot = path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning');
+  const changeRoot = path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning');
 
   await fs.mkdir(path.join(sandbox.cwd, '.git'), { recursive: true });
-  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+  await fs.mkdir(path.join(getSuperplanRoot(sandbox), 'changes'), { recursive: true });
   await fs.mkdir(nestedCwd, { recursive: true });
 
   const result = await runCli(['change', 'new', 'improve-planning', '--json'], {
@@ -69,17 +70,19 @@ test('change new from a nested repo directory uses the repo-root superplan works
     env: sandbox.env,
   });
   const payload = parseCliJson(result);
+  const resolvedNestedCwd = await fs.realpath(nestedCwd).catch(() => path.resolve(nestedCwd));
+  const resolvedChangeRoot = await fs.realpath(changeRoot).catch(() => path.resolve(changeRoot));
 
   assert.equal(result.code, 0);
   assert.equal(payload.ok, true);
   assert.equal(payload.data.change_id, 'improve-planning');
-  assert.equal(payload.data.root, path.relative(nestedCwd, changeRoot) || changeRoot);
+  assert.equal(payload.data.root, path.relative(resolvedNestedCwd, resolvedChangeRoot) || resolvedChangeRoot);
   assert.deepEqual(payload.data.files, [
-    path.relative(nestedCwd, path.join(changeRoot, 'tasks.md')) || path.join(changeRoot, 'tasks.md'),
-    path.relative(nestedCwd, path.join(changeRoot, 'tasks')) || path.join(changeRoot, 'tasks'),
-    path.relative(nestedCwd, path.join(changeRoot, 'plan.md')) || path.join(changeRoot, 'plan.md'),
-    path.relative(nestedCwd, path.join(changeRoot, 'specs', 'README.md')) || path.join(changeRoot, 'specs', 'README.md'),
-    path.relative(nestedCwd, path.join(changeRoot, 'metrics.json')) || path.join(changeRoot, 'metrics.json'),
+    path.relative(resolvedNestedCwd, path.join(resolvedChangeRoot, 'tasks.md')) || path.join(resolvedChangeRoot, 'tasks.md'),
+    path.relative(resolvedNestedCwd, path.join(resolvedChangeRoot, 'tasks')) || path.join(resolvedChangeRoot, 'tasks'),
+    path.relative(resolvedNestedCwd, path.join(resolvedChangeRoot, 'plan.md')) || path.join(resolvedChangeRoot, 'plan.md'),
+    path.relative(resolvedNestedCwd, path.join(resolvedChangeRoot, 'specs', 'README.md')) || path.join(resolvedChangeRoot, 'specs', 'README.md'),
+    path.relative(resolvedNestedCwd, path.join(resolvedChangeRoot, 'metrics.json')) || path.join(resolvedChangeRoot, 'metrics.json'),
   ]);
   assert.equal(payload.data.next_action.type, 'stop');
   assert.equal(payload.error, null);
@@ -92,7 +95,7 @@ test('change new from a nested repo directory uses the repo-root superplan works
 
 test('change new can scaffold a single-task change in one invocation', async () => {
   const sandbox = await makeSandbox('superplan-change-single-task-');
-  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+  await fs.mkdir(path.join(getSuperplanRoot(sandbox), 'changes'), { recursive: true });
 
   const payload = parseCliJson(await runCli([
     'change',
@@ -123,10 +126,10 @@ test('change new can scaffold a single-task change in one invocation', async () 
   assert.equal(payload.data.next_action.type, 'command');
   assert.equal(payload.data.next_action.command, 'superplan run fix-status/T-001 --json');
 
-  const tasksIndexContent = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'changes', 'fix-status', 'tasks.md'), 'utf-8');
+  const tasksIndexContent = await fs.readFile(path.join(getSuperplanRoot(sandbox), 'changes', 'fix-status', 'tasks.md'), 'utf-8');
   assert.match(tasksIndexContent, /- `T-001` Add status counts/);
 
-  const taskContent = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'changes', 'fix-status', 'tasks', 'T-001.md'), 'utf-8');
+  const taskContent = await fs.readFile(path.join(getSuperplanRoot(sandbox), 'changes', 'fix-status', 'tasks', 'T-001.md'), 'utf-8');
   assert.match(taskContent, /task_id: T-001/);
   assert.match(taskContent, /title: Add status counts/);
   assert.match(taskContent, /priority: high/);
@@ -138,7 +141,7 @@ test('change new can scaffold a single-task change in one invocation', async () 
 
 test('change plan set writes change-scoped plan content through the CLI', async () => {
   const sandbox = await makeSandbox('superplan-change-plan-set-');
-  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+  await fs.mkdir(path.join(getSuperplanRoot(sandbox), 'changes'), { recursive: true });
 
   parseCliJson(await runCli(['change', 'new', 'improve-planning', '--json'], {
     cwd: sandbox.cwd,
@@ -159,12 +162,12 @@ test('change plan set writes change-scoped plan content through the CLI', async 
   }));
 
   assert.equal(payload.ok, true);
-  assert.equal(await fs.readFile(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'plan.md'), 'utf-8'), '# Change Plan\n\nPlan body\n');
+  assert.equal(await fs.readFile(path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'plan.md'), 'utf-8'), '# Change Plan\n\nPlan body\n');
 });
 
 test('change spec set writes change-scoped spec content through the CLI', async () => {
   const sandbox = await makeSandbox('superplan-change-spec-set-');
-  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+  await fs.mkdir(path.join(getSuperplanRoot(sandbox), 'changes'), { recursive: true });
 
   parseCliJson(await runCli(['change', 'new', 'improve-planning', '--json'], {
     cwd: sandbox.cwd,
@@ -187,12 +190,12 @@ test('change spec set writes change-scoped spec content through the CLI', async 
   }));
 
   assert.equal(payload.ok, true);
-  assert.equal(await fs.readFile(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'specs', 'design', 'api-shape.md'), 'utf-8'), '# API Shape\n\nSpec body\n');
+  assert.equal(await fs.readFile(path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'specs', 'design', 'api-shape.md'), 'utf-8'), '# API Shape\n\nSpec body\n');
 });
 
 test('change task add updates the graph and scaffolds the task contract through the CLI', async () => {
   const sandbox = await makeSandbox('superplan-change-task-add-');
-  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+  await fs.mkdir(path.join(getSuperplanRoot(sandbox), 'changes'), { recursive: true });
 
   parseCliJson(await runCli(['change', 'new', 'improve-planning', '--json'], {
     cwd: sandbox.cwd,
@@ -216,22 +219,22 @@ test('change task add updates the graph and scaffolds the task contract through 
 
   assert.equal(payload.ok, true);
 
-  const tasksIndexContent = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks.md'), 'utf-8');
+  const tasksIndexContent = await fs.readFile(path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'tasks.md'), 'utf-8');
   assert.match(tasksIndexContent, /Add CLI graph authoring/);
   assert.match(tasksIndexContent, /depends_on_all: \[\]/);
 
-  const files = await fs.readdir(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks'));
+  const files = await fs.readdir(path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'tasks'));
   const generatedTaskFile = files[0];
   assert.ok(generatedTaskFile);
   assert.equal(generatedTaskFile, 'T-001.md');
-  const taskContent = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks', generatedTaskFile), 'utf-8');
+  const taskContent = await fs.readFile(path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'tasks', generatedTaskFile), 'utf-8');
   assert.match(taskContent, /Add CLI graph authoring/);
   assert.match(taskContent, /The CLI can add tracked tasks without manual graph edits/);
 });
 
 test('change task add keeps new tasks inside Graph Layout when workstreams exist', async () => {
   const sandbox = await makeSandbox('superplan-change-task-add-workstreams-');
-  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+  await fs.mkdir(path.join(getSuperplanRoot(sandbox), 'changes'), { recursive: true });
 
   await writeChangeGraph(sandbox.cwd, 'improve-planning', {
     title: 'Improve Planning',
@@ -262,7 +265,7 @@ test('change task add keeps new tasks inside Graph Layout when workstreams exist
 
   assert.equal(payload.ok, true);
 
-  const tasksIndexContent = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks.md'), 'utf-8');
+  const tasksIndexContent = await fs.readFile(path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'tasks.md'), 'utf-8');
   const newTaskIndex = tasksIndexContent.indexOf('- `T-002` Add follow-up graph task');
   const workstreamsIndex = tasksIndexContent.indexOf('## Workstreams');
   assert.notEqual(newTaskIndex, -1);
@@ -273,7 +276,7 @@ test('change task add keeps new tasks inside Graph Layout when workstreams exist
 
 test('task scaffold new scaffolds a contract for a graph-declared task id without mutating tasks.md', async () => {
   const sandbox = await makeSandbox('superplan-task-new-');
-  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+  await fs.mkdir(path.join(getSuperplanRoot(sandbox), 'changes'), { recursive: true });
 
   parseCliJson(await runCli(['change', 'new', 'improve-planning', '--json'], {
     cwd: sandbox.cwd,
@@ -316,7 +319,10 @@ test('task scaffold new scaffolds a contract for a graph-declared task id withou
   assert.equal(firstTaskPayload.data.task.task_id, 'T-001');
   assert.equal(firstTaskPayload.data.task.change_id, 'improve-planning');
   assert.equal(firstTaskPayload.data.task.task_ref, 'improve-planning/T-001');
-  assert.match(firstTaskPayload.data.task.task_file_path, /\/\.superplan\/changes\/improve-planning\/tasks\/T-001\.md$/);
+  assert.equal(
+    firstTaskPayload.data.task.task_file_path,
+    path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'tasks', 'T-001.md'),
+  );
   assert.equal(firstTaskPayload.data.task.status, 'pending');
   assert.equal(firstTaskPayload.data.task.priority, 'high');
   assert.deepEqual(firstTaskPayload.data.task.depends_on_all, []);
@@ -389,7 +395,10 @@ test('task scaffold new scaffolds a contract for a graph-declared task id withou
   assert.equal(thirdTaskPayload.data.task.task_id, 'T-003');
   assert.equal(thirdTaskPayload.data.task.change_id, 'release-polish');
   assert.equal(thirdTaskPayload.data.task.task_ref, 'release-polish/T-003');
-  assert.match(thirdTaskPayload.data.task.task_file_path, /\/\.superplan\/changes\/release-polish\/tasks\/T-003\.md$/);
+  assert.equal(
+    thirdTaskPayload.data.task.task_file_path,
+    path.join(getSuperplanRoot(sandbox), 'changes', 'release-polish', 'tasks', 'T-003.md'),
+  );
   assert.equal(thirdTaskPayload.data.task.status, 'pending');
   assert.equal(thirdTaskPayload.data.task.priority, 'medium');
   assert.deepEqual(thirdTaskPayload.data.task.depends_on_all, []);
@@ -412,7 +421,7 @@ test('task scaffold new scaffolds a contract for a graph-declared task id withou
   assert.equal(thirdTaskPayload.data.next_action.command, 'superplan run release-polish/T-003 --json');
   assert.equal(thirdTaskPayload.error, null);
 
-  const firstTaskPath = path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks', 'T-001.md');
+  const firstTaskPath = path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'tasks', 'T-001.md');
   const firstTaskContent = await fs.readFile(firstTaskPath, 'utf-8');
   assert.match(firstTaskContent, /task_id: T-001/);
   assert.match(firstTaskContent, /priority: high/);
@@ -421,11 +430,11 @@ test('task scaffold new scaffolds a contract for a graph-declared task id withou
   assert.doesNotMatch(firstTaskContent, /depends_on_all:/);
   assert.doesNotMatch(firstTaskContent, /depends_on_any:/);
 
-  const tasksIndexContent = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks.md'), 'utf-8');
+  const tasksIndexContent = await fs.readFile(path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'tasks.md'), 'utf-8');
   assert.match(tasksIndexContent, /- `T-001` Add scaffolding command/);
   assert.match(tasksIndexContent, /- `T-002` Add help coverage/);
 
-  const secondChangeIndexContent = await fs.readFile(path.join(sandbox.cwd, '.superplan', 'changes', 'release-polish', 'tasks.md'), 'utf-8');
+  const secondChangeIndexContent = await fs.readFile(path.join(getSuperplanRoot(sandbox), 'changes', 'release-polish', 'tasks.md'), 'utf-8');
   assert.match(secondChangeIndexContent, /- `T-003` Add release notes/);
 
   const parsePayload = parseCliJson(await runCli(['parse', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
@@ -435,7 +444,7 @@ test('task scaffold new scaffolds a contract for a graph-declared task id withou
 
 test('task scaffold batch scaffolds graph-declared task ids and parse derives dependencies from tasks.md', async () => {
   const sandbox = await makeSandbox('superplan-task-batch-');
-  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+  await fs.mkdir(path.join(getSuperplanRoot(sandbox), 'changes'), { recursive: true });
 
   parseCliJson(await runCli(['change', 'new', 'improve-planning', '--json'], {
     cwd: sandbox.cwd,
@@ -515,7 +524,7 @@ test('task scaffold batch scaffolds graph-declared task ids and parse derives de
   assert.deepEqual(batchPayload.data.tasks[1].depends_on_all, ['T-001']);
 
   const firstTaskContent = await fs.readFile(
-    path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks', 'T-001.md'),
+    path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'tasks', 'T-001.md'),
     'utf-8',
   );
   assert.match(firstTaskContent, /priority: high/);
@@ -523,14 +532,14 @@ test('task scaffold batch scaffolds graph-declared task ids and parse derives de
   assert.match(firstTaskContent, /- \[ \] Batch creation reads a JSON payload from stdin\./);
 
   const secondTaskContent = await fs.readFile(
-    path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks', 'T-002.md'),
+    path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'tasks', 'T-002.md'),
     'utf-8',
   );
   assert.match(secondTaskContent, /## Description\nAdd help coverage/);
   assert.doesNotMatch(secondTaskContent, /depends_on_all:/);
 
   const tasksIndexContent = await fs.readFile(
-    path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks.md'),
+    path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'tasks.md'),
     'utf-8',
   );
   assert.match(tasksIndexContent, /- `T-001` Add scaffolding command/);
@@ -543,7 +552,7 @@ test('task scaffold batch scaffolds graph-declared task ids and parse derives de
 
 test('task scaffold batch fails before writing when a task id is not declared in the graph', async () => {
   const sandbox = await makeSandbox('superplan-task-batch-invalid-');
-  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+  await fs.mkdir(path.join(getSuperplanRoot(sandbox), 'changes'), { recursive: true });
 
   parseCliJson(await runCli(['change', 'new', 'improve-planning', '--json'], {
     cwd: sandbox.cwd,
@@ -582,11 +591,11 @@ test('task scaffold batch fails before writing when a task id is not declared in
   assert.equal(payload.ok, false);
   assert.equal(payload.error.code, 'TASK_NOT_IN_GRAPH');
 
-  const taskEntries = await fs.readdir(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks'));
+  const taskEntries = await fs.readdir(path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'tasks'));
   assert.deepEqual(taskEntries, []);
 
   const tasksIndexContent = await fs.readFile(
-    path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks.md'),
+    path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'tasks.md'),
     'utf-8',
   );
   assert.match(tasksIndexContent, /- `T-001` Add scaffolding command/);
@@ -594,7 +603,7 @@ test('task scaffold batch fails before writing when a task id is not declared in
 
 test('task scaffold batch using stdin fails clearly when the payload is empty', async () => {
   const sandbox = await makeSandbox('superplan-task-batch-empty-');
-  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+  await fs.mkdir(path.join(getSuperplanRoot(sandbox), 'changes'), { recursive: true });
 
   parseCliJson(await runCli(['change', 'new', 'improve-planning', '--json'], {
     cwd: sandbox.cwd,

@@ -7,13 +7,14 @@ export type AgentName =
   | 'antigravity'
   | 'claude'
   | 'codex'
+  | 'copilot'
   | 'cursor'
   | 'gemini'
   | 'opencode'
-  | 'copilot';
+  | 'windsurf';
 
 export type AgentScope = 'global' | 'project';
-export type AgentInstallKind = 'toml_command' | 'skills_namespace' | 'pointer_rule' | 'markdown_rule' | 'managed_global_rule' | 'amazonq_rules' | 'antigravity_workflows';
+export type AgentInstallKind = 'toml_command' | 'skills_namespace' | 'pointer_rule' | 'markdown_rule' | 'managed_global_rule' | 'amazonq_rules' | 'antigravity_workflows' | 'windsurf_rules';
 export type AgentBootstrapStrength = 'context_bootstrap' | 'rule_bootstrap' | 'skills_only';
 
 export interface AgentEnvironment {
@@ -31,21 +32,23 @@ export const AGENT_DISPLAY_NAMES: Record<AgentName, string> = {
   antigravity: 'Antigravity',
   claude: 'Claude Code',
   codex: 'Codex',
+  copilot: 'GitHub Copilot',
   cursor: 'Cursor',
   gemini: 'Gemini',
   opencode: 'OpenCode',
-  copilot: 'GitHub Copilot',
+  windsurf: 'Windsurf',
 };
 
 export const AGENT_SELECTION_ORDER: AgentName[] = [
   'claude',
   'codex',
-  'gemini',
+  'copilot',
   'cursor',
+  'gemini',
   'opencode',
+  'windsurf',
   'amazonq',
   'antigravity',
-  'copilot',
 ];
 
 export function getSkillsNamespaceCandidates(baseDir: string, ...segments: string[]): string[] {

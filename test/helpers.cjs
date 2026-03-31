@@ -2,6 +2,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { createHash } = require('node:crypto');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const DIST_MAIN = path.join(REPO_ROOT, 'dist', 'cli', 'main.js');
@@ -34,7 +35,67 @@ async function writeJson(targetPath, value) {
   await writeFile(targetPath, JSON.stringify(value, null, 2));
 }
 
-async function writeChangeGraph(rootDir, changeSlug, options = {}) {
+function getWorkspaceDirName(workspacePath) {
+  const workspaceName = path.basename(workspacePath).toLowerCase().replace(/[^a-z0-9]/g, '-');
+  return `workspace-${workspaceName || 'root'}`;
+}
+
+function sanitizeSegment(value) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+}
+
+function resolveRealPath(targetPath) {
+  try {
+    return require('fs').realpathSync(targetPath);
+  } catch {
+    return path.resolve(targetPath);
+  }
+}
+
+function resolveGitPath(workspaceRoot, flag) {
+  const result = require('child_process').spawnSync('git', ['-C', workspaceRoot, 'rev-parse', flag], {
+    encoding: 'utf-8',
+  });
+
+  if (result.status !== 0) {
+    return null;
+  }
+
+  const output = result.stdout.trim();
+  if (!output) {
+    return null;
+  }
+
+  return resolveRealPath(path.isAbsolute(output) ? output : path.resolve(workspaceRoot, output));
+}
+
+function getSuperplanRoot(sandbox, targetCwd = sandbox ? sandbox.cwd : process.cwd()) {
+  let currentDir = targetCwd;
+  let gitRoot = null;
+  while (true) {
+    try {
+      require('fs').accessSync(path.join(currentDir, '.git'));
+      gitRoot = currentDir;
+      break;
+    } catch {
+      const parentDir = path.dirname(currentDir);
+      if (parentDir === currentDir) break;
+      currentDir = parentDir;
+    }
+  }
+  const workspacePath = gitRoot || targetCwd;
+  const home = sandbox ? sandbox.home : process.env.HOME;
+  const gitCommonDir = resolveGitPath(workspacePath, '--git-common-dir');
+  const identitySource = gitCommonDir || resolveRealPath(workspacePath);
+  const projectHash = createHash('sha1').update(identitySource).digest('hex').slice(0, 10);
+  const baseName = path.basename(identitySource) === '.git'
+    ? path.basename(path.dirname(identitySource))
+    : path.basename(identitySource);
+  const projectName = sanitizeSegment(baseName || path.basename(workspacePath) || 'root') || 'root';
+  return path.join(home, '.config', 'superplan', `project-${projectName}-${projectHash}`);
+}
+
+async function writeChangeGraph(rootDir, changeSlug, options = {}, sandbox = null) {
   const title = options.title ?? changeSlug;
   const entries = options.entries ?? [];
   const notes = options.notes ?? [
@@ -79,9 +140,16 @@ async function writeChangeGraph(rootDir, changeSlug, options = {}) {
   graphLines.push(...notes.map(note => `- ${note}`));
   graphLines.push('');
 
-  await fs.mkdir(path.join(rootDir, '.superplan', 'changes', changeSlug, 'tasks'), { recursive: true });
+    // Infer sandbox from rootDir
+  const inferredSandbox = sandbox || {
+    cwd: rootDir,
+    home: require('path').join(require('path').dirname(rootDir), 'home')
+  };
+  const superplanRoot = getSuperplanRoot(inferredSandbox, rootDir);
+
+  await fs.mkdir(path.join(superplanRoot, 'changes', changeSlug, 'tasks'), { recursive: true });
   await writeFile(
-    path.join(rootDir, '.superplan', 'changes', changeSlug, 'tasks.md'),
+    path.join(superplanRoot, 'changes', changeSlug, 'tasks.md'),
     graphLines.join('\n'),
   );
 }
@@ -213,6 +281,7 @@ async function withSandboxEnv(sandbox, fn) {
 }
 
 module.exports = {
+  getSuperplanRoot,
   DIST_MAIN,
   REPO_ROOT,
   loadDistModule,

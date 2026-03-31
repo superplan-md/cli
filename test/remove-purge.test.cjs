@@ -11,13 +11,19 @@ const {
   runCli,
   withSandboxEnv,
   writeFile,
+  getSuperplanRoot,
 } = require('./helpers.cjs');
+
+function getLocalSuperplanRoot(sandbox) {
+  return path.join(sandbox.cwd, '.superplan');
+}
 
 test('remove deletes local superplan state including .superplan changes', async () => {
   const sandbox = await makeSandbox('superplan-remove-local-');
+  const localSuperplanRoot = getLocalSuperplanRoot(sandbox);
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'config.toml'), 'version = "0.1"\n');
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), '# task\n');
+  await writeFile(path.join(localSuperplanRoot, 'config.toml'), 'version = "0.1"\n');
+  await writeFile(path.join(localSuperplanRoot, 'changes', 'demo', 'tasks', 'T-001.md'), '# task\n');
   await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-entry', 'SKILL.md'), '# superplan-entry\n');
   await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-execute', 'SKILL.md'), '# superplan-execute\n');
   await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'custom-skill', 'SKILL.md'), '# custom\n');
@@ -32,17 +38,18 @@ test('remove deletes local superplan state including .superplan changes', async 
   assert.equal(result.ok, true);
   assert.equal(result.data.scope, 'local');
   assert.equal(result.data.mode, 'remove');
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan')), false);
+  assert.equal(await pathExists(localSuperplanRoot), false);
   assert.equal(await pathExists(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-entry')), false);
   assert.equal(await pathExists(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-execute')), false);
   assert.equal(await pathExists(path.join(sandbox.cwd, '.claude', 'skills', 'custom-skill', 'SKILL.md')), true);
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes')), false);
+  assert.equal(await pathExists(path.join(localSuperplanRoot, 'changes')), false);
 });
 
 test('remove also cleans up legacy pre-prefix skill directories', async () => {
   const sandbox = await makeSandbox('superplan-remove-legacy-skill-names-');
+  const localSuperplanRoot = getLocalSuperplanRoot(sandbox);
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'config.toml'), 'version = "0.1"\n');
+  await writeFile(path.join(localSuperplanRoot, 'config.toml'), 'version = "0.1"\n');
   await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'using-superplan', 'SKILL.md'), '# using-superplan\n');
   await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'execute-task-graph', 'SKILL.md'), '# execute-task-graph\n');
   await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'custom-skill', 'SKILL.md'), '# custom\n');
@@ -62,9 +69,10 @@ test('remove also cleans up legacy pre-prefix skill directories', async () => {
 
 test('remove deletes local superplan state even when only .superplan exists', async () => {
   const sandbox = await makeSandbox('superplan-remove-only-runtime-');
+  const localSuperplanRoot = getLocalSuperplanRoot(sandbox);
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'config.toml'), 'version = "0.1"\n');
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), '# task\n');
+  await writeFile(path.join(localSuperplanRoot, 'config.toml'), 'version = "0.1"\n');
+  await writeFile(path.join(localSuperplanRoot, 'changes', 'demo', 'tasks', 'T-001.md'), '# task\n');
 
   const { remove } = loadDistModule('cli/commands/remove.js', {
     select: async () => 'local',
@@ -76,11 +84,11 @@ test('remove deletes local superplan state even when only .superplan exists', as
   assert.equal(result.ok, true);
   assert.equal(result.data.scope, 'local');
   assert.equal(result.data.mode, 'remove');
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan')), false);
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes')), false);
+  assert.equal(await pathExists(localSuperplanRoot), false);
+  assert.equal(await pathExists(path.join(localSuperplanRoot, 'changes')), false);
 });
 
-test('remove deletes the recorded global overlay install when removing machine-level state', async () => {
+test('remove preserves the recorded global overlay install while deleting machine-level state', async () => {
   const sandbox = await makeSandbox('superplan-remove-global-overlay-');
   const overlayInstallPath = path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay', 'overlay-bin');
 
@@ -102,15 +110,26 @@ test('remove deletes the recorded global overlay install when removing machine-l
     confirm: async () => true,
   });
 
-  const result = await withSandboxEnv(sandbox, async () => remove({}));
+  const result = await withSandboxEnv(sandbox, async () => remove({}, {
+    readInstallMetadata: async () => ({
+      install_method: 'remote_repo',
+      repo_url: 'https://github.com/example/superplan.git',
+      ref: 'dev',
+      overlay: {
+        install_method: 'copied_prebuilt',
+        install_path: overlayInstallPath,
+        executable_path: overlayInstallPath,
+      },
+    }),
+  }));
 
   assert.equal(result.ok, true);
   assert.equal(result.data.scope, 'global');
-  assert.equal(await pathExists(overlayInstallPath), false);
+  assert.equal(await pathExists(overlayInstallPath), true);
   assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan')), false);
 });
 
-test('remove deletes the recorded global CLI install when removing machine-level state', async () => {
+test('remove preserves the recorded global CLI install while deleting machine-level state', async () => {
   const sandbox = await makeSandbox('superplan-remove-global-cli-');
   const installPrefix = path.join(sandbox.home, '.local');
   const installBinDir = path.join(installPrefix, 'bin');
@@ -133,16 +152,24 @@ test('remove deletes the recorded global CLI install when removing machine-level
     confirm: async () => true,
   });
 
-  const result = await withSandboxEnv(sandbox, async () => remove({}));
+  const result = await withSandboxEnv(sandbox, async () => remove({}, {
+    readInstallMetadata: async () => ({
+      install_method: 'remote_repo',
+      repo_url: 'https://github.com/example/superplan.git',
+      ref: 'dev',
+      install_prefix: installPrefix,
+      install_bin: installBinDir,
+    }),
+  }));
 
   assert.equal(result.ok, true);
   assert.equal(result.data.scope, 'global');
-  assert.equal(await pathExists(installedPackageDir), false);
-  assert.equal(await pathExists(installedBinPath), false);
+  assert.equal(await pathExists(installedPackageDir), true);
+  assert.equal(await pathExists(installedBinPath), true);
   assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan')), false);
 });
 
-test('remove infers and deletes the running global CLI install when metadata is missing', async () => {
+test('remove does not infer and delete the running global CLI install when metadata is missing', async () => {
   const sandbox = await makeSandbox('superplan-remove-infer-cli-');
   const installPrefix = path.join(sandbox.home, '.pnpm-global');
   const installBinDir = path.join(installPrefix, 'bin');
@@ -165,12 +192,12 @@ test('remove infers and deletes the running global CLI install when metadata is 
 
   assert.equal(result.ok, true);
   assert.equal(result.data.scope, 'global');
-  assert.equal(await pathExists(installedPackageDir), false);
-  assert.equal(await pathExists(installedBinPath), false);
+  assert.equal(await pathExists(installedPackageDir), true);
+  assert.equal(await pathExists(installedBinPath), true);
   assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan')), false);
 });
 
-test('remove deletes a symlinked dev-style global install by inferring from the invoked superplan bin path', async () => {
+test('remove preserves a symlinked dev-style global install when invoked through the installed bin path', async () => {
   const sandbox = await makeSandbox('superplan-remove-symlinked-cli-');
   const workspaceRoot = path.join(sandbox.root, 'source', 'superplan-cli');
   const installPrefix = path.join(sandbox.home, '.homebrew');
@@ -198,8 +225,8 @@ test('remove deletes a symlinked dev-style global install by inferring from the 
 
   assert.equal(result.ok, true);
   assert.equal(result.data.scope, 'global');
-  assert.equal(await pathExists(installedPackageDir), false);
-  assert.equal(await pathExists(installedBinPath), false);
+  assert.equal(await pathExists(installedPackageDir), true);
+  assert.equal(await pathExists(installedBinPath), true);
   assert.equal(await pathExists(workspaceRoot), true);
   assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan')), false);
 });
@@ -207,9 +234,10 @@ test('remove deletes a symlinked dev-style global install by inferring from the 
 test('remove from a nested subdirectory deletes the nearest parent local superplan root', async () => {
   const sandbox = await makeSandbox('superplan-remove-parent-root-');
   const nestedWorkspaceDir = path.join(sandbox.cwd, 'apps', 'overlay-desktop');
+  const localSuperplanRoot = getLocalSuperplanRoot(sandbox);
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'config.toml'), 'version = "0.1"\n');
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), '# task\n');
+  await writeFile(path.join(localSuperplanRoot, 'config.toml'), 'version = "0.1"\n');
+  await writeFile(path.join(localSuperplanRoot, 'changes', 'demo', 'tasks', 'T-001.md'), '# task\n');
   await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-entry', 'SKILL.md'), '# superplan-entry\n');
   await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-execute', 'SKILL.md'), '# superplan-execute\n');
   await fs.mkdir(nestedWorkspaceDir, { recursive: true });
@@ -226,15 +254,16 @@ test('remove from a nested subdirectory deletes the nearest parent local superpl
 
   assert.equal(result.ok, true);
   assert.equal(result.data.scope, 'local');
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan')), false);
+  assert.equal(await pathExists(localSuperplanRoot), false);
   assert.equal(await pathExists(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-entry')), false);
 });
 
 test('remove supports explicit non-interactive local cleanup for agents', async () => {
   const sandbox = await makeSandbox('superplan-remove-cli-local-');
+  const localSuperplanRoot = getLocalSuperplanRoot(sandbox);
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'config.toml'), 'version = "0.1"\n');
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), '# task\n');
+  await writeFile(path.join(localSuperplanRoot, 'config.toml'), 'version = "0.1"\n');
+  await writeFile(path.join(localSuperplanRoot, 'changes', 'demo', 'tasks', 'T-001.md'), '# task\n');
   await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-entry', 'SKILL.md'), '# superplan-entry\n');
 
   const result = await runCli(['remove', '--scope', 'local', '--yes', '--json'], {
@@ -251,7 +280,7 @@ test('remove supports explicit non-interactive local cleanup for agents', async 
   assert.equal(Array.isArray(payload.data.agents), true);
   assert.equal(payload.data.next_action.type, 'stop');
   assert.equal(payload.error, null);
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan')), false);
+  assert.equal(await pathExists(localSuperplanRoot), false);
   assert.equal(await pathExists(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-entry')), false);
 });
 
