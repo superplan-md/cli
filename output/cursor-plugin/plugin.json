@@ -6,8 +6,8 @@
   "author": {
     "name": "Superplan"
   },
-  "homepage": "https://github.com/superplan-md/superplan-plugin",
-  "repository": "https://github.com/superplan-md/superplan-plugin",
+  "homepage": "https://github.com/superplan-md/cli",
+  "repository": "https://github.com/superplan-md/cli",
   "license": "MIT",
   "keywords": ["planning", "workflow", "skills", "task-graph", "execution", "superplan"],
   "skills": "./skills/",

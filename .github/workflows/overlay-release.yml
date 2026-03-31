@@ -1,0 +1,108 @@
+name: overlay-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Git ref or commit to build from
+        required: true
+        type: string
+      release_tag:
+        description: GitHub release tag to upload overlay artifacts to
+        required: true
+        type: string
+      release_name:
+        description: Optional release title
+        required: false
+        type: string
+      draft:
+        description: Create the release as a draft
+        required: true
+        default: "true"
+        type: string
+      prerelease:
+        description: Mark the release as a prerelease
+        required: true
+        default: "false"
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure target release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_NAME: ${{ inputs.release_name }}
+          DRAFT: ${{ inputs.draft }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -euo pipefail
+          title="${RELEASE_NAME:-$RELEASE_TAG}"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists."
+            exit 0
+          fi
+
+          args=( "$RELEASE_TAG" --title "$title" --notes "" )
+          if [ "$DRAFT" = "true" ]; then
+            args+=( --draft )
+          fi
+          if [ "$PRERELEASE" = "true" ]; then
+            args+=( --prerelease )
+          fi
+
+          gh release create "${args[@]}"
+
+  build:
+    needs: prepare-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-13
+            platform: darwin
+            arch: x64
+          - os: macos-14
+            platform: darwin
+            arch: arm64
+          - os: ubuntu-24.04
+            platform: linux
+            arch: x64
+          - os: windows-2022
+            platform: win32
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+
+      - name: Install desktop dependencies
+        run: pnpm --dir apps/desktop install --frozen-lockfile
+
+      - name: Build stable overlay artifact
+        run: node ./scripts/overlay-release.js build-package --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
+
+      - name: Upload overlay artifact to GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          gh release upload "$RELEASE_TAG" dist/release/overlay/* --clobber

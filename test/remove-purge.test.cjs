@@ -88,7 +88,7 @@ test('remove deletes local superplan state even when only .superplan exists', as
   assert.equal(await pathExists(path.join(localSuperplanRoot, 'changes')), false);
 });
 
-test('remove deletes the recorded global overlay install when removing machine-level state', async () => {
+test('remove preserves the recorded global overlay install while deleting machine-level state', async () => {
   const sandbox = await makeSandbox('superplan-remove-global-overlay-');
   const overlayInstallPath = path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay', 'overlay-bin');
 
@@ -125,11 +125,11 @@ test('remove deletes the recorded global overlay install when removing machine-l
 
   assert.equal(result.ok, true);
   assert.equal(result.data.scope, 'global');
-  assert.equal(await pathExists(overlayInstallPath), false);
+  assert.equal(await pathExists(overlayInstallPath), true);
   assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan')), false);
 });
 
-test('remove deletes the recorded global CLI install when removing machine-level state', async () => {
+test('remove preserves the recorded global CLI install while deleting machine-level state', async () => {
   const sandbox = await makeSandbox('superplan-remove-global-cli-');
   const installPrefix = path.join(sandbox.home, '.local');
   const installBinDir = path.join(installPrefix, 'bin');
@@ -164,12 +164,12 @@ test('remove deletes the recorded global CLI install when removing machine-level
 
   assert.equal(result.ok, true);
   assert.equal(result.data.scope, 'global');
-  assert.equal(await pathExists(installedPackageDir), false);
-  assert.equal(await pathExists(installedBinPath), false);
+  assert.equal(await pathExists(installedPackageDir), true);
+  assert.equal(await pathExists(installedBinPath), true);
   assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan')), false);
 });
 
-test('remove infers and deletes the running global CLI install when metadata is missing', async () => {
+test('remove does not infer and delete the running global CLI install when metadata is missing', async () => {
   const sandbox = await makeSandbox('superplan-remove-infer-cli-');
   const installPrefix = path.join(sandbox.home, '.pnpm-global');
   const installBinDir = path.join(installPrefix, 'bin');
@@ -192,12 +192,12 @@ test('remove infers and deletes the running global CLI install when metadata is 
 
   assert.equal(result.ok, true);
   assert.equal(result.data.scope, 'global');
-  assert.equal(await pathExists(installedPackageDir), false);
-  assert.equal(await pathExists(installedBinPath), false);
+  assert.equal(await pathExists(installedPackageDir), true);
+  assert.equal(await pathExists(installedBinPath), true);
   assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan')), false);
 });
 
-test('remove deletes a symlinked dev-style global install by inferring from the invoked superplan bin path', async () => {
+test('remove preserves a symlinked dev-style global install when invoked through the installed bin path', async () => {
   const sandbox = await makeSandbox('superplan-remove-symlinked-cli-');
   const workspaceRoot = path.join(sandbox.root, 'source', 'superplan-cli');
   const installPrefix = path.join(sandbox.home, '.homebrew');
@@ -225,8 +225,8 @@ test('remove deletes a symlinked dev-style global install by inferring from the 
 
   assert.equal(result.ok, true);
   assert.equal(result.data.scope, 'global');
-  assert.equal(await pathExists(installedPackageDir), false);
-  assert.equal(await pathExists(installedBinPath), false);
+  assert.equal(await pathExists(installedPackageDir), true);
+  assert.equal(await pathExists(installedBinPath), true);
   assert.equal(await pathExists(workspaceRoot), true);
   assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan')), false);
 });

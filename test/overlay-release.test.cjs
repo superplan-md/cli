@@ -95,6 +95,8 @@ test('overlay release packaging creates a stable macOS tarball from the Electron
   const tarListing = await runTarList(result.artifactPath);
 
   assert.equal(path.basename(result.artifactPath), 'superplan-overlay-darwin-arm64.tar.gz');
+  assert.equal(path.basename(result.checksumPath), 'superplan-overlay-darwin-arm64.tar.gz.sha256');
+  assert.match(await fs.readFile(result.checksumPath, 'utf-8'), /^[a-f0-9]{64}  superplan-overlay-darwin-arm64\.tar\.gz$/m);
   assert.match(tarListing, /Superplan\.app\/Contents\/MacOS\/Superplan/);
   if (process.platform === 'darwin') {
     assert.match(tarListing, /Superplan\.app\/Contents\/_CodeSignature\/CodeResources/);
@@ -119,6 +121,8 @@ test('overlay release packaging creates a stable Linux AppImage artifact', async
   });
 
   assert.equal(path.basename(result.artifactPath), 'superplan-overlay-linux-x64.AppImage');
+  assert.equal(path.basename(result.checksumPath), 'superplan-overlay-linux-x64.AppImage.sha256');
+  assert.match(await fs.readFile(result.checksumPath, 'utf-8'), /^[a-f0-9]{64}  superplan-overlay-linux-x64\.AppImage$/m);
   assert.equal(await fs.readFile(result.artifactPath, 'utf-8'), 'binary');
 });
 
@@ -140,5 +144,7 @@ test('overlay release packaging creates a stable Windows executable artifact', a
   });
 
   assert.equal(path.basename(result.artifactPath), 'superplan-overlay-windows-x64.exe');
+  assert.equal(path.basename(result.checksumPath), 'superplan-overlay-windows-x64.exe.sha256');
+  assert.match(await fs.readFile(result.checksumPath, 'utf-8'), /^[a-f0-9]{64}  superplan-overlay-windows-x64\.exe$/m);
   assert.equal(await fs.readFile(result.artifactPath, 'utf-8'), 'windows-binary');
 });

@@ -2,6 +2,7 @@
 
 const fsp = require('node:fs/promises');
 const path = require('node:path');
+const { createHash } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -85,6 +86,15 @@ async function pathExists(targetPath) {
 
 async function ensureDirectory(targetPath) {
   await fsp.mkdir(targetPath, { recursive: true });
+}
+
+async function writeSha256File(targetPath) {
+  const hash = createHash('sha256');
+  hash.update(await fsp.readFile(targetPath));
+  const digest = hash.digest('hex');
+  const checksumPath = `${targetPath}.sha256`;
+  await fsp.writeFile(checksumPath, `${digest}  ${path.basename(targetPath)}\n`, 'utf8');
+  return checksumPath;
 }
 
 function getPnpmCommand() {
@@ -233,10 +243,13 @@ async function packageOverlayRelease(options = {}) {
     await fsp.chmod(artifactPath, 0o755).catch(() => {});
   }
 
+  const checksumPath = await writeSha256File(artifactPath);
+
   return {
     ...target,
     bundleInputPath,
     artifactPath,
+    checksumPath,
     outputDir,
   };
 }

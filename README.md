@@ -22,7 +22,7 @@ Superplan does.
 ## Quick Start
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/main/scripts/install.sh | sh
 ```
 
 That uses a stable installer URL and resolves the latest published GitHub release tag automatically before installing the CLI and matching overlay artifact.
@@ -31,13 +31,13 @@ After install, Superplan asks whether you want to run `superplan init` immediate
 Windows PowerShell:
 
 ```powershell
-curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd; if ($LASTEXITCODE -eq 0) { .\install-superplan.cmd }
+curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/cli/main/scripts/install.cmd; if ($LASTEXITCODE -eq 0) { .\install-superplan.cmd }
 ```
 
 Windows Command Prompt:
 
 ```bat
-curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && install-superplan.cmd
+curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/cli/main/scripts/install.cmd && install-superplan.cmd
 ```
 
 The Windows installer now installs the CLI and the packaged overlay companion when a matching Windows release artifact has been published to the repo's GitHub release.
@@ -112,7 +112,7 @@ Each skill enforces structure so the agent doesn’t drift.
 ### 1. Install Latest version
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/main/scripts/install.sh | sh
 ```
 
 That uses a stable installer URL and resolves the latest published GitHub release tag automatically before installing the CLI and matching overlay artifact.
@@ -120,13 +120,13 @@ That uses a stable installer URL and resolves the latest published GitHub releas
 For Windows PowerShell:
 
 ```powershell
-curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd; if ($LASTEXITCODE -eq 0) { .\install-superplan.cmd }
+curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/cli/main/scripts/install.cmd; if ($LASTEXITCODE -eq 0) { .\install-superplan.cmd }
 ```
 
 For Windows Command Prompt:
 
 ```bat
-curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && install-superplan.cmd
+curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/cli/main/scripts/install.cmd && install-superplan.cmd
 ```
 
 The Windows installer resolves the latest published GitHub release tag for the CLI source when `SUPERPLAN_REF` is not pinned, and it installs the Windows overlay companion when the matching release artifact has been published for that release tag.
@@ -135,7 +135,7 @@ After install, Superplan asks whether you want to run `superplan init` immediate
 If you want the direct PowerShell installer instead, this still works:
 
 ```powershell
-irm https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/superplan-md/cli/main/scripts/install.ps1 | iex
 ```
 
 **Note on Overlay:** The Superplan desktop companion is optional. The installer can enable or disable it as your machine default, and you can always change that later with `superplan overlay enable --global` or `superplan overlay disable --global`.
@@ -143,15 +143,15 @@ irm https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts
 If you want to pin a specific release instead, keep the same installer URL and set `SUPERPLAN_REF` explicitly:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.sh | SUPERPLAN_REF=<version-tag> sh
+curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/main/scripts/install.sh | SUPERPLAN_REF=<version-tag> sh
 ```
 
 ```powershell
-$env:SUPERPLAN_REF='<version-tag>'; curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd; if ($LASTEXITCODE -eq 0) { .\install-superplan.cmd }
+$env:SUPERPLAN_REF='<version-tag>'; curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/cli/main/scripts/install.cmd; if ($LASTEXITCODE -eq 0) { .\install-superplan.cmd }
 ```
 
 ```bat
-set SUPERPLAN_REF=<version-tag> && curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && install-superplan.cmd
+set SUPERPLAN_REF=<version-tag> && curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/cli/main/scripts/install.cmd && install-superplan.cmd
 ```
 
 ### 2. Initialize
@@ -213,10 +213,11 @@ npm run overlay:release
 Use the GitHub-backed release path when you need published native artifacts for macOS, Linux, and Windows from one command:
 
 ```bash
-npm run overlay:release:github -- --tag <release-tag>
+npm run overlay:release:github -- --tag <release-tag> --repo superplan-md/cli
 ```
 
 That dispatches a GitHub Actions matrix build and uploads the packaged overlay artifacts to the requested GitHub release tag.
+For the end-to-end maintainer flow, including tagging, publication, checksums, and post-release verification, see [docs/release-checklist.md](docs/release-checklist.md).
 
 ## Credits
 

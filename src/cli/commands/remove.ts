@@ -3,7 +3,6 @@ import * as os from 'os';
 import * as path from 'path';
 import { confirm, select } from '@inquirer/prompts';
 import { AgentInstallKind } from '../agent-integrations';
-import { readInstallMetadata, type InstallMetadata } from '../install-metadata';
 import { ALL_SUPERPLAN_SKILL_NAMES } from '../skill-names';
 import { stopNextAction, type NextAction } from '../next-action';
 import { terminateInstalledOverlayCompanion } from '../overlay-companion';
@@ -35,9 +34,6 @@ export interface RemoveOptions {
 }
 
 interface RemoveDeps {
-  readInstallMetadata?: () => Promise<InstallMetadata | null>;
-  currentPackageRoot?: string;
-  invokedEntryPath?: string;
 }
 
 export type RemoveResult =
@@ -509,102 +505,6 @@ async function removeAgentInstalls(
   }
 }
 
-function inferInstalledCliTargetsFromPackageRoot(packageRoot: string): string[] {
-  const normalizedRoot = path.normalize(packageRoot);
-  if (path.basename(normalizedRoot) !== 'superplan') {
-    return [];
-  }
-
-  const nodeModulesDir = path.dirname(normalizedRoot);
-  if (path.basename(nodeModulesDir) !== 'node_modules') {
-    return [];
-  }
-
-  const libDir = path.dirname(nodeModulesDir);
-  if (path.basename(libDir) !== 'lib') {
-    return [];
-  }
-
-  const installPrefix = path.dirname(libDir);
-  return [
-    normalizedRoot,
-    path.join(installPrefix, 'bin', 'superplan'),
-  ];
-}
-
-function inferInstalledCliTargetsFromInvokedEntryPath(invokedEntryPath: string): string[] {
-  const normalizedEntryPath = path.normalize(invokedEntryPath);
-  if (path.basename(normalizedEntryPath) !== 'superplan') {
-    return [];
-  }
-
-  const binDir = path.dirname(normalizedEntryPath);
-  if (path.basename(binDir) !== 'bin') {
-    return [];
-  }
-
-  const installPrefix = path.dirname(binDir);
-  return [
-    path.join(installPrefix, 'lib', 'node_modules', 'superplan'),
-    normalizedEntryPath,
-  ];
-}
-
-function resolveInstalledCliTargets(
-  installMetadata: InstallMetadata | null,
-  currentPackageRoot: string,
-  invokedEntryPath: string,
-): string[] {
-  const targets = new Set<string>();
-
-  if (installMetadata?.install_bin) {
-    targets.add(path.join(installMetadata.install_bin, 'superplan'));
-  }
-
-  if (installMetadata?.install_prefix) {
-    targets.add(path.join(installMetadata.install_prefix, 'lib', 'node_modules', 'superplan'));
-  }
-
-  for (const inferredTarget of inferInstalledCliTargetsFromPackageRoot(currentPackageRoot)) {
-    targets.add(inferredTarget);
-  }
-
-  for (const inferredTarget of inferInstalledCliTargetsFromInvokedEntryPath(invokedEntryPath)) {
-    targets.add(inferredTarget);
-  }
-
-  return Array.from(targets);
-}
-
-function resolveInstalledOverlayTargets(installMetadata: InstallMetadata | null): string[] {
-  const targets = new Set<string>();
-  const overlay = installMetadata?.overlay;
-
-  if (overlay?.install_path) {
-    targets.add(path.normalize(overlay.install_path));
-  }
-
-  if (overlay?.executable_path) {
-    targets.add(path.normalize(overlay.executable_path));
-  }
-
-  if (process.platform === 'darwin') {
-    targets.add('/Applications/Superplan.app');
-    targets.add(path.join(os.homedir(), '.local', 'share', 'superplan', 'overlay', 'Superplan.app'));
-    targets.add('/Applications/Superplan Overlay Desktop.app');
-  }
-
-  if (process.platform === 'linux') {
-    targets.add(path.join(os.homedir(), '.local', 'share', 'superplan', 'overlay', 'superplan-overlay.AppImage'));
-  }
-
-  if (process.platform === 'win32') {
-    targets.add(path.join(os.homedir(), '.config', 'superplan', 'overlay', 'superplan-overlay.exe'));
-  }
-
-  return Array.from(targets);
-}
-
 async function removeCommand(
   options: RemoveOptions,
   deps: Partial<RemoveDeps> = {},
@@ -680,14 +580,6 @@ async function removeCommand(
     }
 
     const removedPaths: string[] = [];
-    const installMetadataReader = deps.readInstallMetadata ?? readInstallMetadata;
-    const installMetadata = await installMetadataReader();
-    const installedCliTargets = resolveInstalledCliTargets(
-      installMetadata,
-      deps.currentPackageRoot ?? path.resolve(__dirname, '../../..'),
-      deps.invokedEntryPath ?? process.argv[1] ?? '',
-    );
-    const installedOverlayTargets = resolveInstalledOverlayTargets(installMetadata);
     const globalAgents = scope === 'global'
       ? await detectAgents(homeDir, 'global', managedSkillNames)
       : [];
@@ -724,14 +616,6 @@ async function removeCommand(
       await removeManagedInstructionsFile(path.join(homeDir, 'CLAUDE.md'), removedPaths);
       await removeManagedInstructionsFile(path.join(homeDir, '.claude', 'CLAUDE.md'), removedPaths);
       await removeManagedInstructionsFile(path.join(homeDir, '.codex', 'AGENTS.md'), removedPaths);
-
-      for (const installedCliTarget of installedCliTargets) {
-        await removePath(installedCliTarget, removedPaths);
-      }
-
-      for (const installedOverlayTarget of installedOverlayTargets) {
-        await removePath(installedOverlayTarget, removedPaths);
-      }
       
       // Thoroughly wipe the global config directory
       await removePath(globalSuperplanDir, removedPaths);

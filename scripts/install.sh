@@ -20,7 +20,7 @@ set -eu
 # - SUPERPLAN_ENABLE_OVERLAY: yes/no override for machine-default overlay behavior
 # - SUPERPLAN_RUN_SETUP_AFTER_INSTALL: 1 to run `superplan init` in the launch directory, 0 to skip it
 
-SUPERPLAN_REPO_URL="${SUPERPLAN_REPO_URL:-https://github.com/superplan-md/superplan-plugin.git}"
+SUPERPLAN_REPO_URL="${SUPERPLAN_REPO_URL:-https://github.com/superplan-md/cli.git}"
 SUPERPLAN_REF="${SUPERPLAN_REF:-}"
 SUPERPLAN_SOURCE_DIR="${SUPERPLAN_SOURCE_DIR:-}"
 SUPERPLAN_INSTALL_PREFIX="${SUPERPLAN_INSTALL_PREFIX:-}"
