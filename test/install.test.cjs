@@ -212,7 +212,7 @@ test('windows installer scripts are packaged and documented', async () => {
   assert.ok(packageJson.files.includes('scripts/install.ps1'));
   assert.ok(packageJson.files.includes('scripts/install.cmd'));
   assert.ok(
-    readme.includes('curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/cli/main/scripts/install.cmd; if ($LASTEXITCODE -eq 0) { .\\install-superplan.cmd }'),
+    readme.includes('curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd; if ($LASTEXITCODE -eq 0) { .\\install-superplan.cmd }'),
   );
   assert.match(readme, /install-superplan\.cmd/);
   assert.match(readme, /Windows installer now installs the CLI and the packaged overlay companion/i);
@@ -239,7 +239,7 @@ test('windows cmd installer delegates to powershell', async () => {
 
   assert.match(installerSource, /install\.ps1/);
   assert.match(installerSource, /powershell -NoProfile -ExecutionPolicy Bypass/);
-  assert.match(installerSource, /raw\.githubusercontent\.com\/superplan-md\/cli\/main\/scripts\/install\.ps1/);
+  assert.match(installerSource, /raw\.githubusercontent\.com\/superplan-md\/superplan-plugin\/main\/scripts\/install\.ps1/);
   assert.match(installerSource, /Invoke-WebRequest -UseBasicParsing/);
   assert.match(installerSource, /-OutFile/);
   assert.match(installerSource, /-File "%TEMP_PS1%"/);

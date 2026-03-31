@@ -6,7 +6,7 @@ import { readInstallMetadata, type InstallMetadata } from '../install-metadata';
 import { refreshInstalledSkills, type RefreshInstalledSkillsResult } from './install-helpers';
 import { commandNextAction, type NextAction } from '../next-action';
 
-const DEFAULT_REPO_URL = 'https://github.com/superplan-md/cli.git';
+const DEFAULT_REPO_URL = 'https://github.com/superplan-md/superplan-plugin.git';
 const DEFAULT_REF = 'main';
 
 interface UpdateOptions {

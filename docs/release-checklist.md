@@ -26,7 +26,7 @@ git push origin v0.x.y
 3. Dispatch the native overlay build and upload:
 
 ```bash
-npm run overlay:release:github -- --tag v0.x.y --repo superplan-md/cli --publish
+npm run overlay:release:github -- --tag v0.x.y --repo superplan-md/superplan-plugin --publish
 ```
 
 That workflow builds native artifacts on GitHub-hosted runners and uploads them to the GitHub release for `v0.x.y`.
@@ -47,13 +47,13 @@ Each uploaded artifact should also have a matching checksum file:
 Then smoke-test the public install path from a clean machine or sandbox:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.sh | sh
 ```
 
 On Windows PowerShell:
 
 ```powershell
-curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/cli/main/scripts/install.cmd; if ($LASTEXITCODE -eq 0) { .\install-superplan.cmd }
+curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd; if ($LASTEXITCODE -eq 0) { .\install-superplan.cmd }
 ```
 
 ## Expected Unsigned Warnings

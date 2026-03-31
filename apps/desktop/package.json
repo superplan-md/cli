@@ -4,7 +4,7 @@
   "description": "Superplan desktop progress app",
   "main": "./out/main/index.js",
   "author": "Superplan",
-  "homepage": "https://github.com/superplan-md/cli",
+  "homepage": "https://github.com/superplan-md/superplan-plugin",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",

@@ -6,7 +6,7 @@ Detailed documentation for developers and power users.
 
 ### Install with custom prefix
 ```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/alpha.4/scripts/install.sh | SUPERPLAN_REF=alpha.4 SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh
+curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/alpha.4/scripts/install.sh | SUPERPLAN_REF=alpha.4 SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh
 ```
 
 ### Run from source
@@ -28,7 +28,7 @@ Emits a packaged artifact for the current host platform to `dist/release/overlay
 
 ### Overlay GitHub Releases
 ```bash
-npm run overlay:release:github -- --tag <release-tag> --repo superplan-md/cli
+npm run overlay:release:github -- --tag <release-tag> --repo superplan-md/superplan-plugin
 ```
 Dispatches the GitHub Actions matrix release workflow, which builds native overlay artifacts for macOS, Linux, and Windows on matching runners and uploads them to the requested GitHub release tag.
 The full unsigned-first maintainer checklist lives in [release-checklist.md](release-checklist.md).

@@ -50,8 +50,8 @@ const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: 'system', label: 'System Default' }
 ]
 
-const GITHUB_REPO = 'https://github.com/superplan-md/cli'
-const GITHUB_API_LATEST = 'https://api.github.com/repos/superplan-md/cli/releases/latest'
+const GITHUB_REPO = 'https://github.com/superplan-md/superplan-plugin'
+const GITHUB_API_LATEST = 'https://api.github.com/repos/superplan-md/superplan-plugin/releases/latest'
 
 type UpdateResult =
   | { status: 'up_to_date'; version: string }

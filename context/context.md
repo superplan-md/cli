@@ -42,8 +42,8 @@ The current documented top-level command surface is:
 
 Supported install paths in the current repo are:
 
-- curl installer: `curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/0.1.0/scripts/install.sh | SUPERPLAN_REF=0.1.0 sh`
-- curl installer with custom prefix: `curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/0.1.0/scripts/install.sh | SUPERPLAN_REF=0.1.0 SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh`
+- curl installer: `curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/0.1.0/scripts/install.sh | SUPERPLAN_REF=0.1.0 sh`
+- curl installer with custom prefix: `curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/0.1.0/scripts/install.sh | SUPERPLAN_REF=0.1.0 SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh`
 - npm from a local checkout after build (release mode): `npm install -g .`
 - npm link for active local development: `npm link` from the project root after `npm run build`.
 
