@@ -6,7 +6,7 @@ Use this reference when deciding what execution move is appropriate.
 
 Meaning:
 
-- with no `task_id`, continue the active task or claim the next ready one
+- with no `task_id`, continue the current session's focused task or focused change frontier, or claim the next ready task only when no unrelated task is already in progress
 - with `task_id`, explicitly start a ready task or resume a paused one
 - the task contract is valid enough to execute
 - the agent is now actively working it

@@ -8,6 +8,7 @@ const {
   runCli,
   writeChangeGraph,
   writeFile,
+  getSuperplanRoot,
 } = require('./helpers.cjs');
 
 test('validate accepts a graph-only change before task contracts are scaffolded', async () => {
@@ -90,7 +91,7 @@ test('validate reports task contracts that are not declared in the graph', async
     ],
   });
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks', 'T-002.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'improve-planning', 'tasks', 'T-002.md'), `---
 task_id: T-002
 status: pending
 ---

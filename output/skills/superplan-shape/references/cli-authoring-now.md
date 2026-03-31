@@ -7,14 +7,16 @@ Use this reference when shaping work against the current CLI implementation.
 March 17 defines the target artifact model as:
 
 ```text
-~/.config/superplan/changes/<slug>/
-  tasks.md
-  tasks/
-    T-001.md
-    T-002.md
+~/.config/superplan/project-<name>-<hash>/
+  changes/
+    <slug>/
+      tasks.md
+      tasks/
+        T-001.md
+        T-002.md
 ```
 
-That remains the product direction.
+That remains the product direction. When the CLI is invoked from the repo root, it may display these shared-state paths as `.superplan/changes/<slug>/...`.
 
 Today, the executable surface is:
 
@@ -32,11 +34,11 @@ Today, the executable surface is:
 
 So shape work like this:
 
-- do not hand-edit anything under `~/.config/superplan/`
+- do not hand-edit anything under the shared Superplan project state root
 - use `superplan change new --single-task` or `superplan change task add` to define tracked work
 - use `superplan change plan set` and `superplan change spec set` to write change-scoped artifacts
 - run `superplan validate <slug> --json` when graph validation matters
-- keep task contracts in `~/.config/superplan/changes/<slug>/tasks/T-xxx.md`, but let the CLI create them
+- keep task contracts in the shared project state root at `~/.config/superplan/project-<name>-<hash>/changes/<slug>/tasks/T-xxx.md`, but let the CLI create them
 - use `superplan parse` for contract parsing and `superplan validate` for graph plus cross-artifact checks
 - inspect readiness with `superplan status --json`, `superplan run --json`, and `superplan task inspect show <task_ref> --json` as needed
 - do not split dependency ownership back into task-file frontmatter
@@ -44,7 +46,7 @@ So shape work like this:
 ## Current Authoring Workflow
 
 1. Run `superplan init --yes --json` if the repo is not initialized.
-2. Run `superplan change new <slug> --json` to create `~/.config/superplan/changes/<slug>/` and `~/.config/superplan/changes/<slug>/tasks/`.
+2. Run `superplan change new <slug> --json` to create `changes/<slug>/` and `changes/<slug>/tasks/` under the shared project state root.
 3. Use `superplan change plan set`, `superplan change spec set`, and `superplan change task add` to place change-scoped artifacts through the CLI.
 4. Run `superplan validate <slug> --json` when graph validation matters.
 5. Use the returned payload from CLI authoring directly instead of immediately calling `task inspect show`.

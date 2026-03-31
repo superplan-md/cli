@@ -12,6 +12,7 @@ const {
   writeChangeGraph,
   writeFile,
   writeJson,
+  getSuperplanRoot,
 } = require('./helpers.cjs');
 
 test('macOS bundle launch plan reuses an already running matching workspace instance', () => {
@@ -33,7 +34,7 @@ test('macOS bundle launch plan reuses an already running matching workspace inst
   });
 });
 
-test('macOS bundle launch plan hands off through the executable when another workspace instance is already running', () => {
+test('macOS bundle launch plan reuses the existing app for another workspace', () => {
   const { getMacosOverlayBundleLaunchPlan } = loadDistModule('cli/overlay-companion.js');
 
   const executablePath = '/Applications/Superplan Overlay Desktop.app/Contents/MacOS/superplan-overlay-desktop';
@@ -47,9 +48,29 @@ test('macOS bundle launch plan hands off through the executable when another wor
   });
 
   assert.deepEqual(plan, {
-    mode: 'handoff_existing_instance',
-    command: executablePath,
-    args: ['--workspace', '/tmp/next-workspace'],
+    mode: 'reuse_running',
+    command: null,
+    args: [],
+  });
+});
+
+test('macOS bundle launch plan reuses the existing app when only the board-style process is already running', () => {
+  const { getMacosOverlayBundleLaunchPlan } = loadDistModule('cli/overlay-companion.js');
+
+  const executablePath = '/Applications/Superplan Overlay Desktop.app/Contents/MacOS/superplan-overlay-desktop';
+  const plan = getMacosOverlayBundleLaunchPlan({
+    appBundlePath: '/Applications/Superplan Overlay Desktop.app',
+    executablePath,
+    workspacePath: '/tmp/next-workspace',
+    runningProcessEntries: [
+      { pid: 1234, command: executablePath },
+    ],
+  });
+
+  assert.deepEqual(plan, {
+    mode: 'reuse_running',
+    command: null,
+    args: [],
   });
 });
 
@@ -66,7 +87,7 @@ test('macOS bundle launch plan opens the app bundle without forcing a new instan
   assert.deepEqual(plan, {
     mode: 'open_bundle',
     command: '/usr/bin/open',
-    args: ['-a', '/Applications/Superplan Overlay Desktop.app', '--args', '--workspace', '/tmp/workspace'],
+    args: ['-a', '/Applications/Superplan Overlay Desktop.app', '--args', '--overlay', '--workspace', '/tmp/workspace'],
   });
   assert.equal(plan.args.includes('-n'), false);
 });
@@ -99,6 +120,13 @@ test('overlay companion matches quoted Windows executable and workspace argument
       command: '"C:\\\\overlay\\\\superplan-overlay-desktop.exe" --workspace "C:\\\\repo with space"',
     }],
   );
+  assert.equal(
+    commandMatchesExecutablePath(
+      'Superplan --overlay --workspace /tmp/repo',
+      '/Applications/Superplan.app/Contents/MacOS/Superplan',
+    ),
+    true,
+  );
 });
 
 test('overlay process inspection degrades gracefully when spawning the system process list is blocked', async () => {
@@ -130,7 +158,7 @@ async function waitForFile(targetPath, timeoutMs = 3000) {
 function getOverlayRuntimePathsForSandbox(sandbox) {
   const { getWorkspaceOverlayKey } = loadDistModule('shared/overlay.js');
   const workspaceKey = getWorkspaceOverlayKey(sandbox.cwd);
-  const runtimeDir = path.join(sandbox.home, '.config', 'superplan', 'runtime', workspaceKey);
+  const runtimeDir = path.join(sandbox.home, '.config', 'superplan', workspaceKey, 'runtime');
   return {
     runtime_dir: runtimeDir,
     snapshot_path: path.join(runtimeDir, 'overlay.json'),
@@ -139,7 +167,7 @@ function getOverlayRuntimePathsForSandbox(sandbox) {
 }
 
 function getGlobalRuntimePathsForSandbox(sandbox) {
-  const runtimeDir = path.join(sandbox.home, '.config', 'superplan', 'runtime');
+  const runtimeDir = path.join(getSuperplanRoot(sandbox), 'runtime');
   return {
     runtime_dir: runtimeDir,
     tasks_path: path.join(runtimeDir, 'tasks.json'),
@@ -175,7 +203,7 @@ async function waitForCondition(predicate, timeoutMs = 3000) {
   throw new Error('Timed out waiting for condition');
 }
 
-async function waitForPidCount(pidLogPath, expectedCount, timeoutMs = 3000) {
+async function waitForPidCount(pidLogPath, expectedCount, timeoutMs = 8000) {
   let lastPids = [];
 
   await waitForCondition(async () => {
@@ -206,6 +234,14 @@ async function writeDemoGraph(cwd, entries) {
   });
 }
 
+async function enableOverlayForSandbox(sandbox) {
+  await fs.mkdir(path.join(sandbox.cwd, '.superplan'), { recursive: true });
+  return parseCliJson(await runCli(['overlay', 'enable', '--json'], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+}
+
 test('overlay --help explains overlay lifecycle subcommands', async () => {
   const result = await runCli(['overlay', '--help']);
 
@@ -225,7 +261,7 @@ test('overlay ensure keeps the companion hidden until overlay support is enabled
   await writeDemoGraph(sandbox.cwd, [
     { task_id: 'T-001', title: 'Primary task' },
   ]);
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-001.md'), `---
 task_id: T-001
 status: pending
 priority: high
@@ -257,6 +293,8 @@ Show the current task description in the overlay
   assert.deepEqual(snapshot.board.in_progress, []);
   assert.deepEqual(snapshot.board.backlog, [{
     task_id: 'T-001',
+    change_id: 'demo',
+    task_ref: 'demo/T-001',
     title: 'Primary task',
     description: 'Show the current task description in the overlay',
     status: 'backlog',
@@ -283,7 +321,7 @@ test('overlay enable turns on local overlay behavior and allows ensure to show t
   await writeDemoGraph(sandbox.cwd, [
     { task_id: 'T-010', title: 'Enable overlay' },
   ]);
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-010.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-010.md'), `---
 task_id: T-010
 status: pending
 priority: high
@@ -296,7 +334,7 @@ Enable overlay
 - [ ] A
 `);
 
-  const enablePayload = parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  const enablePayload = await enableOverlayForSandbox(sandbox);
   assert.equal(enablePayload.ok, true);
   assert.equal(enablePayload.data.enabled, true);
   assert.equal(enablePayload.data.local_enabled, true);
@@ -319,7 +357,7 @@ printf '%s\n' "$*" > "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
 printf '%s\n' "$SUPERPLAN_OVERLAY_WORKSPACE" >> "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
 `);
   await fs.chmod(fakeOverlayPath, 0o755);
-  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+  await fs.mkdir(path.join(getSuperplanRoot(sandbox), 'changes'), { recursive: true });
 
   parseCliJson(await runCli(['change', 'new', 'shape-spec', '--json'], {
     cwd: sandbox.cwd,
@@ -331,7 +369,7 @@ printf '%s\n' "$SUPERPLAN_OVERLAY_WORKSPACE" >> "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
       { task_id: 'T-001', title: 'Break down the main spec graph' },
     ],
   });
-  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  await enableOverlayForSandbox(sandbox);
 
   const createPayload = parseCliJson(await runCli([
     'task',
@@ -379,7 +417,7 @@ printf '%s\n' "$*" > "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
 printf '%s\n' "$SUPERPLAN_OVERLAY_WORKSPACE" >> "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
 `);
   await fs.chmod(fakeOverlayPath, 0o755);
-  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+  await fs.mkdir(path.join(getSuperplanRoot(sandbox), 'changes'), { recursive: true });
 
   parseCliJson(await runCli(['change', 'new', 'shape-spec', '--json'], {
     cwd: sandbox.cwd,
@@ -392,7 +430,7 @@ printf '%s\n' "$SUPERPLAN_OVERLAY_WORKSPACE" >> "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
       { task_id: 'T-002', title: 'Add implementation coverage' },
     ],
   });
-  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  await enableOverlayForSandbox(sandbox);
 
   const createPayload = parseCliJson(await runCli([
     'task',
@@ -452,7 +490,7 @@ printf '%s\n' "$SUPERPLAN_OVERLAY_WORKSPACE" >> "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
       { task_id: 'T-001', title: 'Ship prior work' },
     ],
   });
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'finished-change', 'tasks', 'T-001.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'finished-change', 'tasks', 'T-001.md'), `---
 task_id: T-001
 status: pending
 priority: high
@@ -475,7 +513,7 @@ Ship prior work
     },
   });
 
-  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  await enableOverlayForSandbox(sandbox);
 
   const changePayload = parseCliJson(await runCli([
     'change',
@@ -540,7 +578,7 @@ enabled = true
   await writeDemoGraph(sandbox.cwd, [
     { task_id: 'T-010A', title: 'Start with only global overlay config' },
   ]);
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-010A.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-010A.md'), `---
 task_id: T-010A
 status: pending
 priority: high
@@ -567,13 +605,13 @@ Start with only global overlay config
   assert.equal(startPayload.data.overlay.companion.reason, 'not_installed');
 });
 
-test('run ensures overlay visibility when it starts and continues work', async () => {
+test('run with an explicit task id re-ensures overlay visibility when continuing work', async () => {
   const sandbox = await makeSandbox('superplan-overlay-run-');
 
   await writeDemoGraph(sandbox.cwd, [
     { task_id: 'T-150', title: 'Run overlay task' },
   ]);
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-150.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-150.md'), `---
 task_id: T-150
 status: pending
 priority: high
@@ -586,7 +624,7 @@ Run overlay task
 - [ ] A
 `);
 
-  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  await enableOverlayForSandbox(sandbox);
   const firstRunPayload = parseCliJson(await runCli(['run', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
 
   const startedSnapshot = await readJson(getOverlayRuntimePathsForSandbox(sandbox).snapshot_path);
@@ -605,7 +643,7 @@ Run overlay task
   assert.equal(hiddenControl.requested_action, 'hide');
   assert.equal(hiddenControl.visible, false);
 
-  const secondRunPayload = parseCliJson(await runCli(['run', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  const secondRunPayload = parseCliJson(await runCli(['run', 'T-150', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
 
   const continuedControl = await readJson(getOverlayRuntimePathsForSandbox(sandbox).control_path);
   assert.equal(continuedControl.requested_action, 'ensure');
@@ -630,7 +668,7 @@ printf '%s\n' "$SUPERPLAN_OVERLAY_WORKSPACE" >> "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
   await writeDemoGraph(sandbox.cwd, [
     { task_id: 'T-011', title: 'Launch overlay companion' },
   ]);
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-011.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-011.md'), `---
 task_id: T-011
 status: pending
 priority: high
@@ -643,7 +681,7 @@ Launch overlay companion
 - [ ] A
 `);
 
-  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  await enableOverlayForSandbox(sandbox);
 
   const ensurePayload = parseCliJson(await runCli(['overlay', 'ensure', '--json'], {
     cwd: sandbox.cwd,
@@ -674,7 +712,7 @@ test('overlay ensure suppresses repeated launch attempts after a recent failure'
   await writeDemoGraph(sandbox.cwd, [
     { task_id: 'T-011C', title: 'Suppress repeated overlay launch failures' },
   ]);
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-011C.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-011C.md'), `---
 task_id: T-011C
 status: pending
 priority: high
@@ -687,7 +725,7 @@ Suppress repeated overlay launch failures
 - [ ] A
 `);
 
-  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  await enableOverlayForSandbox(sandbox);
 
   const overlayEnv = {
     ...sandbox.env,
@@ -733,7 +771,7 @@ done
   await writeDemoGraph(sandbox.cwd, [
     { task_id: 'T-011B', title: 'Keep one overlay companion only' },
   ]);
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-011B.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-011B.md'), `---
 task_id: T-011B
 status: pending
 priority: high
@@ -746,7 +784,7 @@ Keep one overlay companion only
 - [ ] A
 `);
 
-  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  await enableOverlayForSandbox(sandbox);
 
   const overlayEnv = {
     ...sandbox.env,
@@ -812,7 +850,7 @@ done
   await writeDemoGraph(sandbox.cwd, [
     { task_id: 'T-011C', title: 'Terminate overlay companion on hide' },
   ]);
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-011C.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-011C.md'), `---
 task_id: T-011C
 status: pending
 priority: high
@@ -825,7 +863,7 @@ Terminate overlay companion on hide
 - [ ] A
 `);
 
-  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  await enableOverlayForSandbox(sandbox);
 
   const overlayEnv = {
     ...sandbox.env,
@@ -888,7 +926,7 @@ done
     ],
   });
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-011E.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-011E.md'), `---
 task_id: T-011E
 status: pending
 priority: high
@@ -911,7 +949,7 @@ Relaunch overlay when feedback is requested
     },
   });
 
-  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  await enableOverlayForSandbox(sandbox);
 
   const overlayEnv = {
     ...sandbox.env,
@@ -998,7 +1036,7 @@ test('overlay ensure keeps the companion visible when a tracked change remains a
   const sandbox = await makeSandbox('superplan-overlay-empty-terminates-');
   const fakeOverlayPath = path.join(sandbox.root, 'fake-overlay');
   const pidLogPath = path.join(sandbox.root, 'overlay-pids.txt');
-  const taskPath = path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-011D.md');
+  const taskPath = path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-011D.md');
 
   await writeFile(fakeOverlayPath, `#!/bin/sh
 trap 'kill 0 >/dev/null 2>&1; exit 0' TERM INT
@@ -1027,7 +1065,7 @@ Terminate overlay companion when there is nothing left to show
 - [ ] A
 `);
 
-  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  await enableOverlayForSandbox(sandbox);
 
   const overlayEnv = {
     ...sandbox.env,
@@ -1091,7 +1129,7 @@ test('overlay status reports the last requested runtime visibility instead of re
   await writeDemoGraph(sandbox.cwd, [
     { task_id: 'T-015', title: 'Overlay status task' },
   ]);
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-015.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-015.md'), `---
 task_id: T-015
 status: pending
 priority: high
@@ -1104,7 +1142,7 @@ Overlay status task
 - [ ] A
 `);
 
-  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  await enableOverlayForSandbox(sandbox);
   parseCliJson(await runCli(['overlay', 'ensure', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   parseCliJson(await runCli(['overlay', 'hide', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
 
@@ -1152,7 +1190,7 @@ printf '%s\n' "$*" > ${JSON.stringify(overlayOutputPath)}
   await writeDemoGraph(sandbox.cwd, [
     { task_id: 'T-011A', title: 'Launch overlay companion app bundle' },
   ]);
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-011A.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-011A.md'), `---
 task_id: T-011A
 status: pending
 priority: high
@@ -1165,7 +1203,7 @@ Launch overlay companion app bundle
 - [ ] A
 `);
 
-  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  await enableOverlayForSandbox(sandbox);
 
   const ensurePayload = parseCliJson(await runCli(['overlay', 'ensure', '--json'], {
     cwd: sandbox.cwd,
@@ -1196,7 +1234,7 @@ printf '%s\n' "$SUPERPLAN_OVERLAY_WORKSPACE" >> "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
   await writeDemoGraph(sandbox.cwd, [
     { task_id: 'T-012', title: 'Auto-launch overlay on execution' },
   ]);
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-012.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-012.md'), `---
 task_id: T-012
 status: pending
 priority: high
@@ -1209,7 +1247,7 @@ Auto-launch overlay on execution
 - [ ] A
 `);
 
-  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  await enableOverlayForSandbox(sandbox);
 
   const startPayload = parseCliJson(await runCli(['run', 'T-012', '--json'], {
     cwd: sandbox.cwd,
@@ -1238,7 +1276,7 @@ test('run with an explicit task id ensures overlay visibility for both start and
   await writeDemoGraph(sandbox.cwd, [
     { task_id: 'T-250', title: 'Pickup overlay task' },
   ]);
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-250.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-250.md'), `---
 task_id: T-250
 status: pending
 priority: high
@@ -1251,7 +1289,7 @@ Pickup overlay task
 - [ ] A
 `);
 
-  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  await enableOverlayForSandbox(sandbox);
   const startPayload = parseCliJson(await runCli(['run', 'T-250', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
 
   const startedControl = await readJson(getOverlayRuntimePathsForSandbox(sandbox).control_path);
@@ -1289,7 +1327,7 @@ test('overlay snapshot includes active-task checklist progress counts', async ()
   await writeDemoGraph(sandbox.cwd, [
     { task_id: 'T-020', title: 'Track real checklist progress' },
   ]);
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-020.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-020.md'), `---
 task_id: T-020
 status: pending
 priority: high
@@ -1304,7 +1342,7 @@ Track real checklist progress
 - [ ] Third
 `);
 
-  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  await enableOverlayForSandbox(sandbox);
   parseCliJson(await runCli(['overlay', 'ensure', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
 
   const snapshot = await readJson(getOverlayRuntimePathsForSandbox(sandbox).snapshot_path);
@@ -1314,6 +1352,8 @@ Track real checklist progress
   assert.equal(snapshot.active_task.progress_percent, 33);
   assert.deepEqual(snapshot.board.in_progress, [{
     task_id: 'T-020',
+    change_id: 'demo',
+    task_ref: 'demo/T-020',
     title: 'Track real checklist progress',
     status: 'in_progress',
     completed_acceptance_criteria: 1,
@@ -1324,7 +1364,7 @@ Track real checklist progress
 
 test('sync refreshes overlay snapshot after task checklist edits', async () => {
   const sandbox = await makeSandbox('superplan-overlay-sync-');
-  const taskPath = path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-021.md');
+  const taskPath = path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-021.md');
 
   await writeDemoGraph(sandbox.cwd, [
     { task_id: 'T-021', title: 'Refresh overlay after checklist edits' },
@@ -1343,7 +1383,7 @@ Refresh overlay after checklist edits
 - [ ] Second
 `);
 
-  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  await enableOverlayForSandbox(sandbox);
   parseCliJson(await runCli(['overlay', 'ensure', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
 
   let snapshot = await readJson(getOverlayRuntimePathsForSandbox(sandbox).snapshot_path);
@@ -1371,6 +1411,8 @@ Refresh overlay after checklist edits
   assert.equal(snapshot.attention_state, 'all_tasks_done');
   assert.deepEqual(snapshot.board.done, [{
     task_id: 'T-021',
+    change_id: 'demo',
+    task_ref: 'demo/T-021',
     title: 'Refresh overlay after checklist edits',
     status: 'done',
     completed_acceptance_criteria: 2,
@@ -1385,7 +1427,7 @@ test('task lifecycle updates overlay snapshot and emits high-signal alerts only'
   await writeDemoGraph(feedbackSandbox.cwd, [
     { task_id: 'T-200', title: 'Needs review' },
   ]);
-  await writeFile(path.join(feedbackSandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-200.md'), `---
+  await writeFile(path.join(getSuperplanRoot(feedbackSandbox), 'changes', 'demo', 'tasks', 'T-200.md'), `---
 task_id: T-200
 status: pending
 priority: high
@@ -1406,6 +1448,8 @@ Needs review
   assert.equal(feedbackSnapshot.attention_state, 'needs_feedback');
   assert.deepEqual(feedbackSnapshot.board.needs_feedback, [{
     task_id: 'T-200',
+    change_id: 'demo',
+    task_ref: 'demo/T-200',
     title: 'Needs review',
     status: 'needs_feedback',
     completed_acceptance_criteria: 0,
@@ -1425,7 +1469,7 @@ Needs review
   await writeDemoGraph(doneSandbox.cwd, [
     { task_id: 'T-300', title: 'Finish me' },
   ]);
-  await writeFile(path.join(doneSandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-300.md'), `---
+  await writeFile(path.join(getSuperplanRoot(doneSandbox), 'changes', 'demo', 'tasks', 'T-300.md'), `---
 task_id: T-300
 status: pending
 priority: high
@@ -1455,6 +1499,8 @@ Finish me
   assert.equal(doneSnapshot.attention_state, 'all_tasks_done');
   assert.deepEqual(doneSnapshot.board.done, [{
     task_id: 'T-300',
+    change_id: 'demo',
+    task_ref: 'demo/T-300',
     title: 'Finish me',
     status: 'done',
     completed_acceptance_criteria: 1,

@@ -126,13 +126,15 @@ All Superplan workflow skills are installed globally on this machine.
 
 ## Critical Rule
 
-Before making ANY code changes or proposing any plan:
-- Run \`superplan status --json\` to check current state.
-- If Superplan instructions are installed for this workspace, you ARE in a structured workflow. Tracked changes may live under \`~/.config/superplan/changes/\`.
-- Do not edit repo files until \`superplan run --json\` or \`superplan run <task_ref> --json\` returns an active task for this turn.
+Before making ANY code changes or entering tracked execution:
+- Load \`superplan-entry\` first and let it decide whether Superplan should engage.
+- Read-only repo inspection and approach reasoning are allowed before task creation.
+- If Superplan instructions are installed for this workspace, you ARE in a structured workflow. Tracked changes and runtime may live under a shared project state root such as \`~/.config/superplan/project-<name>-<hash>/\`, and the CLI may surface those paths as \`.superplan/...\` from the repo root.
+- Do not edit repo files or mutate repo state until \`superplan run --json\` or \`superplan run <task_ref> --json\` returns an active task for this turn.
 - Treat the returned active-task context as the edit gate. If \`run\` fails, do not proceed into implementation.
+- Use \`superplan status --json\` only when you need orientation, inspection, or recovery.
 - Use the CLI for all lifecycle transitions (block, feedback, complete).
-- Never hand-edit \`~/.config/superplan/runtime/\` files.
+- Never hand-edit shared runtime files under \`~/.config/superplan/project-<name>-<hash>/runtime/\`.
 
 ## Global Skills Directory
 
@@ -223,33 +225,47 @@ Non-negotiable rules:
 - No broad repo exploration before loading and following \`superplan-entry\`.
 - No planning or repo-specific clarification before loading and following \`superplan-entry\`.
 - Keep workflow control internal: do not narrate skill names, routing, or command logs to the user.
-- Treat the Superplan CLI as the execution control plane for structured repo work, even when tracked changes live under \`~/.config/superplan/\` instead of a repo-local \`.superplan/\` directory.
+- Treat the Superplan CLI as the execution control plane for structured repo work, even when tracked changes and runtime live under a shared project state root such as \`~/.config/superplan/project-<name>-<hash>/\` and are surfaced as \`.superplan/...\` from the repo root.
 - Prefer workspace harnesses, scripts, and custom workflows when \`superplan-entry\` routes you there.
-- For any repo work beyond a direct answer, create a tracked Superplan task before acting — even lightweight work.
-- Users cannot see what the agent is doing without a task; task creation is not ceremony, it is visibility.
+- For repo work that will enter execution, create or claim a tracked Superplan task before editing files or mutating repo state — even lightweight work.
+- Users cannot see active execution without a task; task creation is not ceremony, it is visibility.
 
 Task creation rule:
-- Any work that changes files, runs commands, or modifies state must be tracked as a Superplan task first.
-- Do not treat "this is small" or "this is obvious" as a reason to skip task creation.
+- Read-only repo inspection, local reasoning, and user-facing planning may happen before task creation.
+- Any work that edits files, mutates repo state, or enters tracked execution must be attached to a Superplan task first.
+- Do not treat "this is small" or "this is obvious" as a reason to skip task creation once execution is about to begin.
 - For tiny work, one \`direct\`-depth task is enough; for multi-step work, shape a full task graph.
-- Task creation happens before the first file edit, not after.
+- Task creation happens before the first file edit or stateful repo mutation, not after.
 - Non-trivial edits require a concrete task contract, not just a vague intent to work on something.
 - Multi-file refactors should happen only when the task graph already declares that work.
 
+Session focus rule:
+- Session-local routing depends on a stable per-chat \`SUPERPLAN_SESSION_ID\`.
+- If the host or startup hook already exported \`SUPERPLAN_SESSION_ID\`, preserve it on every \`superplan\` command in this chat.
+- If startup context gives you a Superplan session token but the host did not auto-export it, prefix every Superplan CLI command with \`SUPERPLAN_SESSION_ID=<token>\`.
+- If the host has no startup hook or session export path, mint one stable chat-local token before the first Superplan CLI command and reuse it for the rest of the chat.
+- Use \`superplan run --fresh --json\` when the user starts unrelated work in the same chat and you need to bypass the saved session focus without explicitly resuming old work.
+
+Communication modes:
+- \`control-plane mode\` is the default for \`superplan-entry\`, \`superplan-route\`, \`superplan-shape\`, \`superplan-execute\`, and normal lifecycle handling. Be terse, outcome-focused, and mostly silent about workflow mechanics. No phase narration.
+- \`planning mode\` is for \`superplan-plan\`, \`superplan-brainstorm\`, or any point where the user needs help choosing an approach. Be detailed about approaches, recommendation, trade-offs, and execution path while keeping Superplan ceremony in the background.
+- Do not blend the modes accidentally: control-plane work should stay quiet, and planning work should make the useful reasoning visible.
+
 Canonical loop when Superplan is active:
-1. Run \`superplan status --json\`.
-2. If no active task exists for the current work, shape and scaffold one now before proceeding.
-3. Claim or resume work with \`superplan run --json\` or \`superplan run <task_ref> --json\`.
-4. Do not edit repo files until that run command has returned an active task for this turn.
+1. If continuing known work, run \`superplan run <task_ref> --json\`; if the user starts unrelated work in this same chat, run \`superplan run --fresh --json\`; otherwise start with \`superplan run --json\`.
+2. Treat the returned active-task context as the edit gate. Do not edit repo files until a run command has returned an active task for this turn.
+3. If \`run\` did not return an active task for the current work, shape and scaffold the minimal honest task now, then claim it.
+4. Use \`superplan status --json\` only when you need frontier orientation, human inspection, or recovery after ambiguity.
 5. Continue through the owning Superplan phase instead of improvising a parallel workflow.
-6. Use lifecycle commands such as \`superplan task runtime block\`, \`superplan task runtime request-feedback\`, and \`superplan task review complete\`; never hand-edit \`~/.config/superplan/runtime/\`.
+6. Use lifecycle commands such as \`superplan task runtime block\`, \`superplan task runtime request-feedback\`, and \`superplan task review complete\`, and use \`superplan worktree ensure <change> --json\` / \`superplan worktree list --json\` when execution-root routing needs repair; never hand-edit shared runtime files under \`~/.config/superplan/project-<name>-<hash>/runtime/\`.
 
 Decision guardrails:
 - If readiness is missing, give the concrete missing-layer guidance and stop.
 - If work is already shaped, resume the owning execution or review phase instead of routing from scratch.
 - If the request is large, ambiguous, or multi-workstream, route before implementing.
-- If the agent is about to edit a file without a tracked task, stop and create the task first.
+- If the agent is about to edit a file or mutate repo state without a tracked task, stop and create or claim the task first.
 - If \`superplan run\`, \`status\`, or task activation returns an unexpected lifecycle or runtime error, the next action must be another Superplan command, not implementation.
+- If \`superplan run\` or task activation returns \`EXECUTION_ROOT_OCCUPIED\` or \`EXECUTION_ROOT_STALE\`, inspect or repair execution roots with \`superplan worktree list --json\` or \`superplan worktree ensure <change> --json\` before editing in the wrong checkout.
 - If \`superplan run\` fails, do not proceed until the task is blocked, reopened, repaired, or clarified through Superplan.
 ${MANAGED_ENTRY_INSTRUCTIONS_BLOCK_END}`;
 }
@@ -266,9 +282,11 @@ Non-negotiable requirements:
 - No planning, clarification, or task breakdown is allowed before loading and following \`superplan-entry\`.
 - If any Superplan rule applies, follow the owning rule instead of improvising.
 - For packed, ambiguous, or multi-constraint requests, route through Superplan first and do not begin implementation directly.
-- For any repo work that changes files or state, create a tracked Superplan task before acting — even small work.
-- Task creation is user visibility, not ceremony; users cannot see what the agent is doing without it.
-- Do not edit repo files until \`superplan run --json\` or \`superplan run <task_ref> --json\` returns an active task for this turn.
+- Read-only repo inspection, local reasoning, and user-facing planning may happen before task creation.
+- For repo work that will edit files, mutate repo state, or enter tracked execution, create or claim a tracked Superplan task before acting — even small work.
+- Task creation is user visibility, not ceremony; users cannot see active execution without it.
+- Do not edit repo files or mutate repo state until \`superplan run --json\`, \`superplan run --fresh --json\`, or \`superplan run <task_ref> --json\` returns an active task for this turn.
+- Use \`control-plane mode\` for normal workflow control and \`planning mode\` only when the user actually needs approaches, recommendation, trade-offs, and execution path detail.
 - If \`run\` or a lifecycle command fails unexpectedly, the next move must stay inside Superplan until runtime state is repaired or clarified.
 
 Embedded \`superplan-entry\` rule for reinforcement:
@@ -398,21 +416,25 @@ export async function installWindsurfEnforcementFiles(agentPath: string, globalS
 
 ## CRITICAL RULES - NO EXCEPTIONS
 
-- **I CANNOT edit files without first running \`superplan status --json\`**
+- **I CANNOT edit files or mutate repo state without first claiming or creating the correct Superplan task**
 - **I CANNOT proceed without an active Superplan task**
+- **I CAN inspect and understand the repo before task creation, but I MUST stay read-only until a task is active**
+- **I MUST use control-plane mode for normal workflow control: terse, outcome-focused, no phase narration**
+- **I MUST switch to planning mode only when the user needs detailed approaches, recommendation, trade-offs, or execution path**
 - **Single-file edits are the ONLY exception**
 - **If I violate this, I MUST stop and restart correctly**
 
 ## Mandatory Workflow
 
-Before ANY repo work:
-1. Run \`superplan status --json\`
-2. If no active task, load \`superplan-entry\` skill and create one
-3. Only proceed after task is active
+Before repo execution:
+1. Load \`superplan-entry\`
+2. If continuing known work, run \`superplan run <task_ref> --json\`; if the user starts unrelated work in this same chat, run \`superplan run --fresh --json\`; otherwise run \`superplan run --json\`
+3. If no active task exists for the current work, STOP and shape/scaffold the minimal honest task, then claim it
+4. Only proceed after the task is active
 
 ## Task Creation Rule
 
-Any work that changes files, runs commands, or modifies state must be tracked as a Superplan task first — even small work.
+Read-only repo inspection and planning may happen before task creation. Any work that changes files, mutates repo state, or enters tracked execution must be tracked as a Superplan task first — even small work.
 
 ## Entry Point
 
@@ -430,10 +452,11 @@ description: Mandatory gate before any repo work
 
 # Superplan Pre-Flight Check
 
-1. Run \`superplan status --json\`
-2. If no active task, STOP and run superplan-entry workflow
-3. Confirm task reference before any edits
-4. Violations require immediate workflow restart
+1. Load \`superplan-entry\`
+2. If continuing known work, run \`superplan run <task_ref> --json\`; if the user starts unrelated work in this same chat, run \`superplan run --fresh --json\`; otherwise run \`superplan run --json\`
+3. If no active task matches the current work, STOP and shape/scaffold it before edits
+4. Use \`superplan status --json\` only when orientation or recovery is needed
+5. Violations require immediate workflow restart
 `;
 
   await fs.writeFile(claudeMdPath, claudeMdContent, 'utf-8');
@@ -866,6 +889,7 @@ Common commands:
 - \`superplan task scaffold batch <change-slug> --stdin --json\`
 - \`superplan status --json\`
 - \`superplan run --json\`
+- \`superplan run --fresh --json\`
 - \`superplan run <task_ref> --json\`
 - \`superplan task inspect show <task_ref> --json\`
 - \`superplan task runtime block <task_ref> --reason "<reason>" --json\`
@@ -873,21 +897,27 @@ Common commands:
 - \`superplan task review complete <task_ref> --json\`
 - \`superplan task repair fix --json\`
 - \`superplan doctor --json\`
+- \`superplan worktree ensure <change-slug> --json\`
+- \`superplan worktree list --json\`
+- \`superplan worktree detach <change-slug> --json\`
+- \`superplan worktree prune --json\`
 - \`superplan overlay ensure --json\`
 - \`superplan overlay hide --json\`
 
 Execution loop:
-1. Check \`superplan status --json\`
-2. Claim work with \`superplan run --json\`
-3. Do not edit repo files until \`superplan run --json\` or \`superplan run <task_ref> --json\` has returned an active task context for this turn; use that payload as the edit gate
-4. If \`run\`, \`status\`, or task activation returns an unexpected lifecycle or runtime error, stay inside Superplan and repair, block, reopen, or inspect before attempting implementation
-5. Update runtime state with block, feedback, complete, or fix commands instead of editing markdown state by hand
-6. After implementation proof passes, do not end the turn with the task still effectively pending or in progress; move it through \`superplan task review complete <task_ref> --json\` and the appropriate review path, or state the exact blocker
-7. Use \`superplan context bootstrap --json\` when durable workspace context entrypoints are missing, then use CLI commands to keep context docs, decisions, gotchas, change plans, change specs, and tracked tasks honest instead of inventing ad hoc files
-8. When shaping tracked work, use \`superplan change new --single-task\`, \`superplan change task add\`, \`superplan change plan set\`, and \`superplan change spec set\` instead of editing anything under \`~/.config/superplan/\` directly
-9. When the request is large, ambiguous, or multi-workstream, do not jump straight from the raw request into task scaffolding; clarify expectations, capture spec or plan truth when needed, then finalize the graph
-10. If overlay support is enabled for this workspace and a launchable companion is installed, \`superplan task scaffold new\`, \`superplan task scaffold batch\`, \`superplan run\`, \`superplan run <task_ref>\`, and \`superplan task review reopen\` can auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with \`superplan doctor --json\` and \`superplan overlay ensure --json\` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use \`superplan overlay hide --json\` when it becomes idle or empty
-11. After overlay-triggering commands, inspect the returned \`overlay\` payload; if \`overlay.companion.launched\` is false, surface \`overlay.companion.reason\` instead of assuming the overlay appeared
+1. If continuing known work, run \`superplan run <task_ref> --json\`; if the user starts unrelated work in this same chat, run \`superplan run --fresh --json\`; otherwise start with \`superplan run --json\`
+2. Read-only repo inspection, local reasoning, and user-facing planning may happen before task creation; do not edit repo files or mutate repo state until a run command has returned an active task context for this turn
+3. Treat the returned active-task payload as the edit gate; if \`run\` returned no active task for the current work, shape/scaffold the minimal honest task, then claim it
+4. Use \`superplan status --json\` only when frontier orientation, inspection, or recovery is actually needed
+5. If \`run\` or task activation returns \`EXECUTION_ROOT_OCCUPIED\` or \`EXECUTION_ROOT_STALE\`, inspect or repair execution roots with \`superplan worktree list --json\` or \`superplan worktree ensure <change-slug> --json\` before editing in the wrong checkout
+6. If \`run\`, \`status\`, or task activation returns any other unexpected lifecycle or runtime error, stay inside Superplan and repair, block, reopen, or inspect before attempting implementation
+7. Update runtime state with block, feedback, complete, fix, and worktree-routing commands instead of editing markdown state by hand
+8. After implementation proof passes, do not end the turn with the task still effectively pending or in progress; move it through \`superplan task review complete <task_ref> --json\` and the appropriate review path, or state the exact blocker
+9. Use \`superplan context bootstrap --json\` when durable workspace context entrypoints are missing, then use CLI commands to keep context docs, decisions, gotchas, change plans, change specs, and tracked tasks honest instead of inventing ad hoc files
+10. When shaping tracked work, use \`superplan change new --single-task\`, \`superplan change task add\`, \`superplan change plan set\`, and \`superplan change spec set\` instead of editing anything under the shared Superplan project state root directly
+11. When the request is large, ambiguous, or multi-workstream, do not jump straight from the raw request into task scaffolding; clarify expectations, capture spec or plan truth when needed, then finalize the graph
+12. If overlay support is enabled for this workspace and a launchable companion is installed, \`superplan task scaffold new\`, \`superplan task scaffold batch\`, \`superplan run\`, \`superplan run <task_ref>\`, and \`superplan task review reopen\` can auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with \`superplan doctor --json\` and \`superplan overlay ensure --json\` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use \`superplan overlay hide --json\` when it becomes idle or empty
+13. After overlay-triggering commands, inspect the returned \`overlay\` payload; if \`overlay.companion.launched\` is false, surface \`overlay.companion.reason\` instead of assuming the overlay appeared
 
 Authoring rule:
 - Use \`superplan context bootstrap --json\` to create missing workspace context entrypoints instead of hand-writing them from scratch
@@ -896,7 +926,7 @@ Authoring rule:
 - Use \`superplan change task add\` to define tracked work and let the CLI place graph and task-contract artifacts correctly
 - Use \`superplan change plan set\` and \`superplan change spec set\` for change-scoped plan/spec truth
 - Use \`superplan context doc set\` and \`superplan context log add\` for workspace-owned durable memory
-- Do not edit anything under \`~/.config/superplan/\` directly when a CLI command can own the write
+- Do not edit anything under the shared Superplan project state root directly when a CLI command can own the write
 - Prefer stdin over temp files in agent flows
 - Use the returned task payloads directly after CLI authoring instead of immediately calling \`superplan task inspect show\`
 
@@ -905,12 +935,13 @@ Canonical selection rule:
 - Prefer commands that already return the needed task payload instead of making extra follow-up calls
 
 User communication rule:
-- Keep workflow control and command-by-command orchestration internal unless the user explicitly asks for it
-- Do not narrate meta progress such as which Superplan skill is active, that routing or shaping is happening, or lists of explored files and commands
+- Use \`control-plane mode\` by default for workflow control: keep orchestration internal, stay terse, and avoid phase narration
+- Switch to \`planning mode\` only when the user is choosing an approach or when \`superplan-plan\` / \`superplan-brainstorm\` owns the next step
+- In \`planning mode\`, make approaches, recommendation, trade-offs, and execution path explicit without foregrounding Superplan mechanics
 - Progress updates should focus on user value: what is changing, what risk is being checked, what decision matters, or what blocker needs attention
 - Prefer project thoughts over process thoughts
 
-Never write \`~/.config/superplan/runtime/overlay.json\` by hand.
+Never write shared runtime overlay state by hand.
 """`;
 }
 

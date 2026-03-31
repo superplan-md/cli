@@ -2,10 +2,11 @@
 
 Runtime truth is not graph truth and not task-contract truth.
 
-Current CLI-backed runtime storage:
+Current CLI-backed runtime storage lives under the shared project state root `~/.config/superplan/project-<name>-<hash>/runtime/`, which the CLI may render as `.superplan/runtime/...` from the repo root:
 
-- `.superplan/runtime/tasks.json`
-- `.superplan/runtime/events.ndjson`
+- `runtime/tasks.json`
+- `runtime/events.ndjson`
+- `runtime/execution-roots.json`
 
 ## Runtime Events
 
@@ -50,24 +51,25 @@ Do not treat dependency blockage as proof that execution tried and failed.
 ## Current CLI Runtime States
 
 - `in_progress`
+- `in_review`
 - `blocked`
 - `needs_feedback`
 - `done`
 
 ## Workflow Outputs Not Yet Persisted As CLI State
 
-- review ready
 - localized re-shape required
 - strategic re-route required
 
 These can still be skill outputs and handoff states even when the CLI does not store them directly.
+Review-ready is persisted explicitly as `in_review`.
 
 ## Execution States To Surface
 
 - in progress
 - blocked
 - needs feedback
-- review ready
+- in review
 - localized re-shape required
 - strategic re-route required
 
@@ -87,7 +89,7 @@ It gives:
 - tasks needing feedback
 - ready tasks
 
-The March 17 product doc also points toward `.superplan/runtime/current.json` as a future stable summary artifact.
+The March 17 product doc also points toward a `.superplan/runtime/current.json`-style summary artifact as a future stable surface.
 Do not pretend that persisted file exists if the CLI is only exposing the summary via command output.
 
 ## Event Payload Reality Vs Product Target

@@ -138,7 +138,7 @@ If you want the direct PowerShell installer instead, this still works:
 irm https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.ps1 | iex
 ```
 
-**Note on Overlay:** The Superplan Overlay desktop companion is experimental and disabled by default. It may cause system instability or crashes on some machines. Only enable it if you need the visual interface.
+**Note on Overlay:** The Superplan desktop companion is optional. The installer can enable or disable it as your machine default, and you can always change that later with `superplan overlay enable --global` or `superplan overlay disable --global`.
 
 If you want to pin a specific release instead, keep the same installer URL and set `SUPERPLAN_REF` explicitly:
 

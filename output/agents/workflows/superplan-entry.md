@@ -81,11 +81,13 @@ Do not modify or outrank a working user-owned workflow unless the user explicitl
 
 Keep workflow control language internal.
 
+- This skill runs in `control-plane mode`.
 - do not narrate skill selection, routing decisions, phase names, or command-by-command orchestration to the user
 - do not send meta progress updates such as "I'm using `superplan-entry`", "I'm shaping the change now", or activity logs like "Explored 5 files"
 - progress updates should focus on user-visible value: what is being changed, what risk is being checked, what decision matters, or what blocker affects the user
 - mention a command, artifact, or workflow phase only when it directly explains a user-facing decision, blocker, or requested detail
 - when in doubt, prefer project thoughts over process thoughts
+- if the user needs detailed options, recommendation, trade-offs, or execution path, switch to the planning owner instead of expanding control-plane narration here
 
 ## CLI Discipline
 
@@ -96,6 +98,17 @@ Entry routing is not permission to explore the CLI surface.
 - use `superplan task inspect show <task_ref> --json` only when one task's detailed readiness is actually needed
 - use `superplan doctor --json` only for setup or install uncertainty, not normal routing
 - once the needed CLI state is known, stop polling and route or act
+
+## Session Focus Discipline
+
+Session-local routing depends on a stable per-chat `SUPERPLAN_SESSION_ID`.
+
+- strongest path: let the host startup hook export `SUPERPLAN_SESSION_ID` for you and preserve it on every Superplan CLI command in this chat
+- fallback path: if startup context gives you a Superplan session token but the host did not auto-export it, prefix every Superplan CLI command with `SUPERPLAN_SESSION_ID=<that token>`
+- workflow-only hosts may not have a startup hook at all; in that case mint one stable chat-local token before the first Superplan CLI command and reuse it for the rest of the chat
+- do not silently switch to a different session token mid-chat unless the user explicitly moves this chat onto another session
+- explicit task refs such as `superplan run <task_ref> --json` may cross sessions on purpose; bare `superplan run --json` should stay bound to the current chat token
+- when the user starts unrelated work in the same chat, use `superplan run --fresh --json` to bypass saved session focus instead of silently resuming the old task
 
 ## Trigger
 
@@ -146,7 +159,7 @@ Inputs:
 - current repository and working directory
 - whether Superplan appears active in this repo or host
 - whether setup, init, and durable context appear present
-- whether `.superplan/` exists
+- whether shared Superplan project state already exists, either as a repo-root `.superplan/...` display path or under `~/.config/superplan/project-<name>-<hash>/`
 - whether useful workspace context exists already
 - whether existing task or runtime artifacts suggest the work is already in a later workflow phase
 
@@ -191,13 +204,18 @@ Common commands:
 - `superplan task scaffold new <change-slug> --task-id <task_id> --json` to scaffold exactly one graph-declared task contract
 - `superplan task scaffold batch <change-slug> --stdin --json` to create two or more new task contracts in one pass
 - `superplan status --json` to see active, ready, blocked, and needs-feedback tasks
-- `superplan run --json` to claim the next ready task or continue the active task, with the chosen task contract and selection reason in the payload
+- `superplan run --json` to continue the current session's focused task or focused change frontier, or to claim the highest-priority ready task when the current execution root is not already occupied by unrelated in-progress work
+- `superplan run --fresh --json` to bypass the current session focus for a brand-new request in the same chat
 - `superplan run <task_ref> --json` to explicitly start or resume one known task
 - `superplan task inspect show <task_ref> --json` to inspect one task and its readiness reasons directly
 - `superplan task runtime block <task_ref> --reason "<reason>" --json` when execution cannot safely continue
 - `superplan task runtime request-feedback <task_ref> --message "<message>" --json` when the user must respond
 - `superplan task review complete <task_ref> --json` after the work and acceptance criteria are satisfied
 - `superplan task repair fix --json` when runtime state becomes inconsistent
+- `superplan worktree ensure <change-slug> --json` to attach or repair a dedicated execution root for one change
+- `superplan worktree list --json` to inspect current execution-root attachments
+- `superplan worktree detach <change-slug> --json` to detach a change from its execution root
+- `superplan worktree prune --json` to mark missing worktrees and remove stale detached records
 - `superplan doctor --json` to verify setup, overlay launchability, and workspace health when readiness is unclear
 - `superplan overlay ensure --json` to explicitly reveal or resync the overlay when overlay support is enabled
 - `superplan overlay hide --json` to close the overlay when the workspace is idle or empty
@@ -205,16 +223,17 @@ Common commands:
 
 Execution default:
 
-1. check `superplan status --json`
-2. claim work with `superplan run --json`
-3. do not edit repo files until `superplan run --json` or `superplan run <task_ref> --json` has returned an active task for this turn
-4. treat the returned active-task context as the edit gate; if no active task context was returned, implementation does not begin
+1. if continuing known work, run `superplan run <task_ref> --json`; if the user starts unrelated work in this same chat, run `superplan run --fresh --json`; otherwise start with `superplan run --json`
+2. read-only repo inspection, local reasoning, and user-facing planning may happen before task creation; do not edit repo files or mutate repo state until a run command has returned an active task for this turn
+3. treat the returned active-task context as the edit gate; if `run` returned no active task for the current work, shape and scaffold the minimal honest task now, then claim it
+4. use `superplan status --json` only when frontier orientation, human inspection, or recovery is actually needed
 5. use the task returned by `superplan run`; only call `superplan task inspect show <task_ref> --json` when you need one task's full details and readiness reasons
-6. if `run`, `status`, or task activation returns an unexpected lifecycle or runtime error, the next action must be another Superplan command, not code edits
-7. execute through the workflow spine, especially `superplan-execute`, instead of ad hoc task mutation
-8. block, request feedback, repair, reopen, or complete through the runtime commands rather than editing markdown state by hand
-9. if overlay support is enabled for the workspace and a launchable companion is installed, expect `superplan task scaffold new`, `superplan task scaffold batch`, `superplan run`, `superplan run <task_ref>`, and `superplan task review reopen` to auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle again
-10. after overlay-triggering commands, inspect the returned overlay payload; if `overlay.companion.launched` is false, surface `overlay.companion.reason` instead of assuming the overlay appeared
+6. if `run` or task activation returns `EXECUTION_ROOT_OCCUPIED` or `EXECUTION_ROOT_STALE`, inspect or repair execution-root routing with `superplan worktree list --json` or `superplan worktree ensure <change-slug> --json` before editing
+7. if `run`, `status`, or task activation returns any other unexpected lifecycle or runtime error, the next action must be another Superplan command, not code edits
+8. execute through the workflow spine, especially `superplan-execute`, instead of ad hoc task mutation
+9. block, request feedback, repair, reopen, complete, or reroute execution roots through CLI commands rather than editing markdown or runtime state by hand
+10. if overlay support is enabled for the workspace and a launchable companion is installed, expect `superplan task scaffold new`, `superplan task scaffold batch`, `superplan run`, `superplan run <task_ref>`, and `superplan task review reopen` to auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle again
+11. after overlay-triggering commands, inspect the returned overlay payload; if `overlay.companion.launched` is false, surface `overlay.companion.reason` instead of assuming the overlay appeared
 
 Authoring default:
 

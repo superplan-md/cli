@@ -34,12 +34,14 @@ Use when:
 
 Make the useful reasoning visible to the user without narrating Superplan ceremony.
 
+- This skill runs in `planning mode`.
 - lead with a brief read on what the user appears to want and what makes that intent matter
 - state a recommendation, not just a neutral recap
 - when multiple viable paths exist, present `2-3` concrete approaches with trade-offs before locking into one
 - explain why the recommended path is better for this repo or request right now
 - surface real opinions, risks, and sequencing judgments instead of flattening them into generic intent summaries
 - keep internal phase names, command choreography, and storage details out of the foreground unless they directly affect the user's decision
+- do not hide behind control-plane terseness here; the user should be able to see the approaches, recommendation, trade-offs, and execution path clearly
 
 If there is only one credible path, say that plainly and explain why alternatives are not worth carrying forward.
 

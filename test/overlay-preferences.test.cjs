@@ -8,6 +8,7 @@ const {
   makeSandbox,
   withSandboxEnv,
   writeFile,
+  getSuperplanRoot,
 } = require('./helpers.cjs');
 
 async function writeGlobalOverlayConfig(sandbox, enabled) {
@@ -37,7 +38,7 @@ test('readOverlayPreferences falls back to the global setting when local .superp
   const { readOverlayPreferences } = loadDistModule('cli/overlay-preferences.js');
 
   await writeGlobalOverlayConfig(sandbox, true);
-  await fs.mkdir(path.join(sandbox.cwd, '.superplan'), { recursive: true });
+  await fs.mkdir(getSuperplanRoot(sandbox), { recursive: true });
 
   const preferences = await withSandboxEnv(sandbox, async () => readOverlayPreferences());
 
@@ -52,7 +53,7 @@ test('readOverlayPreferences ignores a partial local overlay section and keeps t
   const { readOverlayPreferences } = loadDistModule('cli/overlay-preferences.js');
 
   await writeGlobalOverlayConfig(sandbox, true);
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'config.toml'), `version = "0.1"
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'config.toml'), `version = "0.1"
 
 [overlay]
 
@@ -73,7 +74,7 @@ test('readOverlayPreferences ignores an invalid local overlay value and keeps th
   const { readOverlayPreferences } = loadDistModule('cli/overlay-preferences.js');
 
   await writeGlobalOverlayConfig(sandbox, true);
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'config.toml'), `version = "0.1"
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'config.toml'), `version = "0.1"
 
 [overlay]
 enabled = maybe

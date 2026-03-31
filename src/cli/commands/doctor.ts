@@ -17,6 +17,7 @@ import { parse } from './parse';
 import { inspectOverlayCompanionInstall } from '../overlay-companion';
 import { readOverlayPreferences } from '../overlay-preferences';
 import { collectWorkspaceHealthIssues } from '../workspace-health';
+import { listExecutionRoots, markMissingExecutionRoots } from '../execution-roots';
 import { getGlobalSuperplanPaths } from '../global-superplan';
 import { getTaskRef, toQualifiedTaskId } from '../task-identity';
 import { commandNextAction, stopNextAction, type NextAction } from '../next-action';
@@ -52,10 +53,22 @@ interface RuntimeState {
 async function readRuntimeState(runtimeFilePath: string): Promise<RuntimeState> {
   try {
     const content = await fs.readFile(runtimeFilePath, 'utf-8');
-    const parsedContent = JSON.parse(content) as Partial<RuntimeState>;
+    const parsedContent = JSON.parse(content) as Partial<RuntimeState> & {
+      changes?: Record<string, { tasks?: Record<string, RuntimeTaskState> }>;
+    };
+    const flattenedTasks = parsedContent.changes && typeof parsedContent.changes === 'object'
+      ? Object.fromEntries(
+        Object.entries(parsedContent.changes).flatMap(([changeId, changeState]) => {
+          const tasks = changeState?.tasks && typeof changeState.tasks === 'object'
+            ? changeState.tasks
+            : {};
+          return Object.entries(tasks).map(([taskId, taskState]) => [toQualifiedTaskId(changeId, taskId), taskState]);
+        }),
+      )
+      : {};
 
     return {
-      tasks: parsedContent.tasks ?? {},
+      tasks: Object.keys(flattenedTasks).length > 0 ? flattenedTasks : parsedContent.tasks ?? {},
     };
   } catch {
     return { tasks: {} };
@@ -95,6 +108,29 @@ function getDependencyState(tasks: ParsedTask[], task: ParsedTask): {
 
 function getInProgressEntries(runtimeState: RuntimeState): [string, RuntimeTaskState][] {
   return Object.entries(runtimeState.tasks).filter(([, taskState]) => taskState.status === 'in_progress');
+}
+
+function getMultipleInProgressByChange(runtimeState: RuntimeState): string[] {
+  const counts = new Map<string, number>();
+
+  for (const [taskRef, taskState] of getInProgressEntries(runtimeState)) {
+    if (taskState.status !== 'in_progress') {
+      continue;
+    }
+
+    const separatorIndex = taskRef.indexOf('/');
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const changeId = taskRef.slice(0, separatorIndex);
+    counts.set(changeId, (counts.get(changeId) ?? 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .filter(([, count]) => count > 1)
+    .map(([changeId]) => changeId)
+    .sort((left, right) => left.localeCompare(right));
 }
 
 function getMissingDependencyIds(tasks: ParsedTask[], task: ParsedTask): string[] {
@@ -145,10 +181,11 @@ async function collectDeepIssues(cwd: string): Promise<DoctorIssue[]> {
   }
 
   const inProgressEntries = getInProgressEntries(runtimeState);
-  if (inProgressEntries.length > 1) {
+  const changesWithMultipleInProgress = getMultipleInProgressByChange(runtimeState);
+  for (const changeId of changesWithMultipleInProgress) {
     issues.push({
       code: 'RUNTIME_CONFLICT_MULTIPLE_IN_PROGRESS',
-      message: 'Multiple tasks are currently in progress',
+      message: `Multiple tasks are currently in progress for change ${changeId}`,
       fix: 'superplan task repair fix --json',
     });
   }
@@ -257,7 +294,51 @@ export async function doctor(args: string[] = []) {
     });
   }
 
-  issues.push(...await collectWorkspaceHealthIssues(globalPaths.superplanRoot));
+  issues.push(...await collectWorkspaceHealthIssues(workspaceRoot));
+
+  await markMissingExecutionRoots().catch(() => {});
+  const executionRoots = await listExecutionRoots().catch(() => []);
+  const rootsByChange = new Map<string, string[]>();
+  for (const root of executionRoots) {
+    if (root.attached_change_id) {
+      const roots = rootsByChange.get(root.attached_change_id) ?? [];
+      roots.push(root.path);
+      rootsByChange.set(root.attached_change_id, roots);
+    }
+
+    if (root.status !== 'missing') {
+      if (root.status === 'stale') {
+        issues.push({
+          code: 'EXECUTION_ROOT_STALE',
+          message: `Managed execution root drifted from its expected branch: ${root.path}`,
+          fix: root.attached_change_id
+            ? `Run superplan worktree ensure ${root.attached_change_id} --json from the project root, or switch ${root.path} back to its managed branch`
+            : 'Detach or prune the stale execution root metadata',
+        });
+      }
+      continue;
+    }
+
+    issues.push({
+      code: 'EXECUTION_ROOT_MISSING',
+      message: `Managed execution root is missing: ${root.path}`,
+      fix: root.attached_change_id
+        ? `Run superplan worktree ensure ${root.attached_change_id} --json or detach the missing execution root`
+        : 'Run superplan worktree prune --json to remove stale detached execution-root metadata',
+    });
+  }
+
+  for (const [changeId, attachedPaths] of rootsByChange.entries()) {
+    if (attachedPaths.length <= 1) {
+      continue;
+    }
+
+    issues.push({
+      code: 'EXECUTION_ROOT_DUPLICATE_CHANGE_ATTACHMENT',
+      message: `Multiple execution roots are attached to change ${changeId}: ${attachedPaths.join(', ')}`,
+      fix: `Detach the stale root with superplan worktree detach ${changeId} --json, then re-ensure the intended root with superplan worktree ensure ${changeId} --json`,
+    });
+  }
 
   if (deep) {
     issues.push(...await collectDeepIssues(globalPaths.superplanRoot));

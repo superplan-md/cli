@@ -9,6 +9,7 @@ const {
   writeChangeGraph,
   writeFile,
   writeJson,
+  getSuperplanRoot,
 } = require('./helpers.cjs');
 
 test('sync reparses tasks, repairs safe runtime drift, and returns a refreshed status summary', async () => {
@@ -22,7 +23,7 @@ test('sync reparses tasks, repairs safe runtime drift, and returns a refreshed s
     ],
   });
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-001.md'), `---
 task_id: T-001
 status: pending
 priority: high
@@ -35,7 +36,7 @@ First task
 - [ ] A
 `);
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-002.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-002.md'), `---
 task_id: T-002
 status: pending
 ---
@@ -47,7 +48,7 @@ Second task
 - [ ] A
 `);
 
-  await writeJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'), {
+  await writeJson(path.join(getSuperplanRoot(sandbox), 'runtime', 'tasks.json'), {
     tasks: {
       'demo/T-001': {
         status: 'in_progress',

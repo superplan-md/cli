@@ -88,23 +88,27 @@ Align execution to the CLI that exists today.
 
 Current CLI execution surface:
 
-- `superplan quick "Task title" --priority high` - One-shot task creation
 - `superplan task inspect show <task_ref> --json`
 - `superplan run --json`
+- `superplan run --fresh --json`
 - `superplan run <task_ref> --json`
 - `superplan task runtime block <task_ref> --reason <reason> --json`
 - `superplan task runtime request-feedback <task_ref> --message <message> --json`
 - `superplan task review complete <task_ref> --json`
 - `superplan task repair fix --json`
 - `superplan status --json`
+- `superplan worktree ensure <change-slug> --json`
+- `superplan worktree list --json`
+- `superplan worktree detach <change-slug> --json`
+- `superplan worktree prune --json`
 
 Current CLI truth:
 
 - readiness is computed from parsed task contracts plus runtime state
 - runtime states currently include `in_progress`, `in_review`, `done`, `blocked`, and `needs_feedback`
-- runtime events are append-only in `.superplan/runtime/events.ndjson`
+- runtime files live under the shared project state root `~/.config/superplan/project-<name>-<hash>/runtime/`, which the CLI may render as `.superplan/runtime/...` from the repo root
 - `superplan task inspect show <task_ref> --json` includes one task's computed readiness reasons
-- `superplan status --json` is the current narrow runtime summary surface even though `.superplan/runtime/current.json` is still only a product target
+- `superplan status --json` is the current narrow runtime summary surface even though a persisted `.superplan/runtime/current.json`-style summary is still only a product target
 - review handoff is now represented explicitly as `in_review`
 
 Therefore:
@@ -128,9 +132,11 @@ Execution is not permission to wander across CLI commands.
 
 Execution updates must describe actual work performed, current verification, material risks, and user-impacting decisions. Do not narrate Superplan ceremony.
 
+- This skill runs in `control-plane mode`.
 - do not mention scheduler behavior, subagent dispatch, runtime transitions, command history, or other Superplan mechanics unless the user needs that fact to understand a blocker, risk, or decision
 - reject updates that are primarily internal process commentary
 - tell the user what changed in the workspace, what verification is being run and for what risk, what decision was made and why, or what concrete blocker needs user input
+- do not let execution updates drift into planning-mode essays unless the user actually needs approach selection or trade-off review
 
 ## Lifecycle Semantics And Recovery
 
@@ -272,15 +278,16 @@ Runtime summary should keep legible:
 
 Use the runtime-aware CLI as the scheduler:
 
-1. `superplan status --json` to inspect the frontier
-2. `superplan run --json` to continue the current task or claim the next ready task
-3. use the task returned by `superplan run --json`; use `superplan run <task_ref> --json` when one known ready or paused task should become active; only call `superplan task inspect show <task_ref> --json` when you need one task's full details and readiness reasons
-4. `superplan task runtime block <task_ref> --reason "<reason>" --json` when blocked
-5. `superplan task runtime request-feedback <task_ref> --message "<message>" --json` when user input is required
-6. `superplan task review complete <task_ref> --json` only after the task contract is actually satisfied
-7. `superplan task repair fix --json` if runtime state becomes inconsistent
-8. if overlay support is enabled for the workspace and a launchable companion is installed, expect `superplan task scaffold new`, `superplan task scaffold batch`, `superplan run`, `superplan run <task_ref>`, and `superplan task review reopen` to auto-reveal the overlay as work becomes visible; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle or empty
-9. after overlay-triggering commands, inspect the returned overlay payload; if `overlay.companion.launched` is false, surface `overlay.companion.reason` instead of assuming the overlay appeared
+1. if continuing known work, start with `superplan run <task_ref> --json`; if the user starts unrelated work in the same chat, use `superplan run --fresh --json`; otherwise start with `superplan run --json`
+2. use `superplan status --json` only when frontier orientation, inspection, or runtime recovery is actually needed
+3. use the task returned by `superplan run`; only call `superplan task inspect show <task_ref> --json` when you need one task's full details and readiness reasons
+4. if `run` or task activation returns `EXECUTION_ROOT_OCCUPIED` or `EXECUTION_ROOT_STALE`, repair or inspect execution-root routing with `superplan worktree ensure <change-slug> --json` or `superplan worktree list --json` before continuing in the wrong checkout
+5. `superplan task runtime block <task_ref> --reason "<reason>" --json` when blocked
+6. `superplan task runtime request-feedback <task_ref> --message "<message>" --json` when user input is required
+7. `superplan task review complete <task_ref> --json` only after the task contract is actually satisfied
+8. `superplan task repair fix --json` if runtime state becomes inconsistent
+9. if overlay support is enabled for the workspace and a launchable companion is installed, expect `superplan task scaffold new`, `superplan task scaffold batch`, `superplan run`, `superplan run <task_ref>`, and `superplan task review reopen` to auto-reveal the overlay as work becomes visible; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle or empty
+10. after overlay-triggering commands, inspect the returned overlay payload; if `overlay.companion.launched` is false, surface `overlay.companion.reason` instead of assuming the overlay appeared
 
 Close-out rule:
 

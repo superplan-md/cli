@@ -2,7 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
-const { loadDistModule, makeSandbox, parseCliJson, runCli, withSandboxEnv, writeChangeGraph, writeFile } = require('./helpers.cjs');
+const {
+  loadDistModule, makeSandbox, parseCliJson, runCli, withSandboxEnv, writeChangeGraph, writeFile,
+  getSuperplanRoot,
+} = require('./helpers.cjs');
 
 test('cli returns NO_COMMAND in json mode', async () => {
   const result = await runCli(['--json']);
@@ -183,7 +186,7 @@ test('task show includes readiness reasons without a separate why command', asyn
       { task_id: 'T-999', title: 'Upstream blocker' },
     ],
   });
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-001.md'), `---
 task_id: T-001
 status: pending
 ---

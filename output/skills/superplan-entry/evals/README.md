@@ -27,6 +27,8 @@
 - confirm it routes to `superplan-route` rather than choosing `superplan-brainstorm` or `superplan-debug` as the entry lane
 - confirm "continue T-003" routes to `superplan-execute`, not `superplan-route`
 - confirm "is this task done?" routes to `superplan-review`, not `superplan-execute`
+- confirm a brand-new request in the same chat does not silently resume an older active or interrupted task
+- confirm unrelated dirty worktree state is treated as contamination risk, not as proof the new request should inherit old work
 
 ## Handoff Check
 
@@ -59,7 +61,16 @@
 - request arrives inside a bounded execution subagent and the skill must skip top-level rerouting
 - repo instructions conflict with a default Superplan habit and the skill must honor repo instructions
 - repo has a strong user-owned workflow and the skill must supervise rather than seize control
+- a fresh request arrives while another task is already active in this chat
+- an interrupted task is still waiting in the same chat when the user asks for different work
+- the checkout is dirty from another session and the new request may or may not overlap those edits
+
+## Scenario Files
+
+- `01-fresh-request-active-task.md`
+- `02-interrupted-session-different-request.md`
+- `03-unrelated-dirty-worktree.md`
 
 ## Pass Condition
 
-The skill stays brief, does not shape artifacts itself, distinguishes workflow skills from support skills, preserves outer entry discipline, keeps metadata trigger-only, handles CLI vs setup vs init vs context readiness distinctly, defers to user-owned workflows, and routes cleanly to the owning workflow phase.
+The skill stays brief, does not shape artifacts itself, distinguishes workflow skills from support skills, preserves outer entry discipline, keeps metadata trigger-only, handles CLI vs setup vs init vs context readiness distinctly, defers to user-owned workflows, keeps session focus from hijacking fresh requests, treats unrelated dirty diffs as explicit risk instead of hidden context, and routes cleanly to the owning workflow phase.

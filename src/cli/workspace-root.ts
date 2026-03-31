@@ -1,6 +1,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
+import {
+  getWorkspaceDirName,
+  resolvePathForDisplay,
+  resolveProjectIdentity,
+  resolveProjectStateRoot,
+  resolveWorkspaceRoot,
+} from './project-identity';
 
 function pathExists(targetPath: string): boolean {
   try {
@@ -19,28 +25,35 @@ function resolveStartDir(startDir: string): string {
   }
 }
 
-export function resolveWorkspaceRoot(startDir = process.cwd()): string {
-  const resolvedStartDir = resolveStartDir(startDir);
-  let currentDir = resolvedStartDir;
-  let gitRoot: string | null = null;
-
-  while (true) {
-    if (pathExists(path.join(currentDir, '.git'))) {
-      gitRoot = currentDir;
-      return gitRoot;
-    }
-
-    const parentDir = path.dirname(currentDir);
-    if (parentDir === currentDir) {
-      break;
-    }
-
-    currentDir = parentDir;
-  }
-
-  return resolvedStartDir;
+function isSameOrDescendant(parentPath: string, candidatePath: string): boolean {
+  const relativePath = path.relative(parentPath, candidatePath);
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
 }
 
-export function resolveSuperplanRoot(): string {
-  return path.join(os.homedir(), '.config', 'superplan');
+function toDisplaySlashes(targetPath: string): string {
+  return targetPath.split(path.sep).join('/');
+}
+
+export { getWorkspaceDirName, resolveWorkspaceRoot };
+
+export function resolveSuperplanRoot(startDir = process.cwd()): string {
+  return resolveProjectStateRoot(startDir);
+}
+
+export function getProjectIdentity(startDir = process.cwd()) {
+  return resolveProjectIdentity(startDir);
+}
+
+export function formatCliPath(targetPath: string, startDir = process.cwd()): string {
+  const resolvedStartDir = resolveStartDir(startDir);
+  const resolvedTargetPath = resolvePathForDisplay(targetPath);
+  const resolvedWorkspaceRoot = resolveWorkspaceRoot(startDir);
+  const resolvedSuperplanRoot = resolvePathForDisplay(resolveSuperplanRoot(startDir));
+
+  if (resolvedStartDir === resolvedWorkspaceRoot && isSameOrDescendant(resolvedSuperplanRoot, resolvedTargetPath)) {
+    const relativeToSuperplanRoot = path.relative(resolvedSuperplanRoot, resolvedTargetPath);
+    return toDisplaySlashes(path.join('.superplan', relativeToSuperplanRoot));
+  }
+
+  return toDisplaySlashes(path.relative(resolvedStartDir, resolvedTargetPath) || resolvedTargetPath);
 }

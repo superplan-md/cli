@@ -108,8 +108,8 @@ test('update resolves and installs the latest published release before refreshin
           install_method: 'downloaded_prebuilt',
           release_base_url: 'https://github.com/example/custom-superplan/releases/download/alpha.12',
           install_dir: path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay'),
-          install_path: path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay', 'Superplan Overlay Desktop.app'),
-          executable_path: path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay', 'Superplan Overlay Desktop.app', 'Contents', 'MacOS', 'Superplan Overlay Desktop'),
+          install_path: path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay', 'Superplan.app'),
+          executable_path: path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay', 'Superplan.app', 'Contents', 'MacOS', 'Superplan'),
         },
       }),
       resolveLatestRelease: async () => ({
@@ -122,7 +122,7 @@ test('update resolves and installs the latest published release before refreshin
         return {
           stopped: [
             { pid: 101, kind: 'cli', command: '/prefix/bin/superplan run --json' },
-            { pid: 202, kind: 'overlay', command: '/overlay/Superplan Overlay Desktop' },
+            { pid: 202, kind: 'overlay', command: '/overlay/Superplan' },
           ],
         };
       },
@@ -174,10 +174,10 @@ test('update resolves and installs the latest published release before refreshin
       'share',
       'superplan',
       'overlay',
-      'Superplan Overlay Desktop.app',
+      'Superplan.app',
       'Contents',
       'MacOS',
-      'Superplan Overlay Desktop',
+      'Superplan',
     ));
 
     assert.equal(calls.length, 1);
@@ -279,7 +279,7 @@ test('update refreshes installed skills for existing global and local setups', a
 
     assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-release', 'SKILL.md')), true);
     assert.equal(await pathExists(path.join(sandbox.home, '.claude', 'CLAUDE.md')), true);
-    assert.equal(await pathExists(path.join(sandbox.home, '.gemini', 'commands', 'superplan.toml')), true);
+    assert.equal(await pathExists(path.join(sandbox.home, '.gemini', 'skills', 'superplan-release', 'SKILL.md')), true);
     assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'skills', 'superplan-release', 'SKILL.md')), true);
     assert.equal(await pathExists(path.join(sandbox.cwd, '.codex')), true);
   });

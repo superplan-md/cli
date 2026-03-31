@@ -1,8 +1,8 @@
 import { setOverlayVisibilityRequest } from './overlay-runtime';
 import { readOverlayPreferences, type OverlayPreferenceState } from './overlay-preferences';
 import {
+  hideInstalledOverlayCompanion,
   launchInstalledOverlayCompanion,
-  terminateInstalledOverlayCompanion,
   type OverlayCompanionLaunchResult,
 } from './overlay-companion';
 import type { OverlayRequestedAction, OverlaySnapshot } from '../shared/overlay';
@@ -75,9 +75,7 @@ export async function applyRequestedOverlayAction(
   const [{ control }, companion] = await Promise.all([
     setOverlayVisibilityRequest(appliedAction, { workspacePath: snapshot.workspace_path }),
     appliedAction === 'hide'
-      // Bug #11 fix: pass workspace path so we only kill the overlay process
-      // for THIS workspace, not all overlay instances across all workspaces.
-      ? terminateInstalledOverlayCompanion(snapshot.workspace_path).then(() => createSkippedCompanionLaunchResult(snapshot.workspace_path))
+      ? hideInstalledOverlayCompanion(snapshot.workspace_path).then(() => createSkippedCompanionLaunchResult(snapshot.workspace_path))
       : launchInstalledOverlayCompanion(snapshot.workspace_path),
   ]);
 

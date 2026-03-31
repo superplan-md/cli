@@ -107,8 +107,8 @@ copy_local_source_snapshot() {
     tar \
       --exclude '.git' \
       --exclude 'node_modules' \
-      --exclude 'apps/overlay-desktop/node_modules' \
-      --exclude 'apps/overlay-desktop/src-tauri/target' \
+      --exclude 'apps/desktop/node_modules' \
+      --exclude 'apps/desktop/dist' \
       -cf - .
   ) | (
     cd "$SOURCE_WORKTREE"
@@ -249,10 +249,17 @@ resolve_install_ref() {
     return 0
   fi
 
-  # This script is fetched from the dev branch, so default installs should
-  # reproduce that same branch unless the caller overrides SUPERPLAN_REF.
-  SUPERPLAN_RESOLVED_REF="dev"
-  say "Defaulting Superplan CLI source to: $SUPERPLAN_RESOLVED_REF"
+  latest_release_tag="$(resolve_latest_release_tag_from_github)" || latest_lookup_status=$?
+  latest_lookup_status="${latest_lookup_status:-0}"
+
+  if [ "$latest_lookup_status" -eq 0 ] && [ -n "$latest_release_tag" ]; then
+    SUPERPLAN_RESOLVED_REF="$latest_release_tag"
+    say "Resolved latest Superplan release: $SUPERPLAN_RESOLVED_REF"
+    return 0
+  fi
+
+  SUPERPLAN_RESOLVED_REF="main"
+  say "No release tag found; defaulting Superplan source to $SUPERPLAN_RESOLVED_REF"
 }
 
 resolve_overlay_ref() {
@@ -297,6 +304,21 @@ resolve_packaged_overlay_source() {
   fi
 
   if [ -n "$SUPERPLAN_SOURCE_DIR" ]; then
+    local_desktop_dist="$SOURCE_WORKTREE/apps/desktop/dist"
+    local_desktop_source=""
+
+    if [ "$OVERLAY_PLATFORM" = "darwin" ] && [ -d "$local_desktop_dist" ]; then
+      local_desktop_source="$(find "$local_desktop_dist" -maxdepth 2 -type d -name 'Superplan.app' | sort | head -n 1)"
+    elif [ "$OVERLAY_PLATFORM" = "linux" ] && [ -d "$local_desktop_dist" ]; then
+      local_desktop_source="$(find "$local_desktop_dist" -maxdepth 1 -type f -name '*.AppImage' | sort | head -n 1)"
+    fi
+
+    if [ -n "$local_desktop_source" ] && [ -e "$local_desktop_source" ]; then
+      SUPERPLAN_OVERLAY_SOURCE_PATH="$local_desktop_source"
+      OVERLAY_INSTALL_METHOD="copied_prebuilt"
+      return 0
+    fi
+
     say "No packaged overlay artifact found in local source snapshot; continuing without the desktop companion"
     return 1
   fi
@@ -318,9 +340,10 @@ resolve_overlay_executable_path() {
   install_path="$1"
 
   if [ -d "$install_path/Contents/MacOS" ]; then
-    # Prefer the canonical Tauri binary names before falling back to
+    # Prefer the known Superplan bundle binary names before falling back to
     # an alphabetical find, which could accidentally pick a helper binary.
     for candidate in \
+      "$install_path/Contents/MacOS/Superplan" \
       "$install_path/Contents/MacOS/Superplan Overlay Desktop" \
       "$install_path/Contents/MacOS/superplan-overlay-desktop"; do
       if [ -f "$candidate" ]; then
@@ -631,7 +654,30 @@ if [ ! -x "$INSTALL_BIN_DIR/superplan" ]; then
   fail "superplan binary was not installed to $INSTALL_BIN_DIR"
 fi
 
-# Defer machine setup prompt to the end after all installation messages
+say "Installed Superplan to $INSTALL_BIN_DIR/superplan"
+if [ -n "$OVERLAY_INSTALL_PATH" ]; then
+  say "Installed Superplan overlay to $OVERLAY_INSTALL_PATH"
+fi
+
+# PATH guidance: warn the user if the install bin dir is not on PATH.
+case ":$PATH:" in
+  *":$INSTALL_BIN_DIR:"*)
+    ;;
+  *)
+    say ""
+    say "NOTE: $INSTALL_BIN_DIR is not on your PATH."
+    say "Add it by running one of:"
+    say ""
+    say "  echo 'export PATH=\"$INSTALL_BIN_DIR:\$PATH\"' >> ~/.bashrc   # bash"
+    say "  echo 'export PATH=\"$INSTALL_BIN_DIR:\$PATH\"' >> ~/.zshrc    # zsh"
+    say ""
+    say "Then restart your shell or run:  source ~/.bashrc"
+    ;;
+esac
+
+# Ask about running superplan init after install details are shown, but before
+# persisting install metadata so setup cannot overwrite the shell install record.
+run_machine_setup || true
 
 INSTALL_STATE_DIR="${HOME}/.config/superplan"
 INSTALL_STATE_PATH="$INSTALL_STATE_DIR/install.json"
@@ -708,27 +754,6 @@ if (setupCompleted) {
 fs.writeFileSync(installStatePath, JSON.stringify(metadata, null, 2));
 EOF
 
-say "Installed Superplan to $INSTALL_BIN_DIR/superplan"
-if [ -n "$OVERLAY_INSTALL_PATH" ]; then
-  say "Installed Superplan overlay to $OVERLAY_INSTALL_PATH"
-fi
-
-# PATH guidance: warn the user if the install bin dir is not on PATH.
-case ":$PATH:" in
-  *":$INSTALL_BIN_DIR:"*)
-    ;;
-  *)
-    say ""
-    say "NOTE: $INSTALL_BIN_DIR is not on your PATH."
-    say "Add it by running one of:"
-    say ""
-    say "  echo 'export PATH=\"$INSTALL_BIN_DIR:\$PATH\"' >> ~/.bashrc   # bash"
-    say "  echo 'export PATH=\"$INSTALL_BIN_DIR:\$PATH\"' >> ~/.zshrc    # zsh"
-    say ""
-    say "Then restart your shell or run:  source ~/.bashrc"
-    ;;
-esac
-
 if [ "$SETUP_COMPLETED" = "1" ]; then
   say "Superplan setup completed in $ORIGINAL_CWD"
 else
@@ -737,6 +762,3 @@ else
 fi
 say "Run: superplan --version"
 say ""
-
-# Ask about running superplan init at the very end
-run_machine_setup || true

@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { loadChangeGraph } from './graph';
 import { readVisibilityEvents } from './visibility-runtime';
+import { writeJsonAtomic } from './state-store';
 import { resolveSuperplanRoot } from './workspace-root';
 
 interface ChangeMetricsTaskSnapshot {
@@ -133,7 +134,6 @@ export async function syncChangeMetrics(changeId: string): Promise<string | null
   }
 
   const metricsPath = getMetricsPath(changeId);
-  await fs.mkdir(path.dirname(metricsPath), { recursive: true });
-  await fs.writeFile(metricsPath, JSON.stringify(snapshot, null, 2), 'utf-8');
+  await writeJsonAtomic(metricsPath, snapshot);
   return metricsPath;
 }

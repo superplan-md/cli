@@ -117,11 +117,13 @@ Do not expand this into boilerplate for its own sake.
 
 Keep the thinking visible in a user-helpful way.
 
+- This skill runs in `planning mode`.
 - lead with your best read of the user's actual intention, not just the literal wording of the request
 - be explicit about what signals, tensions, or hidden expectations are driving the design question
 - when alternatives are real, always show the approaches and recommend one
 - take positions; avoid bland summaries that only repeat uncertainty back to the user
 - keep the conversation focused on product, UX, technical trade-offs, and acceptance intent rather than Superplan process
+- do not hide behind control-plane terseness here; the user should be able to see the real alternatives, recommendation, and trade-off logic
 
 The goal is not to expose raw chain-of-thought.
 The goal is to make the important reasoning legible: what you think the user wants, what options exist, and which direction you recommend.

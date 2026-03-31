@@ -29,11 +29,11 @@ If `superplan-entry` says stay out:
 - create no Superplan artifacts
 - do not force the user through `init`, task creation, or lifecycle commands
 
-## 3. Task Creation Before Acting
+## 3. Task Creation Before Editing
 
 Once Superplan is engaged, task creation is how users see what the agent is doing. It is not ceremony.
 
-**The rule:** Any repo work that touches files or runs commands requires a tracked Superplan task before acting.
+**The rule:** Read-only repo inspection, local reasoning, and user-facing planning may happen before task creation. The moment work will edit files, mutate repo state, or enter tracked execution, create or claim a tracked Superplan task first.
 
 **The only exception — one-file/no-decisions carve-out:** A single-file edit that requires no decisions and is verifiable by inspection (e.g. fix a typo, bump a version number) may skip task creation entirely. This carve-out is narrow. If there is any doubt about whether a decision is involved, create a task.
 
@@ -68,6 +68,7 @@ Prefer the fewest user-visible steps that preserve correct workflow state.
 Once `superplan-entry` has decided Superplan should engage:
 
 - use the Superplan CLI as the control plane
+- prefer `superplan run --json` or `superplan run <task_ref> --json` as the default execution entrypoint; use `superplan status --json` for frontier orientation, inspection, or recovery
 - do not hand-edit `.superplan/runtime/`
 - do not hand-create anything under `.superplan/`
 - route plans, specs, graph tasks, task contracts, and workspace logs through the CLI so placement stays correct
@@ -76,7 +77,9 @@ Once `superplan-entry` has decided Superplan should engage:
 ## 6. Overlay And User Communication
 
 - do not assume overlay visibility unless the current workflow phase has verified it
-- keep workflow routing internal
+- `control-plane mode`: use for entry, route, shape, execute, review, and normal lifecycle handling; be terse, outcome-focused, and do not narrate skill or command choreography
+- `planning mode`: use for plan, brainstorm, or any user-visible approach decision; explain approaches, recommendation, trade-offs, and execution path in project terms
+- do not blend the modes accidentally: control-plane work stays quiet, planning work makes the useful reasoning visible
 - talk to the user about outcomes, blockers, and decisions, not about skill selection or command choreography
 - every substantial update should say what actual work was done, what verification is being run and for what risk, and what decision or blocker matters now
 

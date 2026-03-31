@@ -23,6 +23,10 @@ import {
 import { ensureChangeArtifacts } from '../workspace-artifacts';
 import { syncChangeMetrics } from '../change-metrics';
 import { commandNextAction, stopNextAction, type NextAction } from '../next-action';
+import { clearSessionFocusForChange, setSessionFocus } from '../session-focus';
+import { detachExecutionRootByChange } from '../execution-roots';
+import { writeJsonAtomic } from '../state-store';
+import { formatCliPath } from '../workspace-root';
 
 export type ChangeResult =
   | {
@@ -42,6 +46,7 @@ const CHANGE_SUBCOMMANDS = new Set([
   'plan',
   'spec',
   'task',
+  'archive',
 ]);
 
 function parsePriority(rawPriority: string | undefined): ScaffoldPriority | null {
@@ -217,7 +222,7 @@ async function readContentInput(args: string[], options: {
           ok: false,
           error: {
             code: 'CHANGE_CONTENT_FILE_READ_FAILED',
-            message: `Could not read content from ${path.relative(process.cwd(), resolvedFilePath) || resolvedFilePath}.`,
+            message: `Could not read content from ${formatCliPath(resolvedFilePath)}.`,
             retryable: false,
           },
         },
@@ -275,6 +280,7 @@ export function getChangeCommandHelpMessage(options: {
     '  plan set <change-slug>               Write change-scoped plan content through the CLI',
     '  spec set <change-slug>               Write change-scoped spec content through the CLI',
     '  task add <change-slug>               Add one tracked task and scaffold its contract through the CLI',
+    '  archive <change-slug>                Move a change to the archive and clean up its runtime state',
     '',
     'Options:',
     '  --title <title>                      Set the tracked change title or task title',
@@ -297,6 +303,7 @@ export function getChangeCommandHelpMessage(options: {
     '  superplan change plan set improve-task-authoring --file plan.md --json',
     '  superplan change spec set improve-task-authoring --name design --stdin --json',
     '  superplan change task add improve-task-authoring --title "Add CLI plan writer" --depends-on-all T-001 --acceptance-criterion "CLI can write change plans" --json',
+    '  superplan change archive my-change --json',
     '',
     'Use `change task add` for the normal one-task path.',
     'Use `task scaffold new` or `task scaffold batch` only when task ids are already declared in the graph and you need to scaffold contracts from that pre-shaped graph.',
@@ -390,19 +397,23 @@ async function createChange(changeSlug: string, options: {
   }
   const extraFiles = await ensureChangeArtifacts(changePaths.changeRoot, changeSlug, normalizedTitle);
   const metricsPath = await syncChangeMetrics(changeSlug);
+  await setSessionFocus({
+    focusedChangeId: changeSlug,
+    focusedTaskRef: normalizedSingleTaskTitle ? `${changeSlug}/T-001` : null,
+  });
   const overlay = await refreshChangeOverlay();
 
   return {
     ok: true,
       data: {
         change_id: changeSlug,
-        root: path.relative(process.cwd(), changePaths.changeRoot) || changePaths.changeRoot,
+        root: formatCliPath(changePaths.changeRoot),
         files: [
-          path.relative(process.cwd(), changePaths.tasksIndexPath) || changePaths.tasksIndexPath,
-          path.relative(process.cwd(), changePaths.tasksDir) || changePaths.tasksDir,
-          ...extraFiles.map(filePath => path.relative(process.cwd(), filePath) || filePath),
-          ...(taskFilePath ? [path.relative(process.cwd(), taskFilePath) || taskFilePath] : []),
-          ...(metricsPath ? [path.relative(process.cwd(), metricsPath) || metricsPath] : []),
+          formatCliPath(changePaths.tasksIndexPath),
+          formatCliPath(changePaths.tasksDir),
+          ...extraFiles.map(filePath => formatCliPath(filePath)),
+          ...(taskFilePath ? [formatCliPath(taskFilePath)] : []),
+          ...(metricsPath ? [formatCliPath(metricsPath)] : []),
         ],
         next_action: normalizedSingleTaskTitle
           ? commandNextAction(
@@ -410,7 +421,7 @@ async function createChange(changeSlug: string, options: {
               'The single-task change is scaffolded and ready to start immediately.',
             )
           : stopNextAction(
-              `The change scaffold exists. For most new work, use \`superplan change task add ${changeSlug} --title "..." --json\`. Edit ${path.relative(process.cwd(), changePaths.tasksIndexPath) || changePaths.tasksIndexPath} directly only when you are shaping a larger graph up front.`,
+              `The change scaffold exists. For most new work, use \`superplan change task add ${changeSlug} --title "..." --json\`. Edit ${formatCliPath(changePaths.tasksIndexPath)} directly only when you are shaping a larger graph up front.`,
               'The default next step is CLI-owned task creation; manual graph editing is only needed for pre-shaped or multi-task authoring.',
             ),
         ...(overlay ? { overlay } : {}),
@@ -450,15 +461,19 @@ async function writeChangePlan(changeSlug: string, args: string[]): Promise<Chan
   const artifactPaths = await ensureChangeArtifacts(changePaths.changeRoot, changeSlug, formatTitleFromSlug(changeSlug));
   const planPath = path.join(changePaths.changeRoot, 'plan.md');
   await fs.writeFile(planPath, `${contentResult.content!.trimEnd()}\n`, 'utf-8');
+  await setSessionFocus({
+    focusedChangeId: changeSlug,
+    focusedTaskRef: null,
+  });
 
   return {
     ok: true,
     data: {
       change_id: changeSlug,
-      root: path.relative(process.cwd(), changePaths.changeRoot) || changePaths.changeRoot,
+      root: formatCliPath(changePaths.changeRoot),
       files: [
-        ...artifactPaths.map(filePath => path.relative(process.cwd(), filePath) || filePath),
-        path.relative(process.cwd(), planPath) || planPath,
+        ...artifactPaths.map(filePath => formatCliPath(filePath)),
+        formatCliPath(planPath),
       ],
       next_action: commandNextAction(
         `superplan status --json`,
@@ -514,15 +529,19 @@ async function writeChangeSpec(changeSlug: string, args: string[]): Promise<Chan
   const specPath = path.join(changePaths.changeRoot, 'specs', `${normalizedSpecName}.md`);
   await fs.mkdir(path.dirname(specPath), { recursive: true });
   await fs.writeFile(specPath, `${contentResult.content!.trimEnd()}\n`, 'utf-8');
+  await setSessionFocus({
+    focusedChangeId: changeSlug,
+    focusedTaskRef: null,
+  });
 
   return {
     ok: true,
     data: {
       change_id: changeSlug,
-      root: path.relative(process.cwd(), changePaths.changeRoot) || changePaths.changeRoot,
+      root: formatCliPath(changePaths.changeRoot),
       files: [
-        ...artifactPaths.map(filePath => path.relative(process.cwd(), filePath) || filePath),
-        path.relative(process.cwd(), specPath) || specPath,
+        ...artifactPaths.map(filePath => formatCliPath(filePath)),
+        formatCliPath(specPath),
       ],
       next_action: commandNextAction(
         `superplan status --json`,
@@ -631,7 +650,7 @@ async function addChangeTask(changeSlug: string, args: string[]): Promise<Change
       ok: false,
       error: {
         code: 'TASK_ALREADY_IN_GRAPH',
-        message: `Task ${taskId} is already declared in ${path.relative(process.cwd(), changePaths.tasksIndexPath) || changePaths.tasksIndexPath}.`,
+        message: `Task ${taskId} is already declared in ${formatCliPath(changePaths.tasksIndexPath)}.`,
         retryable: false,
       },
     };
@@ -658,21 +677,108 @@ async function addChangeTask(changeSlug: string, args: string[]): Promise<Change
     acceptanceCriteria: getOptionValues(args, '--acceptance-criterion'),
   }), 'utf-8');
   const metricsPath = await syncChangeMetrics(changeSlug);
+  await setSessionFocus({
+    focusedChangeId: changeSlug,
+    focusedTaskRef: `${changeSlug}/${taskId}`,
+  });
   const overlay = await refreshChangeOverlay();
 
   return {
     ok: true,
     data: {
       change_id: changeSlug,
-      root: path.relative(process.cwd(), changePaths.changeRoot) || changePaths.changeRoot,
+      root: formatCliPath(changePaths.changeRoot),
       files: [
-        path.relative(process.cwd(), changePaths.tasksIndexPath) || changePaths.tasksIndexPath,
-        path.relative(process.cwd(), taskPath) || taskPath,
-        ...(metricsPath ? [path.relative(process.cwd(), metricsPath) || metricsPath] : []),
+        formatCliPath(changePaths.tasksIndexPath),
+        formatCliPath(taskPath),
+        ...(metricsPath ? [formatCliPath(metricsPath)] : []),
+      ],
+      next_action: commandNextAction(
+        'superplan run --json',
+        'The graph task and task contract were both created through the CLI, and session focus now points at this change.',
+      ),
+      ...(overlay ? { overlay } : {}),
+    },
+  };
+}
+
+async function archiveChange(changeSlug: string): Promise<ChangeResult> {
+  if (!isValidChangeSlug(changeSlug)) {
+    return {
+      ok: false,
+      error: {
+        code: 'INVALID_CHANGE_SLUG',
+        message: 'Change slug must use lowercase letters, numbers, and hyphens',
+        retryable: false,
+      },
+    };
+  }
+
+  const changePaths = getChangePaths(changeSlug);
+  if (!await pathExists(changePaths.changeRoot)) {
+    return {
+      ok: false,
+      error: {
+        code: 'CHANGE_NOT_FOUND',
+        message: `Change "${changeSlug}" does not exist`,
+        retryable: false,
+      },
+    };
+  }
+
+  const archiveDir = path.join(changePaths.changesRoot, '.archive');
+  const archiveTarget = path.join(archiveDir, changeSlug);
+  if (await pathExists(archiveTarget)) {
+    return {
+      ok: false,
+      error: {
+        code: 'CHANGE_ARCHIVE_EXISTS',
+        message: `Change "${changeSlug}" is already archived`,
+        retryable: false,
+      },
+    };
+  }
+
+  await fs.mkdir(archiveDir, { recursive: true });
+  await fs.rename(changePaths.changeRoot, archiveTarget);
+
+  // Clean up runtime state for this change
+  const runtimeTasksPath = path.join(changePaths.superplanRoot, 'runtime', 'tasks.json');
+  if (await pathExists(runtimeTasksPath)) {
+    try {
+      const raw = await fs.readFile(runtimeTasksPath, 'utf-8');
+      const runtimeState = JSON.parse(raw) as Record<string, unknown>;
+      const changesObj = runtimeState['changes'];
+      if (changesObj && typeof changesObj === 'object' && !Array.isArray(changesObj)) {
+        const changes = changesObj as Record<string, unknown>;
+        if (changeSlug in changes) {
+          delete changes[changeSlug];
+          runtimeState['changes'] = changes;
+          await writeJsonAtomic(runtimeTasksPath, runtimeState);
+        }
+      }
+    } catch {
+      // runtime state cleanup is best-effort; don't fail the archive
+    }
+  }
+
+  const metricsPath = await syncChangeMetrics(changeSlug).catch(() => null);
+  await detachExecutionRootByChange(changeSlug).catch(() => false);
+  await clearSessionFocusForChange(changeSlug);
+  const overlay = await refreshChangeOverlay();
+
+  return {
+    ok: true,
+    data: {
+      change_id: changeSlug,
+      root: formatCliPath(archiveTarget),
+      files: [
+        formatCliPath(archiveTarget),
+        ...(metricsPath ? [formatCliPath(metricsPath)] : []),
       ],
       next_action: commandNextAction(
         'superplan status --json',
-        'The graph task and task contract were both created through the CLI; check the frontier before execution.',
+        `Change "${changeSlug}" has been archived. Check the frontier for remaining active work.`,
       ),
       ...(overlay ? { overlay } : {}),
     },
@@ -716,6 +822,18 @@ export async function change(args: string[]): Promise<ChangeResult> {
       singleTaskTitle,
       priority,
     });
+  }
+
+  if (namespace === 'archive') {
+    const changeSlug = positionalArgs[1];
+    if (!changeSlug) {
+      return getInvalidChangeCommandError({
+        subcommand: namespace,
+        requiresSlug: true,
+      });
+    }
+
+    return archiveChange(changeSlug);
   }
 
   if (!action || action !== 'set' && !(namespace === 'task' && action === 'add')) {

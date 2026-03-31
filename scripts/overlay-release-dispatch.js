@@ -13,8 +13,8 @@ Usage:
 Options:
   --tag <tag>             GitHub release tag to create or update (required)
   --name <name>           Optional release title override
-  --source-ref <ref>      Git ref or commit to build from (default: HEAD)
-  --workflow-ref <ref>    Git ref that contains the workflow file (default: current branch)
+  --source-ref <ref>      Git ref or commit to build from (default: HEAD, or target repo default branch for cross-repo dispatch)
+  --workflow-ref <ref>    Git ref that contains the workflow file (default: current branch, or target repo default branch for cross-repo dispatch)
   --workflow <file>       Workflow filename to dispatch (default: ${DEFAULT_WORKFLOW})
   --publish               Publish immediately instead of creating a draft release
   --prerelease            Mark the release as a prerelease
@@ -87,6 +87,37 @@ function runGit(args) {
   }).trim();
 }
 
+function runGh(args) {
+  return execFileSync('gh', args, {
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim();
+}
+
+function normalizeRepoSlug(value) {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return '';
+  }
+
+  const directMatch = raw.match(/^([^/\s]+)\/([^/\s]+)$/);
+  if (directMatch) {
+    return `${directMatch[1]}/${directMatch[2].replace(/\.git$/, '')}`;
+  }
+
+  const httpsMatch = raw.match(/^https?:\/\/github\.com\/([^/\s]+)\/([^/\s]+?)(?:\.git)?$/);
+  if (httpsMatch) {
+    return `${httpsMatch[1]}/${httpsMatch[2]}`;
+  }
+
+  const sshMatch = raw.match(/^git@github\.com:([^/\s]+)\/([^/\s]+?)(?:\.git)?$/);
+  if (sshMatch) {
+    return `${sshMatch[1]}/${sshMatch[2]}`;
+  }
+
+  return raw.replace(/\.git$/, '');
+}
+
 function getDefaultSourceRef() {
   return runGit(['rev-parse', 'HEAD']);
 }
@@ -94,6 +125,31 @@ function getDefaultSourceRef() {
 function getDefaultWorkflowRef() {
   const branch = runGit(['branch', '--show-current']);
   return branch || getDefaultSourceRef();
+}
+
+function getCurrentRepoSlug() {
+  try {
+    return normalizeRepoSlug(runGit(['remote', 'get-url', 'origin']));
+  } catch {
+    return '';
+  }
+}
+
+function getRepoDefaultBranch(repo) {
+  const normalizedRepo = normalizeRepoSlug(repo);
+  if (!normalizedRepo) {
+    return '';
+  }
+
+  return runGh([
+    'repo',
+    'view',
+    normalizedRepo,
+    '--json',
+    'defaultBranchRef',
+    '--jq',
+    '.defaultBranchRef.name',
+  ]);
 }
 
 function buildWorkflowRunArgs(options) {
@@ -129,15 +185,31 @@ function ensureRequiredOptions(options) {
   }
 }
 
+function resolveDispatchOptions(options, deps = {}) {
+  const resolved = {
+    ...options,
+    repo: normalizeRepoSlug(options.repo),
+  };
+
+  const getCurrentRepo = deps.getCurrentRepoSlug ?? getCurrentRepoSlug;
+  const getDefaultSource = deps.getDefaultSourceRef ?? getDefaultSourceRef;
+  const getDefaultWorkflow = deps.getDefaultWorkflowRef ?? getDefaultWorkflowRef;
+  const getDefaultBranch = deps.getRepoDefaultBranch ?? getRepoDefaultBranch;
+
+  const currentRepo = getCurrentRepo();
+  const crossRepoDispatch = Boolean(resolved.repo) && (!currentRepo || resolved.repo !== currentRepo);
+  const targetDefaultBranch = crossRepoDispatch ? (getDefaultBranch(resolved.repo) || 'main') : '';
+
+  resolved.workflowRef = resolved.workflowRef || (crossRepoDispatch ? targetDefaultBranch : getDefaultWorkflow());
+  resolved.sourceRef = resolved.sourceRef || (crossRepoDispatch ? resolved.workflowRef : getDefaultSource());
+
+  return resolved;
+}
+
 function dispatchOverlayRelease(options) {
   ensureRequiredOptions(options);
 
-  const resolved = {
-    ...options,
-    sourceRef: options.sourceRef || getDefaultSourceRef(),
-    workflowRef: options.workflowRef || getDefaultWorkflowRef(),
-  };
-
+  const resolved = resolveDispatchOptions(options);
   const args = buildWorkflowRunArgs(resolved);
   execFileSync('gh', args, {
     stdio: 'inherit',
@@ -171,4 +243,6 @@ module.exports = {
   buildWorkflowRunArgs,
   dispatchOverlayRelease,
   parseArgs,
+  resolveDispatchOptions,
+  normalizeRepoSlug,
 };

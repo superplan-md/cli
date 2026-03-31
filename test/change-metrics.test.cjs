@@ -3,11 +3,14 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 
-const { makeSandbox, parseCliJson, readJson, runCli, writeChangeGraph } = require('./helpers.cjs');
+const {
+  makeSandbox, parseCliJson, readJson, runCli, writeChangeGraph,
+  getSuperplanRoot,
+} = require('./helpers.cjs');
 
 test('change metrics are generated automatically after change creation, scaffolding, and activation', async () => {
   const sandbox = await makeSandbox('superplan-change-metrics-');
-  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+  await fs.mkdir(path.join(getSuperplanRoot(sandbox), 'changes'), { recursive: true });
 
   const changePayload = parseCliJson(await runCli([
     'change',
@@ -23,7 +26,7 @@ test('change metrics are generated automatically after change creation, scaffold
 
   assert.equal(changePayload.ok, true);
 
-  const metricsPath = path.join(sandbox.cwd, '.superplan', 'changes', 'auto-metrics', 'metrics.json');
+  const metricsPath = path.join(getSuperplanRoot(sandbox), 'changes', 'auto-metrics', 'metrics.json');
   let metrics = await readJson(metricsPath);
   assert.equal(metrics.change_id, 'auto-metrics');
   assert.equal(metrics.created_task_count, 0);
@@ -50,7 +53,7 @@ test('change metrics are generated automatically after change creation, scaffold
     env: sandbox.env,
   }));
 
-  assert.equal(scaffoldPayload.ok, true);
+  if (!scaffoldPayload.ok) console.log(scaffoldPayload); assert.equal(scaffoldPayload.ok, true);
 
   metrics = await readJson(metricsPath);
   assert.equal(metrics.created_task_count, 1);

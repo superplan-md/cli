@@ -1,5 +1,7 @@
+import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { createHash } from 'node:crypto';
 
 export type OverlayTaskStatus =
   | 'in_progress'
@@ -110,9 +112,21 @@ export interface CreateOverlayControlStateInput {
 const OVERLAY_EVENT_KINDS: OverlayEventKind[] = ['needs_feedback', 'all_tasks_done'];
 const GLOBAL_SUPERPLAN_DIR = path.join(os.homedir(), '.config', 'superplan');
 
+function sanitizeSegment(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+}
+
 export function getWorkspaceOverlayKey(workspacePath: string): string {
-  const workspaceName = path.basename(workspacePath).toLowerCase().replace(/[^a-z0-9]/g, '-');
-  return `workspace-${workspaceName || 'root'}`;
+  const normalizedWorkspacePath = (() => {
+    try {
+      return fs.realpathSync(workspacePath);
+    } catch {
+      return path.resolve(workspacePath);
+    }
+  })();
+  const workspaceName = sanitizeSegment(path.basename(normalizedWorkspacePath)) || 'root';
+  const workspaceHash = createHash('sha1').update(normalizedWorkspacePath).digest('hex').slice(0, 10);
+  return `workspace-${workspaceName}-${workspaceHash}`;
 }
 
 export function createEmptyOverlayBoard(): OverlayBoard {
@@ -166,8 +180,8 @@ export function createOverlaySnapshot(input: CreateOverlaySnapshotInput): Overla
 export function getOverlayRuntimePaths(workspacePath: string): OverlayRuntimePaths {
   const runtimeDir = path.join(
     GLOBAL_SUPERPLAN_DIR,
-    'runtime',
     getWorkspaceOverlayKey(workspacePath),
+    'runtime',
   );
 
   return {

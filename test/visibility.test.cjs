@@ -10,6 +10,7 @@ const {
   runCli,
   writeChangeGraph,
   writeFile,
+  getSuperplanRoot,
 } = require('./helpers.cjs');
 
 function parseEvents(content) {
@@ -30,7 +31,7 @@ test('visibility report summarizes an active run, enriches events, and writes re
     ],
   });
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-400.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-400.md'), `---
 task_id: T-400
 status: pending
 priority: high
@@ -69,7 +70,7 @@ Track an active visibility run
   assert.equal(reportPayload.data.report.layers.interruption_recovery.status, 'attention');
   assert.equal(reportPayload.data.report.layers.overlay.status, 'disabled');
 
-  const events = parseEvents(await fs.readFile(path.join(sandbox.cwd, '.superplan', 'runtime', 'events.ndjson'), 'utf-8'));
+  const events = parseEvents(await fs.readFile(path.join(getSuperplanRoot(sandbox), 'runtime', 'events.ndjson'), 'utf-8'));
   assert.equal(events.length, 4);
   assert.equal(events[0].run_id, reportPayload.data.report.run_id);
   assert.equal(events[0].command, 'run');
@@ -88,10 +89,10 @@ Track an active visibility run
   assert.equal(events[3].type, 'overlay.ensure');
   assert.equal(events[3].workflow_phase, 'overlay');
 
-  const latestReport = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'reports', 'latest.json'));
+  const latestReport = await readJson(path.join(getSuperplanRoot(sandbox), 'runtime', 'reports', 'latest.json'));
   assert.equal(latestReport.run_id, reportPayload.data.report.run_id);
 
-  const persistedRunReport = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'reports', `${reportPayload.data.report.run_id}.json`));
+  const persistedRunReport = await readJson(path.join(getSuperplanRoot(sandbox), 'runtime', 'reports', `${reportPayload.data.report.run_id}.json`));
   assert.equal(persistedRunReport.run_id, reportPayload.data.report.run_id);
 });
 
@@ -110,7 +111,7 @@ enabled = true
       { task_id: 'T-401', title: 'Finish a complete visibility run' },
     ],
   });
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-401.md'), `---
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-401.md'), `---
 task_id: T-401
 status: pending
 priority: high
@@ -122,7 +123,7 @@ Finish a complete visibility run
 ## Acceptance Criteria
 - [x] A
 `);
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'), JSON.stringify({
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'runtime', 'tasks.json'), JSON.stringify({
     tasks: {
       'demo/T-401': {
         status: 'in_progress',
@@ -155,7 +156,7 @@ Finish a complete visibility run
     true,
   );
 
-  const sessionState = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'session.json'));
+  const sessionState = await readJson(path.join(getSuperplanRoot(sandbox), 'runtime', 'session.json'));
   assert.equal(sessionState.status, 'closed');
   assert.equal(sessionState.run_id, reportPayload.data.report.run_id);
 });
@@ -163,7 +164,7 @@ Finish a complete visibility run
 test('visibility report stays backward-compatible with legacy event lines that lack run metadata', async () => {
   const sandbox = await makeSandbox('superplan-visibility-legacy-events-');
 
-  await writeFile(path.join(sandbox.cwd, '.superplan', 'runtime', 'events.ndjson'), [
+  await writeFile(path.join(getSuperplanRoot(sandbox), 'runtime', 'events.ndjson'), [
     JSON.stringify({ ts: 1774017763869, type: 'task.started', task_id: 'T-003' }),
     JSON.stringify({ ts: 1774039545073, type: 'task.review_requested', task_id: 'T-003' }),
   ].join('\n'));

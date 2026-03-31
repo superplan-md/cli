@@ -6,6 +6,60 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 LOCAL_SKILLS_DIR="${SCRIPT_DIR}/skills"
 GLOBAL_SKILLS_DIR="${HOME}/.claude/skills"
+HOOK_INPUT=""
+SESSION_TOKEN=""
+SESSION_TOKEN_SOURCE=""
+
+if [ ! -t 0 ]; then
+    HOOK_INPUT="$(cat || true)"
+fi
+
+if [ -n "${HOOK_INPUT}" ]; then
+    SESSION_TOKEN="$(printf '%s' "${HOOK_INPUT}" | node -e '
+let input = "";
+process.stdin.on("data", chunk => { input += String(chunk); });
+process.stdin.on("end", () => {
+  try {
+    const parsed = JSON.parse(input || "{}");
+    const readString = (value) => typeof value === "string" && value.trim() !== ""
+      ? value.trim()
+      : "";
+    const firstString = (...values) => values.map(readString).find(Boolean) || "";
+    const sessionId = firstString(
+      parsed.session_id,
+      parsed.sessionId,
+      parsed.thread_id,
+      parsed.threadId,
+      parsed.conversation_id,
+      parsed.conversationId,
+      parsed.chat_id,
+      parsed.chatId,
+    );
+    const transcriptPath = firstString(
+      parsed.transcript_path,
+      parsed.transcriptPath,
+      parsed.thread_path,
+      parsed.threadPath,
+      parsed.chat_path,
+      parsed.chatPath,
+    );
+    const fallbackSessionId = transcriptPath
+      ? require("node:path").basename(transcriptPath).replace(/\.(jsonl|json|md)$/i, "")
+      : "";
+    process.stdout.write(sessionId || fallbackSessionId);
+  } catch {
+    process.stdout.write("");
+  }
+});
+')" || true
+fi
+
+if [ -n "${SESSION_TOKEN}" ] && [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+    printf 'export SUPERPLAN_SESSION_ID=%q\n' "${SESSION_TOKEN}" >> "${CLAUDE_ENV_FILE}"
+    SESSION_TOKEN_SOURCE="host-env"
+elif [ -n "${SESSION_TOKEN}" ]; then
+    SESSION_TOKEN_SOURCE="context-fallback"
+fi
 
 if [ -f "${LOCAL_SKILLS_DIR}/superplan-entry/SKILL.md" ]; then
     entry_content=$(cat "${LOCAL_SKILLS_DIR}/superplan-entry/SKILL.md")
@@ -28,7 +82,11 @@ escape_for_json() {
 }
 
 entry_escaped=$(escape_for_json "$entry_content")
-session_context="<EXTREMELY_IMPORTANT>\nSuperplan is available in this repository.\n\n**Below is the full content of your \`superplan-entry\` skill. It is ALREADY LOADED. Follow it before implementation, broad repo exploration, or clarifying questions for repo work. Use the skill loader only for later Superplan skills.**\n\n${entry_escaped}\n</EXTREMELY_IMPORTANT>"
+session_token_note=""
+if [ -n "${SESSION_TOKEN}" ] && [ "${SESSION_TOKEN_SOURCE}" = "context-fallback" ]; then
+    session_token_note="\n\nInternal Superplan session token for this chat: \`${SESSION_TOKEN}\`. The host did not expose a known env-file injection path, so prefix every Superplan CLI command in this chat with \`SUPERPLAN_SESSION_ID=${SESSION_TOKEN}\`."
+fi
+session_context="<EXTREMELY_IMPORTANT>\nSuperplan is available in this repository.\n\n**Below is the full content of your \`superplan-entry\` skill. It is ALREADY LOADED. Follow it before implementation, broad repo exploration, or clarifying questions for repo work. Use the skill loader only for later Superplan skills.**${session_token_note}\n\n${entry_escaped}\n</EXTREMELY_IMPORTANT>"
 
 if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
   printf '{\n  "additional_context": "%s"\n}\n' "$session_context"

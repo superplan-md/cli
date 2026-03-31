@@ -1,12 +1,10 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { execFile as execFileCallback } from 'node:child_process';
-import { promisify } from 'node:util';
 import { parse, type ParseDiagnostic, type ParsedTask } from './commands/parse';
 import { getTaskRef } from './task-identity';
 import { getGlobalSuperplanPaths } from './global-superplan';
-
-const execFile = promisify(execFileCallback);
+import { getSuperplanSessionId, readSessionFocus, type SessionFocusEntry } from './session-focus';
+import { collectWorktreeSnapshot } from './worktree-snapshot';
 
 export interface WorkspaceHealthIssue {
   code: string;
@@ -32,6 +30,7 @@ interface RuntimeState {
 interface NormalizedRuntimeState {
   tasksByRef: Map<string, RuntimeTaskState>;
   activeTaskRef: string | null;
+  activeTaskRefs: string[];
 }
 
 async function pathExists(targetPath: string): Promise<boolean> {
@@ -76,19 +75,23 @@ function normalizeRuntimeState(rawState: RuntimeState, tasks: ParsedTask[]): Nor
   }
 
   let activeTaskRef: string | null = null;
+  const activeTaskRefs: string[] = [];
 
   if (rawState.changes) {
     for (const [changeId, changeState] of Object.entries(rawState.changes)) {
       for (const [taskId, runtimeTask] of Object.entries(changeState.tasks ?? {})) {
         const taskRef = `${changeId}/${taskId}`;
         tasksByRef.set(taskRef, runtimeTask);
-        if (runtimeTask.status === 'in_progress' && !activeTaskRef) {
-          activeTaskRef = changeState.active_task_ref === taskRef ? taskRef : taskRef;
+        if (runtimeTask.status === 'in_progress') {
+          activeTaskRefs.push(taskRef);
+          if (!activeTaskRef) {
+            activeTaskRef = changeState.active_task_ref === taskRef ? taskRef : taskRef;
+          }
         }
       }
     }
 
-    return { tasksByRef, activeTaskRef };
+    return { tasksByRef, activeTaskRef, activeTaskRefs: activeTaskRefs.sort((left, right) => left.localeCompare(right)) };
   }
 
   for (const [rawTaskId, runtimeTask] of Object.entries(rawState.tasks ?? {})) {
@@ -103,12 +106,15 @@ function normalizeRuntimeState(rawState: RuntimeState, tasks: ParsedTask[]): Nor
     }
 
     tasksByRef.set(taskRef, runtimeTask);
-    if (runtimeTask.status === 'in_progress' && !activeTaskRef) {
-      activeTaskRef = taskRef;
+    if (runtimeTask.status === 'in_progress') {
+      activeTaskRefs.push(taskRef);
+      if (!activeTaskRef) {
+        activeTaskRef = taskRef;
+      }
     }
   }
 
-  return { tasksByRef, activeTaskRef };
+  return { tasksByRef, activeTaskRef, activeTaskRefs: activeTaskRefs.sort((left, right) => left.localeCompare(right)) };
 }
 
 function taskStateIssues(task: ParsedTask, runtimeTask: RuntimeTaskState | undefined): WorkspaceHealthIssue[] {
@@ -150,28 +156,6 @@ function taskStateIssues(task: ParsedTask, runtimeTask: RuntimeTaskState | undef
   return issues;
 }
 
-async function getGitChangedFiles(workspaceRoot: string): Promise<string[]> {
-  try {
-    const { stdout } = await execFile('git', ['-C', workspaceRoot, 'status', '--porcelain=v1', '--untracked-files=all'], {
-      cwd: workspaceRoot,
-    });
-
-    return stdout
-      .split('\n')
-      .map(line => line.trimEnd())
-      .filter(Boolean)
-      .map(line => {
-        const rawPath = line.slice(3);
-        const renameSeparator = rawPath.indexOf(' -> ');
-        return renameSeparator === -1 ? rawPath : rawPath.slice(renameSeparator + 4);
-      })
-      .map(filePath => filePath.replace(/\\/g, '/'))
-      .filter(filePath => filePath && !filePath.startsWith('.superplan/runtime/'));
-  } catch {
-    return [];
-  }
-}
-
 function normalizeScopePath(workspaceRoot: string, scopePath: string): string {
   const absolutePath = path.isAbsolute(scopePath)
     ? scopePath
@@ -183,21 +167,70 @@ function fileMatchesScope(filePath: string, scopePath: string): boolean {
   return filePath === scopePath || filePath.startsWith(`${scopePath}/`);
 }
 
+function getEffectiveWorktreeChanges(
+  currentFiles: Record<string, string>,
+  sessionFocus: SessionFocusEntry | null,
+  workspaceRoot: string,
+): string[] {
+  const baseline = sessionFocus?.worktree_baseline;
+  if (!baseline || !sessionFocus?.focused_task_ref || baseline.task_ref !== sessionFocus.focused_task_ref) {
+    return Object.keys(currentFiles).sort((left, right) => left.localeCompare(right));
+  }
+
+  const normalizedWorkspaceRoot = workspaceRoot.replace(/\\/g, '/');
+  if (baseline.snapshot.workspace_root.replace(/\\/g, '/') !== normalizedWorkspaceRoot) {
+    return Object.keys(currentFiles).sort((left, right) => left.localeCompare(right));
+  }
+
+  return Object.entries(currentFiles)
+    .filter(([filePath, fingerprint]) => baseline.snapshot.files[filePath] !== fingerprint)
+    .map(([filePath]) => filePath)
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function getSessionActiveTask(
+  tasks: ParsedTask[],
+  runtimeState: NormalizedRuntimeState,
+  sessionFocus: SessionFocusEntry | null,
+): ParsedTask | undefined {
+  if (!sessionFocus?.focused_task_ref) {
+    return undefined;
+  }
+
+  const focusedTaskRuntime = runtimeState.tasksByRef.get(sessionFocus.focused_task_ref);
+  if (focusedTaskRuntime?.status !== 'in_progress') {
+    return undefined;
+  }
+
+  return tasks.find(task => getTaskRef(task) === sessionFocus.focused_task_ref);
+}
+
 function buildEditDriftIssues(
   workspaceRoot: string,
   tasks: ParsedTask[],
   runtimeState: NormalizedRuntimeState,
-  changedFiles: string[],
+  currentFiles: Record<string, string>,
+  sessionFocus: SessionFocusEntry | null,
 ): WorkspaceHealthIssue[] {
+  const changedFiles = getEffectiveWorktreeChanges(currentFiles, sessionFocus, workspaceRoot);
   if (changedFiles.length === 0) {
     return [];
   }
 
-  const activeTask = runtimeState.activeTaskRef
-    ? tasks.find(task => getTaskRef(task) === runtimeState.activeTaskRef)
-    : undefined;
+  const sessionId = getSuperplanSessionId();
+  const activeTask = sessionId
+    ? getSessionActiveTask(tasks, runtimeState, sessionFocus)
+    : (
+      runtimeState.activeTaskRef
+        ? tasks.find(task => getTaskRef(task) === runtimeState.activeTaskRef)
+        : undefined
+    );
 
   if (!activeTask) {
+    if (sessionId && runtimeState.activeTaskRefs.length > 0) {
+      return [];
+    }
+
     return [{
       code: 'WORKSPACE_EDITS_WITHOUT_ACTIVE_TASK',
       message: `Workspace has ${changedFiles.length} changed file${changedFiles.length === 1 ? '' : 's'} but no active claimed task.`,
@@ -308,7 +341,8 @@ export async function collectWorkspaceHealthIssues(workspaceRoot: string): Promi
     workspaceRoot,
     parsedTasks,
     runtimeState,
-    await getGitChangedFiles(workspaceRoot),
+    (await collectWorktreeSnapshot(workspaceRoot)).files,
+    await readSessionFocus(),
   ));
 
   return issues;

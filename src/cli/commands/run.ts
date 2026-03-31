@@ -1,4 +1,5 @@
 import { activateTask, selectNextTask, type ParsedTask, loadTasks } from './task';
+import { findExecutionRootForChange, getCurrentExecutionRootRecord } from '../execution-roots';
 import type { OverlayRuntimeNotice } from '../overlay-visibility';
 import { getQueueNextAction, stopNextAction, type NextAction } from '../next-action';
 import { getTaskRef } from '../task-identity';
@@ -15,6 +16,12 @@ interface ActiveTaskContext {
   change_id: string | null;
   task_file_path: string | null;
   task_contract_present: boolean;
+  execution_root: {
+    path: string | null;
+    kind: 'primary' | 'worktree' | null;
+    attached_change_id: string | null;
+    current: boolean;
+  };
   environment: Record<string, string>;
   edit_gate: {
     claimed: true;
@@ -55,11 +62,15 @@ export type RunResult =
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
 
 function getPositionalArgs(args: string[]): string[] {
-  return args.filter(arg => arg !== '--json' && arg !== '--quiet' && arg !== '--all-ready');
+  return args.filter(arg => arg !== '--json' && arg !== '--quiet' && arg !== '--all-ready' && arg !== '--fresh');
 }
 
 function hasAllReadyFlag(args: string[]): boolean {
   return args.includes('--all-ready');
+}
+
+function hasFreshFlag(args: string[]): boolean {
+  return args.includes('--fresh');
 }
 
 function getInvalidRunCommandError(): RunResult {
@@ -68,10 +79,11 @@ function getInvalidRunCommandError(): RunResult {
     error: {
       code: 'INVALID_RUN_COMMAND',
       message: [
-        'Run accepts at most one optional <task_ref>, or --all-ready flag.',
+        'Run accepts at most one optional <task_ref>, or one selector flag: --fresh or --all-ready.',
         '',
         'Usage:',
         '  superplan run',
+        '  superplan run --fresh',
         '  superplan run <task_ref>',
         '  superplan run --all-ready',
       ].join('\n'),
@@ -80,8 +92,13 @@ function getInvalidRunCommandError(): RunResult {
   };
 }
 
-function buildActiveTaskContext(task: ParsedTask, workflowSurfaces: WorkflowSurfaceSummary): ActiveTaskContext {
+async function buildActiveTaskContext(task: ParsedTask, workflowSurfaces: WorkflowSurfaceSummary): Promise<ActiveTaskContext> {
   const taskRef = getTaskRef(task);
+  const currentExecutionRoot = await getCurrentExecutionRootRecord();
+  const attachedExecutionRoot = task.change_id
+    ? await findExecutionRootForChange(task.change_id)
+    : null;
+  const effectiveExecutionRoot = attachedExecutionRoot ?? currentExecutionRoot;
   const environment: Record<string, string> = {
     SUPERPLAN_ACTIVE_TASK: taskRef,
     SUPERPLAN_ACTIVE_TASK_ID: task.task_id,
@@ -95,12 +112,26 @@ function buildActiveTaskContext(task: ParsedTask, workflowSurfaces: WorkflowSurf
     environment.SUPERPLAN_ACTIVE_TASK_FILE = task.task_file_path;
   }
 
+  if (effectiveExecutionRoot?.path) {
+    environment.SUPERPLAN_EXECUTION_ROOT = effectiveExecutionRoot.path;
+  }
+
+  if (effectiveExecutionRoot?.kind) {
+    environment.SUPERPLAN_EXECUTION_ROOT_KIND = effectiveExecutionRoot.kind;
+  }
+
   return {
     task_ref: taskRef,
     task_id: task.task_id,
     change_id: task.change_id ?? null,
     task_file_path: task.task_file_path ?? null,
     task_contract_present: Boolean(task.task_file_path),
+    execution_root: {
+      path: effectiveExecutionRoot?.path ?? null,
+      kind: effectiveExecutionRoot?.kind ?? null,
+      attached_change_id: effectiveExecutionRoot?.attached_change_id ?? null,
+      current: Boolean(effectiveExecutionRoot?.path && currentExecutionRoot?.path === effectiveExecutionRoot.path),
+    },
     environment,
     edit_gate: {
       claimed: true,
@@ -121,10 +152,10 @@ function buildActiveTaskContext(task: ParsedTask, workflowSurfaces: WorkflowSurf
   };
 }
 
-function buildRunResultFromActivation(
+async function buildRunResultFromActivation(
   activationResult: Awaited<ReturnType<typeof activateTask>>,
   workflowSurfaces: WorkflowSurfaceSummary,
-): RunResult {
+): Promise<RunResult> {
   if (!activationResult.ok) {
     return activationResult;
   }
@@ -132,11 +163,11 @@ function buildRunResultFromActivation(
   return {
     ok: true,
     data: {
-      task_id: activationResult.data.task_id,
+        task_id: activationResult.data.task_id,
         action: activationResult.data.action,
         status: activationResult.data.status,
         task: activationResult.data.task,
-        active_task_context: buildActiveTaskContext(activationResult.data.task, workflowSurfaces),
+        active_task_context: await buildActiveTaskContext(activationResult.data.task, workflowSurfaces),
         reason: activationResult.data.reason,
         next_action: stopNextAction(
           `Task ${activationResult.data.task_id} is active. Continue implementation until it is completed, blocked, or waiting for feedback.`,
@@ -193,7 +224,7 @@ async function runAllReady(runtimeDeps: RunDeps, workflowSurfaces: WorkflowSurfa
         task_id: activationResult.data.task_id,
         status: activationResult.data.status,
         task: activationResult.data.task,
-        active_task_context: buildActiveTaskContext(activationResult.data.task, workflowSurfaces),
+        active_task_context: await buildActiveTaskContext(activationResult.data.task, workflowSurfaces),
       });
     }
   }
@@ -238,8 +269,9 @@ export async function run(args: string[] = [], deps: Partial<RunDeps> = {}): Pro
   };
   const positionalArgs = getPositionalArgs(args);
   const allReadyFlag = hasAllReadyFlag(args);
+  const freshFlag = hasFreshFlag(args);
 
-  if (positionalArgs.length > 1) {
+  if (positionalArgs.length > 1 || (freshFlag && allReadyFlag)) {
     return getInvalidRunCommandError();
   }
 
@@ -247,7 +279,11 @@ export async function run(args: string[] = [], deps: Partial<RunDeps> = {}): Pro
 
   const explicitTaskId = positionalArgs[0];
   if (explicitTaskId) {
-    return buildRunResultFromActivation(await runtimeDeps.activateTaskFn(explicitTaskId, 'run'), workflowSurfaces);
+    if (freshFlag || allReadyFlag) {
+      return getInvalidRunCommandError();
+    }
+
+    return await buildRunResultFromActivation(await runtimeDeps.activateTaskFn(explicitTaskId, 'run'), workflowSurfaces);
   }
 
   // Handle --all-ready batch activation
@@ -255,7 +291,7 @@ export async function run(args: string[] = [], deps: Partial<RunDeps> = {}): Pro
     return runAllReady(runtimeDeps, workflowSurfaces);
   }
 
-  const nextTaskResult = await runtimeDeps.selectNextTaskFn();
+  const nextTaskResult = await runtimeDeps.selectNextTaskFn({ fresh: freshFlag });
   if (!nextTaskResult.ok) {
     return nextTaskResult;
   }
@@ -277,6 +313,32 @@ export async function run(args: string[] = [], deps: Partial<RunDeps> = {}): Pro
   }
 
   if (nextTaskResult.data.task_id === null) {
+    const activeTaskIds = Array.isArray(nextTaskResult.data.active_task_ids)
+      ? nextTaskResult.data.active_task_ids.filter((taskId): taskId is string => typeof taskId === 'string' && taskId.trim() !== '')
+      : [];
+
+    if (activeTaskIds.length > 0) {
+      const outcome = activeTaskIds.length === 1
+        ? `Task ${activeTaskIds[0]} is already in progress. Resume it explicitly with "superplan run ${activeTaskIds[0]} --json" if that is the intended work, or block/complete it before starting different work.`
+        : `Tasks ${activeTaskIds.join(', ')} are already in progress. Resume the intended one explicitly with "superplan run <task_ref> --json" or resolve them before starting different work.`;
+
+      return {
+        ok: true,
+        data: {
+          task_id: null,
+          action: 'idle',
+          status: null,
+          task: null,
+          active_task_context: null,
+          reason: nextTaskResult.data.reason,
+          next_action: stopNextAction(
+            outcome,
+            'Bare run now only picks up new ready work. It does not auto-resume existing in-progress tasks because that can hijack a fresh request.',
+          ),
+        },
+      };
+    }
+
     return {
       ok: true,
       data: {
@@ -310,7 +372,7 @@ export async function run(args: string[] = [], deps: Partial<RunDeps> = {}): Pro
         action: activationResult.data.action,
         status: activationResult.data.status,
         task: activationResult.data.task,
-        active_task_context: buildActiveTaskContext(activationResult.data.task, workflowSurfaces),
+        active_task_context: await buildActiveTaskContext(activationResult.data.task, workflowSurfaces),
         reason: nextTaskResult.data.reason,
         next_action: stopNextAction(
           `Task ${activationResult.data.task_id} is active. Continue implementation until it is completed, blocked, or waiting for feedback.`,

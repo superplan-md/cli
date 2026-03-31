@@ -27,8 +27,20 @@ import {
   waitForUserNextAction,
   type NextAction,
 } from '../next-action';
-import { resolveSuperplanRoot } from '../workspace-root';
+import { formatCliPath, resolveSuperplanRoot } from '../workspace-root';
 import type { OverlayEventKind, OverlayRequestedAction } from '../../shared/overlay';
+import { readSessionFocus, setSessionFocus, setSessionFocusUnlocked } from '../session-focus';
+import {
+  applyExecutionRootAttachment,
+  findExecutionRootForChange,
+  findStaleExecutionRootForChange,
+  getCurrentExecutionRootRecord,
+  readExecutionRootsState,
+  writeExecutionRootsState,
+} from '../execution-roots';
+import { resolveWorkspaceRoot } from '../project-identity';
+import { withProjectStateLock } from '../state-lock';
+import { writeJsonAtomic } from '../state-store';
 import {
   buildTaskContract,
   getChangePaths,
@@ -130,11 +142,14 @@ interface TaskBatchItem {
 type TaskLifecycleStatus = 'in_progress' | 'in_review' | 'done' | 'blocked' | 'needs_feedback';
 type TaskSelectionStatus = 'in_progress' | 'ready' | null;
 type TaskActivationAction = 'start' | 'resume' | 'continue';
+interface SelectNextTaskOptions {
+  fresh?: boolean;
+}
 
 export type TaskErrorResult = { ok: false; error: { code: string; message: string; retryable: boolean } };
 export type TaskListResult = { ok: true; data: { tasks: ParsedTask[] } } | TaskErrorResult;
 export type TaskSelectionResult =
-  | { ok: true; data: { task_id: string | null; status: TaskSelectionStatus; task: ParsedTask | null; reason: string } }
+  | { ok: true; data: { task_id: string | null; status: TaskSelectionStatus; task: ParsedTask | null; reason: string; active_task_ids?: string[] } }
   | TaskErrorResult;
 export type TaskActivationResult =
   | {
@@ -290,7 +305,7 @@ async function readRuntimeState(runtimeFilePath: string): Promise<RuntimeState> 
 
 async function writeRuntimeState(runtimeFilePath: string, runtimeState: RuntimeState): Promise<void> {
   await fs.mkdir(path.dirname(runtimeFilePath), { recursive: true });
-  await fs.writeFile(runtimeFilePath, JSON.stringify(runtimeState, null, 2), 'utf-8');
+  await writeJsonAtomic(runtimeFilePath, runtimeState);
 }
 
 function createEmptyRuntimeState(): RuntimeState {
@@ -1193,10 +1208,169 @@ function getOtherActiveTaskEntry(runtimeState: RuntimeState, taskRef: string): [
     return undefined;
   }
 
-  return Object.entries(changeState.tasks)
-    .filter(([, taskState]) => taskState.status === 'in_progress')
-    .map(([taskId, taskState]) => [toQualifiedTaskId(address.changeId, taskId), taskState] as [string, RuntimeTaskState])
-    .find(([activeTaskRef]) => activeTaskRef !== taskRef);
+  for (const [taskId, taskState] of Object.entries(changeState.tasks)) {
+    if (taskState.status !== 'in_progress') {
+      continue;
+    }
+
+    const activeTaskRef = toQualifiedTaskId(address.changeId, taskId);
+    if (activeTaskRef !== taskRef) {
+      return [activeTaskRef, taskState];
+    }
+  }
+
+  return undefined;
+}
+
+function changeHasInProgressTask(runtimeState: RuntimeState, changeId: string): boolean {
+  const changeState = runtimeState.changes[changeId];
+  if (!changeState) {
+    return false;
+  }
+
+  return Object.values(changeState.tasks).some(taskState => taskState.status === 'in_progress');
+}
+
+async function getExecutionRootOccupancyConflict(
+  runtimeState: RuntimeState,
+  targetChangeId: string | null | undefined,
+): Promise<{ attachedChangeId: string; path: string } | null> {
+  if (!targetChangeId) {
+    return null;
+  }
+
+  const currentExecutionRoot = await getCurrentExecutionRootRecord();
+  if (!currentExecutionRoot?.attached_change_id || currentExecutionRoot.attached_change_id === targetChangeId) {
+    return null;
+  }
+
+  if (!changeHasInProgressTask(runtimeState, currentExecutionRoot.attached_change_id)) {
+    return null;
+  }
+
+  return {
+    attachedChangeId: currentExecutionRoot.attached_change_id,
+    path: currentExecutionRoot.path,
+  };
+}
+
+async function persistTaskActivationState(task: ParsedTask, runtimePaths: RuntimePaths, runtimeState: RuntimeState, options: {
+  captureWorktreeBaseline?: boolean;
+} = {}): Promise<TaskErrorResult | null> {
+  const startDir = process.cwd();
+  const workspaceRoot = resolveWorkspaceRoot(startDir);
+  const taskRef = getTaskRef(task);
+  const desiredTaskState = getRuntimeTaskState(runtimeState, taskRef);
+
+  if (!desiredTaskState) {
+    return {
+      ok: false,
+      error: {
+        code: 'TASK_STATE_MISSING',
+        message: `Task ${taskRef} does not have runtime state to persist.`,
+        retryable: false,
+      },
+    };
+  }
+
+  return await withProjectStateLock(async () => {
+    const latestRuntimeState = await readRuntimeState(runtimePaths.tasksPath);
+    const latestTaskState = getRuntimeTaskState(latestRuntimeState, taskRef);
+    const activeTaskEntry = getOtherActiveTaskEntry(latestRuntimeState, taskRef);
+    if (activeTaskEntry) {
+      return {
+        ok: false,
+        error: {
+          code: 'ANOTHER_TASK_IN_PROGRESS',
+          message: 'Another task is already in progress',
+          retryable: true,
+        },
+      };
+    }
+
+    const executionRootsState = await readExecutionRootsState(startDir);
+    let attachedExecutionRoot = Object.values(executionRootsState.roots).find(record => record.path === workspaceRoot) ?? null;
+    if (task.change_id && attachedExecutionRoot?.attached_change_id && attachedExecutionRoot.attached_change_id !== task.change_id) {
+      if (changeHasInProgressTask(latestRuntimeState, attachedExecutionRoot.attached_change_id)) {
+        return getExecutionRootOccupiedError({
+          attachedChangeId: attachedExecutionRoot.attached_change_id,
+          path: attachedExecutionRoot.path,
+        });
+      }
+    }
+
+    if (task.change_id) {
+      attachedExecutionRoot = applyExecutionRootAttachment({
+        state: executionRootsState,
+        rootPath: workspaceRoot,
+        startDir,
+        changeId: task.change_id,
+      });
+    }
+    await writeExecutionRootsState(executionRootsState, startDir);
+
+    setRuntimeTaskState(latestRuntimeState, taskRef, {
+      ...latestTaskState,
+      ...desiredTaskState,
+    });
+    await setSessionFocusUnlocked({
+      startDir,
+      focusedChangeId: task.change_id ?? null,
+      focusedTaskRef: getTaskRef(task),
+      attachedChangeId: task.change_id ?? null,
+      executionRootPath: attachedExecutionRoot?.path ?? workspaceRoot,
+      executionRootKind: attachedExecutionRoot?.kind ?? null,
+      captureWorktreeBaseline: options.captureWorktreeBaseline === true,
+    });
+    await writeRuntimeState(runtimePaths.tasksPath, latestRuntimeState);
+    return null;
+  }, startDir);
+}
+
+async function syncSessionFocusToTaskExecutionRoot(task: ParsedTask, options: {
+  captureWorktreeBaseline?: boolean;
+} = {}): Promise<void> {
+  const attachedExecutionRoot = task.change_id
+    ? await findExecutionRootForChange(task.change_id)
+    : await getCurrentExecutionRootRecord();
+
+  await setSessionFocus({
+    focusedChangeId: task.change_id ?? null,
+    focusedTaskRef: getTaskRef(task),
+    attachedChangeId: task.change_id ?? null,
+    executionRootPath: attachedExecutionRoot?.path,
+    executionRootKind: attachedExecutionRoot?.kind ?? null,
+    captureWorktreeBaseline: options.captureWorktreeBaseline === true,
+  });
+}
+
+function getActiveTasksForCurrentExecutionRoot(tasks: ParsedTask[], attachedChangeId: string | null | undefined): ParsedTask[] {
+  if (!attachedChangeId) {
+    return [];
+  }
+
+  return tasks
+    .filter(taskItem => taskItem.status === 'in_progress' && taskItem.change_id === attachedChangeId)
+    .sort((left, right) => getTaskRef(left).localeCompare(getTaskRef(right)));
+}
+
+function getNextReadyTaskForExecutionRoot(tasks: ParsedTask[], attachedChangeId: string | null | undefined): ParsedTask | undefined {
+  if (!attachedChangeId) {
+    return undefined;
+  }
+
+  return getNextReadyTaskForChange(tasks, attachedChangeId);
+}
+
+function getExecutionRootOccupiedError(conflict: { attachedChangeId: string; path: string }): TaskErrorResult {
+  return {
+    ok: false,
+    error: {
+      code: 'EXECUTION_ROOT_OCCUPIED',
+      message: `Current execution root ${formatCliPath(conflict.path)} is attached to active change ${conflict.attachedChangeId}. Use "superplan worktree ensure" or switch execution roots before starting another active change here.`,
+      retryable: true,
+    },
+  };
 }
 
 function getDependencyState(tasks: ParsedTask[], task: ParsedTask): {
@@ -1380,10 +1554,10 @@ async function getMergedTasks(options?: { skipInvariant?: boolean }): Promise<{
   };
 }
 
-function getActiveTask(tasks: ParsedTask[]): { task?: ParsedTask } {
-  const activeTasks = tasks.filter(taskItem => taskItem.status === 'in_progress');
-
-  return { task: activeTasks[0] };
+function getActiveTasks(tasks: ParsedTask[]): ParsedTask[] {
+  return tasks
+    .filter(taskItem => taskItem.status === 'in_progress')
+    .sort((left, right) => getTaskRef(left).localeCompare(getTaskRef(right)));
 }
 
 function getNextReadyTask(tasks: ParsedTask[]): ParsedTask | undefined {
@@ -1392,7 +1566,22 @@ function getNextReadyTask(tasks: ParsedTask[]): ParsedTask | undefined {
     .sort(sortTasksByPriorityAndId)[0];
 }
 
-function buildTaskSelectionResult(task: ParsedTask | undefined, status: TaskSelectionStatus, reason: string): TaskSelectionResult {
+function getTaskByRef(tasks: ParsedTask[], taskRef: string): ParsedTask | undefined {
+  return tasks.find(taskItem => getTaskRef(taskItem) === taskRef);
+}
+
+function getNextReadyTaskForChange(tasks: ParsedTask[], changeId: string): ParsedTask | undefined {
+  return tasks
+    .filter(taskItem => taskItem.change_id === changeId && taskItem.is_ready)
+    .sort(sortTasksByPriorityAndId)[0];
+}
+
+function buildTaskSelectionResult(
+  task: ParsedTask | undefined,
+  status: TaskSelectionStatus,
+  reason: string,
+  options: { activeTaskIds?: string[] } = {},
+): TaskSelectionResult {
   return {
     ok: true,
     data: {
@@ -1400,6 +1589,9 @@ function buildTaskSelectionResult(task: ParsedTask | undefined, status: TaskSele
       status,
       task: task ?? null,
       reason,
+      ...(options.activeTaskIds && options.activeTaskIds.length > 0
+        ? { active_task_ids: options.activeTaskIds }
+        : {}),
     },
   };
 }
@@ -1455,19 +1647,60 @@ function buildTaskReasons(task: ParsedTask, tasks: ParsedTask[], runtimeState: R
   return [...reasons];
 }
 
-export async function selectNextTask(): Promise<TaskSelectionResult> {
+export async function selectNextTask(options: SelectNextTaskOptions = {}): Promise<TaskSelectionResult> {
   const mergedTasksResult = await getMergedTasks();
   if (mergedTasksResult.error) {
     return mergedTasksResult.error;
   }
 
-  const activeTaskResult = getActiveTask(mergedTasksResult.tasks!);
+  const tasks = mergedTasksResult.tasks!;
+  const sessionFocus = options.fresh ? null : await readSessionFocus();
+  const focusedTask = sessionFocus?.focused_task_ref
+    ? getTaskByRef(tasks, sessionFocus.focused_task_ref)
+    : undefined;
 
-  if (activeTaskResult.task) {
-    return buildTaskSelectionResult(activeTaskResult.task, 'in_progress', 'Task is currently in progress');
+  if (focusedTask?.status === 'in_progress') {
+    return buildTaskSelectionResult(focusedTask, 'in_progress', `Task ${sessionFocus!.focused_task_ref} matches the current session focus.`);
   }
 
-  const nextReadyTask = getNextReadyTask(mergedTasksResult.tasks!);
+  const currentExecutionRoot = await getCurrentExecutionRootRecord();
+  const activeTasks = getActiveTasksForCurrentExecutionRoot(tasks, currentExecutionRoot?.attached_change_id);
+  if (activeTasks.length > 0) {
+    const activeTaskIds = activeTasks.map(taskItem => getTaskRef(taskItem));
+    const reason = activeTaskIds.length === 1
+      ? `Task ${activeTaskIds[0]} is already in progress. Bare run does not auto-resume existing work.`
+      : `Tasks ${activeTaskIds.join(', ')} are already in progress. Bare run does not auto-resume existing work.`;
+
+    return buildTaskSelectionResult(undefined, null, reason, {
+      activeTaskIds,
+    });
+  }
+
+  if (focusedTask?.is_ready) {
+    return buildTaskSelectionResult(focusedTask, 'ready', `Task ${sessionFocus!.focused_task_ref} matches the current session focus and is ready.`);
+  }
+
+  if (sessionFocus?.focused_change_id) {
+    const focusedChangeReadyTask = getNextReadyTaskForChange(tasks, sessionFocus.focused_change_id);
+    if (focusedChangeReadyTask) {
+      return buildTaskSelectionResult(
+        focusedChangeReadyTask,
+        'ready',
+        `Highest priority ready task in focused change ${sessionFocus.focused_change_id}.`,
+      );
+    }
+  }
+
+  const executionRootReadyTask = getNextReadyTaskForExecutionRoot(tasks, currentExecutionRoot?.attached_change_id);
+  if (executionRootReadyTask) {
+    return buildTaskSelectionResult(
+      executionRootReadyTask,
+      'ready',
+      `Highest priority ready task in execution-root attached change ${currentExecutionRoot!.attached_change_id}.`,
+    );
+  }
+
+  const nextReadyTask = getNextReadyTask(tasks);
 
   if (nextReadyTask) {
     return buildTaskSelectionResult(nextReadyTask, 'ready', 'Highest priority among ready tasks');
@@ -1703,6 +1936,7 @@ async function startTask(taskId: string, command = 'task start'): Promise<TaskCo
   const existingTaskState = getRuntimeTaskState(runtimeState, taskRef);
   const activeTaskEntry = getOtherActiveTaskEntry(runtimeState, taskRef);
   const matchedTask = mergedTasksResult.tasks!.find(taskItem => getTaskRef(taskItem) === taskRef) ?? parsedTask.task!;
+  const executionRootConflict = await getExecutionRootOccupancyConflict(runtimeState, matchedTask.change_id);
 
   if (existingTaskState?.status === 'done') {
     return {
@@ -1748,6 +1982,10 @@ async function startTask(taskId: string, command = 'task start'): Promise<TaskCo
     };
   }
 
+  if (executionRootConflict) {
+    return getExecutionRootOccupiedError(executionRootConflict);
+  }
+
   if (!matchedTask.is_ready) {
     return {
       ok: false,
@@ -1766,7 +2004,12 @@ async function startTask(taskId: string, command = 'task start'): Promise<TaskCo
     updated_at: timestamp,
   });
 
-  await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
+  const persistResult = await persistTaskActivationState(matchedTask, runtimePaths, runtimeState, {
+    captureWorktreeBaseline: true,
+  });
+  if (persistResult) {
+    return persistResult;
+  }
   await appendEvent(runtimePaths.eventsPath, 'task.started', taskRef, { command });
   if (matchedTask.change_id) {
     await syncChangeMetrics(matchedTask.change_id);
@@ -1813,6 +2056,7 @@ async function resumeTask(taskId: string, command = 'task resume'): Promise<Task
   const activeTaskEntry = getOtherActiveTaskEntry(runtimeState, taskRef);
   const matchedTask = mergedTasksResult.tasks!.find(taskItem => getTaskRef(taskItem) === taskRef) ?? parsedTask.task!;
   const { allDependenciesSatisfied, anyDependenciesSatisfied } = getDependencyState(mergedTasksResult.tasks!, matchedTask);
+  const executionRootConflict = await getExecutionRootOccupancyConflict(runtimeState, matchedTask.change_id);
 
   if (existingTaskState?.status === 'done') {
     return {
@@ -1862,6 +2106,10 @@ async function resumeTask(taskId: string, command = 'task resume'): Promise<Task
     };
   }
 
+  if (executionRootConflict) {
+    return getExecutionRootOccupiedError(executionRootConflict);
+  }
+
   if (!allDependenciesSatisfied || !anyDependenciesSatisfied) {
     return {
       ok: false,
@@ -1881,7 +2129,12 @@ async function resumeTask(taskId: string, command = 'task resume'): Promise<Task
     updated_at: timestamp,
   });
 
-  await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
+  const persistResult = await persistTaskActivationState(matchedTask, runtimePaths, runtimeState, {
+    captureWorktreeBaseline: true,
+  });
+  if (persistResult) {
+    return persistResult;
+  }
   await appendEvent(runtimePaths.eventsPath, 'task.resumed', taskRef, { command });
   if (matchedTask.change_id) {
     await syncChangeMetrics(matchedTask.change_id);
@@ -1929,6 +2182,20 @@ export async function activateTask(taskId: string, command = 'run'): Promise<Tas
   }
 
   if (matchedTask.status === 'in_progress') {
+    const staleExecutionRoot = matchedTask.change_id
+      ? await findStaleExecutionRootForChange(matchedTask.change_id)
+      : null;
+    if (staleExecutionRoot) {
+      return {
+        ok: false,
+        error: {
+          code: 'EXECUTION_ROOT_STALE',
+          message: `Task ${getTaskRef(matchedTask)} is attached to stale execution root ${formatCliPath(staleExecutionRoot.path)}. Run "superplan worktree ensure ${matchedTask.change_id} --json" before continuing work there.`,
+          retryable: true,
+        },
+      };
+    }
+
     const overlayVisibility = await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
     await appendOverlayEvent({
       command,
@@ -1936,6 +2203,9 @@ export async function activateTask(taskId: string, command = 'run'): Promise<Tas
       visibility: overlayVisibility,
     });
     const overlay = createOverlayRuntimeNotice('ensure', overlayVisibility);
+    await syncSessionFocusToTaskExecutionRoot(matchedTask, {
+      captureWorktreeBaseline: true,
+    });
 
     return {
       ok: true,
@@ -2410,6 +2680,11 @@ async function reopenTask(taskId: string, reason?: string, command = 'task revie
     };
   }
 
+  const executionRootConflict = await getExecutionRootOccupancyConflict(runtimeState, matchedTask.change_id);
+  if (executionRootConflict) {
+    return getExecutionRootOccupiedError(executionRootConflict);
+  }
+
   const mergedTasksResult = await getMergedTasks({ skipInvariant: true });
   if (mergedTasksResult.error) {
     return mergedTasksResult.error;
@@ -2436,7 +2711,12 @@ async function reopenTask(taskId: string, reason?: string, command = 'task revie
     ...(reason ? { reason } : {}),
   });
 
-  await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
+  const persistResult = await persistTaskActivationState(mergedTask, runtimePaths, runtimeState, {
+    captureWorktreeBaseline: true,
+  });
+  if (persistResult) {
+    return persistResult;
+  }
   await appendEvent(runtimePaths.eventsPath, 'task.reopened', taskRef, {
     command,
     workflowPhase: 'review',
@@ -2558,7 +2838,7 @@ async function createTask(changeSlug: string, taskId: string | undefined, rawPri
       ok: false,
       error: {
         code: 'TASK_NOT_IN_GRAPH',
-        message: `Task ${taskId} is not declared in ${path.relative(process.cwd(), changePaths.tasksIndexPath) || changePaths.tasksIndexPath}.`,
+        message: `Task ${taskId} is not declared in ${formatCliPath(changePaths.tasksIndexPath)}.`,
         retryable: false,
       },
     };
@@ -2601,7 +2881,7 @@ async function createTask(changeSlug: string, taskId: string | undefined, rawPri
     data: {
       task_id: taskRef,
       change_id: changeSlug,
-      path: path.relative(process.cwd(), taskPath) || taskPath,
+      path: formatCliPath(taskPath),
       ...(createdTaskResult.task ? { task: createdTaskResult.task } : {}),
       ...(overlay ? { overlay } : {}),
     },
@@ -2649,7 +2929,7 @@ async function createTaskBatch(options: {
       const inputLabel = useStdin
         ? 'stdin'
         : batchFilePath
-          ? path.relative(process.cwd(), path.resolve(process.cwd(), batchFilePath)) || path.resolve(process.cwd(), batchFilePath)
+          ? formatCliPath(path.resolve(process.cwd(), batchFilePath))
           : 'batch input';
       return getTaskBatchError(
         'TASK_BATCH_INVALID_JSON',
@@ -2659,7 +2939,7 @@ async function createTaskBatch(options: {
 
     if (!useStdin && batchFilePath) {
       const resolvedBatchFilePath = path.resolve(process.cwd(), batchFilePath);
-      const batchFileLabel = path.relative(process.cwd(), resolvedBatchFilePath) || resolvedBatchFilePath;
+      const batchFileLabel = formatCliPath(resolvedBatchFilePath);
       return getTaskBatchError(
         'TASK_BATCH_FILE_READ_FAILED',
         `Could not read task batch file: ${batchFileLabel}`,
@@ -2710,7 +2990,7 @@ async function createTaskBatchFromPayload(
         ok: false,
         error: {
           code: 'TASK_NOT_IN_GRAPH',
-          message: `Task ${taskId} is not declared in ${path.relative(process.cwd(), changePaths.tasksIndexPath) || changePaths.tasksIndexPath}.`,
+          message: `Task ${taskId} is not declared in ${formatCliPath(changePaths.tasksIndexPath)}.`,
           retryable: false,
         },
       };
@@ -2743,7 +3023,7 @@ async function createTaskBatchFromPayload(
       task_id: localTaskId,
       ref: taskRef,
       title: graphTask.title,
-      path: path.relative(process.cwd(), taskPath) || taskPath,
+      path: formatCliPath(taskPath),
     });
   }
 

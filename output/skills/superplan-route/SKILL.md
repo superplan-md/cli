@@ -98,9 +98,11 @@ Routing is not permission to explore the CLI surface.
 
 Do not expose routing mechanics as progress narration.
 
+- This skill runs in `control-plane mode`.
 - do not tell the user you are routing, choosing a depth mode, or handing off to another skill
 - summarize the practical outcome instead: whether the work is staying lightweight, needs a small plan, needs deeper structuring, or needs context first
 - avoid internal labels like `stay_out`, `direct`, `task`, `slice`, or `program` unless the user explicitly asks how Superplan classified the work
+- if the user needs a detailed comparison of approaches, trade-offs, recommendation, or execution path, route to the planning owner instead of bloating routing commentary
 
 ## Depth Modes
 

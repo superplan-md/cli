@@ -350,6 +350,31 @@ async function removePath(targetPath: string, removedPaths: string[]): Promise<v
   removedPaths.push(targetPath);
 }
 
+async function removePathIfEmpty(targetPath: string, removedPaths: string[]): Promise<void> {
+  if (!targetPath || !await pathExists(targetPath)) {
+    return;
+  }
+
+  let stats;
+  try {
+    stats = await fs.stat(targetPath);
+  } catch {
+    return;
+  }
+
+  if (!stats.isDirectory()) {
+    return;
+  }
+
+  const entries = await fs.readdir(targetPath);
+  if (entries.length > 0) {
+    return;
+  }
+
+  await fs.rmdir(targetPath);
+  removedPaths.push(targetPath);
+}
+
 function stripManagedAntigravityBlock(content: string): string {
   return content
     .replace(new RegExp(`\\n?${MANAGED_ANTIGRAVITY_BLOCK_START}[\\s\\S]*?${MANAGED_ANTIGRAVITY_BLOCK_END}\\n?`, 'm'), '\n')
@@ -452,8 +477,7 @@ async function removeAgentInstalls(
       for (const cleanupPath of agent.cleanup_paths ?? []) {
         await removePath(cleanupPath, removedPaths);
       }
-      // Also remove the agent's base directory
-      await removePath(agent.path, removedPaths);
+      await removePathIfEmpty(agent.path, removedPaths);
       continue;
     }
 
@@ -474,16 +498,14 @@ async function removeAgentInstalls(
       for (const cleanupPath of agent.cleanup_paths ?? []) {
         await removePath(cleanupPath, removedPaths);
       }
-      // Also remove the agent's base directory
-      await removePath(agent.path, removedPaths);
+      await removePathIfEmpty(agent.path, removedPaths);
       continue;
     }
 
     for (const managedPath of getManagedInstallPaths(agent, managedSkillNames)) {
       await removePath(managedPath, removedPaths);
     }
-    // Also remove the agent's base directory if it exists
-    await removePath(agent.path, removedPaths);
+    await removePathIfEmpty(agent.path, removedPaths);
   }
 }
 
@@ -566,9 +588,18 @@ function resolveInstalledOverlayTargets(installMetadata: InstallMetadata | null)
     targets.add(path.normalize(overlay.executable_path));
   }
 
-  // Standard macOS bundle location if not in metadata or if we want to be thorough
   if (process.platform === 'darwin') {
+    targets.add('/Applications/Superplan.app');
+    targets.add(path.join(os.homedir(), '.local', 'share', 'superplan', 'overlay', 'Superplan.app'));
     targets.add('/Applications/Superplan Overlay Desktop.app');
+  }
+
+  if (process.platform === 'linux') {
+    targets.add(path.join(os.homedir(), '.local', 'share', 'superplan', 'overlay', 'superplan-overlay.AppImage'));
+  }
+
+  if (process.platform === 'win32') {
+    targets.add(path.join(os.homedir(), '.config', 'superplan', 'overlay', 'superplan-overlay.exe'));
   }
 
   return Array.from(targets);
@@ -693,6 +724,14 @@ async function removeCommand(
       await removeManagedInstructionsFile(path.join(homeDir, 'CLAUDE.md'), removedPaths);
       await removeManagedInstructionsFile(path.join(homeDir, '.claude', 'CLAUDE.md'), removedPaths);
       await removeManagedInstructionsFile(path.join(homeDir, '.codex', 'AGENTS.md'), removedPaths);
+
+      for (const installedCliTarget of installedCliTargets) {
+        await removePath(installedCliTarget, removedPaths);
+      }
+
+      for (const installedOverlayTarget of installedOverlayTargets) {
+        await removePath(installedOverlayTarget, removedPaths);
+      }
       
       // Thoroughly wipe the global config directory
       await removePath(globalSuperplanDir, removedPaths);

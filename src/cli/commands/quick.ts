@@ -1,7 +1,7 @@
 import { change } from './change';
-import { task } from './task';
 import { run } from './run';
-import { getQueueNextAction, type NextAction } from '../next-action';
+import { worktree } from './worktree';
+import { stopNextAction, type NextAction } from '../next-action';
 
 export type QuickResult =
   | {
@@ -25,11 +25,6 @@ function generateSlug(title: string): string {
     .replace(/^-|-$/g, '')
     .slice(0, 30);
   return `${base}-${timestamp}`;
-}
-
-function generateTaskId(): string {
-  const timestamp = Date.now().toString(36).slice(-4).toUpperCase();
-  return `T-${timestamp}`;
 }
 
 function getOptionValue(args: string[], optionName: string): string | undefined {
@@ -74,10 +69,19 @@ export async function quick(args: string[] = []): Promise<QuickResult> {
   const title = positionalArgs[0];
   const priority = getOptionValue(args, '--priority') ?? 'medium';
   const changeSlug = generateSlug(title);
-  const taskId = generateTaskId();
+  const taskId = 'T-001';
+  const taskRef = `${changeSlug}/${taskId}`;
 
-  // Step 1: Create change
-  const changeResult = await change(['new', changeSlug]);
+  const changeResult = await change([
+    'new',
+    changeSlug,
+    '--title',
+    title,
+    '--single-task',
+    title,
+    '--priority',
+    priority,
+  ]);
   if (!changeResult.ok) {
     return {
       ok: false,
@@ -89,30 +93,46 @@ export async function quick(args: string[] = []): Promise<QuickResult> {
     };
   }
 
-  // Step 2: Create task
-  const taskResult = await task([
-    'scaffold',
-    'new',
-    changeSlug,
-    taskId,
-    '--priority',
-    priority,
-  ]);
-  
-  if (!taskResult.ok) {
-    return {
-      ok: false,
-      error: {
-        code: 'QUICK_TASK_FAILED',
-        message: `Failed to create task: ${taskResult.error.message}`,
-        retryable: taskResult.error.retryable,
-      },
-    };
-  }
-
-  // Step 3: Activate task
-  const runResult = await run([]);
+  const runResult = await run([taskRef]);
   if (!runResult.ok) {
+    if (runResult.error.code === 'ANOTHER_TASK_IN_PROGRESS' || runResult.error.code === 'EXECUTION_ROOT_OCCUPIED') {
+      let ensuredExecutionRoot: string | null = null;
+      if (runResult.error.code === 'EXECUTION_ROOT_OCCUPIED') {
+        const ensureResult = await worktree(['ensure', changeSlug]);
+        if (!ensureResult.ok) {
+          return {
+            ok: false,
+            error: {
+              code: 'QUICK_WORKTREE_ENSURE_FAILED',
+              message: `Task ${taskRef} was scaffolded, but isolating it into a dedicated execution root failed: ${ensureResult.error.message}`,
+              retryable: ensureResult.error.retryable,
+            },
+          };
+        }
+
+        ensuredExecutionRoot = ensureResult.data.execution_root ?? null;
+      }
+
+      return {
+        ok: true,
+        data: {
+          change_id: changeSlug,
+          task_id: taskId,
+          task_ref: taskRef,
+          title,
+          status: 'ready',
+          next_action: stopNextAction(
+            runResult.error.code === 'EXECUTION_ROOT_OCCUPIED'
+              ? `Task ${taskRef} is scaffolded. A dedicated execution root is ready${ensuredExecutionRoot ? ` at "${ensuredExecutionRoot}"` : ''}; start it from that root with "superplan run ${taskRef} --json".`
+              : `Task ${taskRef} is scaffolded. Resolve the current in-progress task first, then start it with "superplan run ${taskRef} --json".`,
+            runResult.error.code === 'EXECUTION_ROOT_OCCUPIED'
+              ? 'Quick created tracked work successfully, but execution had to be isolated away from the current checkout.'
+              : 'Quick now uses the single-task scaffold path immediately, but activation still respects the one-active-task rule.',
+          ),
+        },
+      };
+    }
+
     return {
       ok: false,
       error: {
@@ -123,7 +143,7 @@ export async function quick(args: string[] = []): Promise<QuickResult> {
     };
   }
 
-  if (!runResult.data.task_id) {
+  if (!runResult.data.task_id || !runResult.data.task) {
     return {
       ok: false,
       error: {
@@ -138,17 +158,11 @@ export async function quick(args: string[] = []): Promise<QuickResult> {
     ok: true,
     data: {
       change_id: changeSlug,
-      task_id: runResult.data.task_id,
-      task_ref: `${changeSlug}:${runResult.data.task_id}`,
+      task_id: runResult.data.task.task_id,
+      task_ref: runResult.data.task_id,
       title,
       status: runResult.data.status ?? 'in_progress',
-      next_action: getQueueNextAction({
-        active: runResult.data.task_id,
-        ready: [],
-        in_review: [],
-        blocked: [],
-        needs_feedback: [],
-      }),
+      next_action: runResult.data.next_action,
     },
   };
 }

@@ -14,6 +14,7 @@ import { overlay } from "./commands/overlay";
 import { update } from "./commands/update";
 import { validate } from "./commands/validate";
 import { visibility } from "./commands/visibility";
+import { worktree } from "./commands/worktree";
 import {
   commandNextAction,
   stopNextAction,
@@ -25,6 +26,8 @@ type CommandOptions = {
   quiet: boolean;
   yes?: boolean;
   scope?: string;
+  global?: boolean;
+  local?: boolean;
 };
 
 type CommandResult = {
@@ -188,6 +191,13 @@ function inferErrorNextAction(command: string | undefined, error: { code: string
     );
   }
 
+  if (error.code === 'INVALID_WORKTREE_COMMAND') {
+    return stopNextAction(
+      'The worktree command is invalid. Use `superplan worktree ensure <change>`, `list`, `detach <change>`, or `prune`.',
+      'Invalid worktree invocations should terminate with the exact supported commands.',
+    );
+  }
+
   if (error.code === 'INVALID_REMOVE_COMMAND') {
     return stopNextAction(
       'The remove command is invalid. Use `superplan remove --scope <local|global|skip> --yes --json` for automation.',
@@ -258,6 +268,13 @@ function inferErrorNextAction(command: string | undefined, error: { code: string
     );
   }
 
+  if (error.code === 'EXECUTION_ROOT_OCCUPIED') {
+    return commandNextAction(
+      'superplan worktree list --json',
+      'The current checkout is occupied by another active change, so inspect or ensure an alternate execution root before proceeding.',
+    );
+  }
+
   if (error.code === 'TASK_NOT_IN_GRAPH') {
     return stopNextAction(
       'The task id is not declared in the change graph. Add it to tasks.md, validate the graph, then scaffold it again.',
@@ -320,6 +337,8 @@ export const router: Record<string, CommandHandler> = {
     json: options.json,
     quiet: options.quiet,
     yes: options.yes,
+    global: options.global,
+    local: options.local,
   }),
   quick: async (args) => quick(args),
   remove: async (args, options) => removeCli(args, {
@@ -345,6 +364,7 @@ export const router: Record<string, CommandHandler> = {
   overlay: async (args) => overlay(args),
   update: async (_args, options) => update(options),
   visibility: async (args) => visibility(args),
+  worktree: async (args) => worktree(args),
 };
 
 export async function routeCommand(args: string[]) {
@@ -354,6 +374,8 @@ export async function routeCommand(args: string[]) {
     json: args.includes("--json"),
     quiet: args.includes("--quiet"),
     yes: args.includes("--yes"),
+    global: args.includes("--global"),
+    local: args.includes("--local"),
     scope: scopeIndex >= 0 ? args[scopeIndex + 1] : undefined,
   };
   const commandArgs = args.slice(1);
