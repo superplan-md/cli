@@ -278,7 +278,8 @@ function Resolve-PackagedOverlaySource {
   try {
     Invoke-WebRequest -Uri $downloadUrl -OutFile $downloadPath | Out-Null
   } catch {
-    Fail "failed to download overlay companion for $script:OverlayPlatform/$script:OverlayArch from $downloadUrl"
+    Say "WARNING: Failed to download overlay companion for $script:OverlayPlatform/$script:OverlayArch from $downloadUrl"
+    return $false
   }
 
   $script:SuperplanOverlaySourcePath = $downloadPath
