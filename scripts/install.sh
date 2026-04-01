@@ -328,7 +328,9 @@ resolve_packaged_overlay_source() {
   DOWNLOADED_OVERLAY_PATH="$WORK_DIR/$OVERLAY_ARTIFACT_NAME"
   say "Downloading Superplan overlay from $OVERLAY_DOWNLOAD_URL"
   if ! curl -fsSL "$OVERLAY_DOWNLOAD_URL" -o "$DOWNLOADED_OVERLAY_PATH"; then
-    fail "failed to download overlay companion for ${OVERLAY_PLATFORM}/${OVERLAY_ARCH} from $OVERLAY_DOWNLOAD_URL"
+    say "WARNING: Failed to download overlay companion for ${OVERLAY_PLATFORM}/${OVERLAY_ARCH} from $OVERLAY_DOWNLOAD_URL"
+    DOWNLOADED_OVERLAY_PATH=""
+    return 1
   fi
 
   SUPERPLAN_OVERLAY_SOURCE_PATH="$DOWNLOADED_OVERLAY_PATH"
