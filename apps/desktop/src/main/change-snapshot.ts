@@ -4,15 +4,13 @@
  */
 
 import * as fs from 'fs/promises'
-import * as os from 'os'
 import * as path from 'path'
+import { resolveProjectStateRoot } from '../../../../src/cli/project-identity'
 import type {
   DesktopChangeSnapshot,
   DesktopChangeTask,
   DesktopChangeViewStatus
 } from '../shared/desktop-contract'
-
-const GLOBAL_SUPERPLAN_DIR = path.join(os.homedir(), '.config', 'superplan')
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -317,9 +315,8 @@ export async function getChangeSnapshot(
   workspacePath: string,
   changeId: string
 ): Promise<DesktopChangeSnapshot | null> {
-  const superplanRoot = GLOBAL_SUPERPLAN_DIR
-  const workspaceName = path.basename(workspacePath).toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'workspace-root'
-  const changeRoot = path.join(superplanRoot, `workspace-${workspaceName}`, 'changes', changeId)
+  const superplanRoot = resolveProjectStateRoot(workspacePath)
+  const changeRoot = path.join(superplanRoot, 'changes', changeId)
   const tasksIndexPath = path.join(changeRoot, 'tasks.md')
 
   if (!await pathExists(tasksIndexPath)) return null
@@ -335,7 +332,7 @@ export async function getChangeSnapshot(
   if (!graphMeta) return null
 
   const { tasks: runtimeTasks, activeTaskRef, updatedAt: runtimeUpdatedAt } =
-    await readRuntimeState(path.join(superplanRoot, `workspace-${workspaceName}`), changeId)
+    await readRuntimeState(superplanRoot, changeId)
 
   const tasksDir = path.join(changeRoot, 'tasks')
   const desktopTasks: DesktopChangeTask[] = []

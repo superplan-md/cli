@@ -36,6 +36,7 @@ import { getChangeSnapshot } from './change-snapshot'
 import { buildOverlaySummary } from './overlay-summary'
 import {
   getLatestVisibleOverlayControl,
+  type RuntimeOverlayControlState,
   scanRuntimeOverlayControls
 } from './runtime-overlay-controls'
 import { scanRuntimeOverlaySnapshots } from './runtime-overlay-snapshots'
@@ -62,6 +63,9 @@ let lastWorkspacesSerialized = JSON.stringify(currentWorkspaces)
 let runtimeRefreshTimer: NodeJS.Timeout | null = null
 let runtimeRefreshInFlight = false
 let overlayWindowVisibilitySource: 'manual' | 'runtime' | null = null
+let latestVisibleRuntimeOverlayControlKey: string | null = null
+let suppressedRuntimeOverlayControlKey: string | null = null
+let lastOverlayWorkspaceVisibilityKey: string | null = null
 let keepDesktopShellResident = false
 let isQuitting = false
 let currentActivationPolicy: 'regular' | 'accessory' | null = null
@@ -188,6 +192,14 @@ function emitCurrentDesktopData(targetWindow: BrowserWindow): void {
   )
 }
 
+function getRuntimeOverlayControlKey(control: RuntimeOverlayControlState | null): string | null {
+  if (!control) {
+    return null
+  }
+
+  return `${control.workspace_path}:${control.updated_at}:${control.requested_action}:${control.visible ? '1' : '0'}`
+}
+
 async function refreshDesktopRuntimeData(): Promise<void> {
   if (runtimeRefreshInFlight) {
     return
@@ -221,10 +233,19 @@ async function refreshDesktopRuntimeData(): Promise<void> {
     }
 
     const latestVisibleControl = getLatestVisibleOverlayControl(controls)
+    const latestVisibleControlKey = getRuntimeOverlayControlKey(latestVisibleControl)
+    latestVisibleRuntimeOverlayControlKey = latestVisibleControlKey
     if (latestVisibleControl) {
+      if (suppressedRuntimeOverlayControlKey === latestVisibleControlKey) {
+        return
+      }
       showOverlayWindow(getDesktopOverlayState().mode, 'runtime')
     } else if (overlayWindowVisibilitySource === 'runtime') {
       closeOverlayWindow()
+    }
+
+    if (!latestVisibleControl || latestVisibleControlKey !== suppressedRuntimeOverlayControlKey) {
+      suppressedRuntimeOverlayControlKey = null
     }
   } finally {
     runtimeRefreshInFlight = false
@@ -258,14 +279,14 @@ function syncMacosActivationPolicy(policy: 'regular' | 'accessory'): void {
 }
 
 function getDesiredMacosActivationPolicy(): 'regular' | 'accessory' {
-  const overlayWindowOpen = Boolean(currentOverlayWindow && !currentOverlayWindow.isDestroyed())
-  if (overlayWindowOpen) {
-    return 'accessory'
-  }
-
   const boardWindowOpen = Boolean(currentBoardWindow && !currentBoardWindow.isDestroyed())
   if (boardWindowOpen) {
     return 'regular'
+  }
+
+  const overlayWindowOpen = Boolean(currentOverlayWindow && !currentOverlayWindow.isDestroyed())
+  if (overlayWindowOpen) {
+    return 'accessory'
   }
 
   // Never leave the app stranded as a hidden accessory process when all
@@ -283,12 +304,38 @@ function getOverlayWorkspaceVisibilityOptions() {
     return undefined
   }
 
+  const boardWindowOpen = Boolean(currentBoardWindow && !currentBoardWindow.isDestroyed())
+  const skipTransformProcessType = !boardWindowOpen && currentActivationPolicy === 'accessory'
+
   return {
     visibleOnFullScreen: true,
-    // Keep the app in accessory mode while the overlay is visible instead of
-    // letting Electron bounce the process type on every call.
-    skipTransformProcessType: true
+    // Electron only allows skipping the process-type transform when the app is
+    // already operating as an accessory/UIElement app. When the board keeps the
+    // app in regular mode, the transform is required for fullscreen visibility.
+    skipTransformProcessType
   }
+}
+
+function applyOverlayWorkspaceVisibility(overlayWindow: BrowserWindow): void {
+  if (process.platform !== 'darwin') {
+    return
+  }
+
+  const options = getOverlayWorkspaceVisibilityOptions()
+  if (!options) {
+    return
+  }
+
+  const visibilityKey = `${overlayWindow.id}:${options.skipTransformProcessType ? 'skip' : 'transform'}`
+  if (
+    lastOverlayWorkspaceVisibilityKey === visibilityKey &&
+    overlayWindow.isVisibleOnAllWorkspaces()
+  ) {
+    return
+  }
+
+  overlayWindow.setVisibleOnAllWorkspaces(true, options)
+  lastOverlayWorkspaceVisibilityKey = visibilityKey
 }
 
 function applyOverlayWindowLevel(overlayWindow: BrowserWindow): void {
@@ -331,6 +378,10 @@ function createBoardWindow(): BrowserWindow {
   currentBoardWindow = boardWindow
 
   boardWindow.on('ready-to-show', () => {
+    if (process.platform === 'darwin') {
+      boardWindow.setAlwaysOnTop(false)
+      boardWindow.setVisibleOnAllWorkspaces(false)
+    }
     boardWindow.show()
   })
 
@@ -468,8 +519,8 @@ function createOverlayWindow(_mode: DesktopOverlayMode, bounds: DesktopBounds): 
 
   overlayWindow.on('ready-to-show', () => {
     if (process.platform === 'darwin') {
-      syncMacosActivationPolicy('accessory')
-      overlayWindow.setVisibleOnAllWorkspaces(true, getOverlayWorkspaceVisibilityOptions())
+      syncMacosActivationPolicyForCurrentWindows()
+      applyOverlayWorkspaceVisibility(overlayWindow)
       overlayWindow.setAlwaysOnTop(true, 'screen-saver')
     }
     overlayWindow.showInactive()
@@ -477,6 +528,7 @@ function createOverlayWindow(_mode: DesktopOverlayMode, bounds: DesktopBounds): 
 
   overlayWindow.on('closed', () => {
     if (currentOverlayWindow === overlayWindow) currentOverlayWindow = null
+    lastOverlayWorkspaceVisibilityKey = null
     overlayWindowVisibilitySource = null
     syncMacosActivationPolicyForCurrentWindows()
   })
@@ -516,9 +568,7 @@ function ensureOverlayWindow(mode: DesktopOverlayMode): BrowserWindow {
 }
 
 function showBoardWindow(): void {
-  if (!currentOverlayWindow || currentOverlayWindow.isDestroyed()) {
-    syncMacosActivationPolicy('regular')
-  }
+  syncMacosActivationPolicy('regular')
   const boardWindow = ensureBoardWindow()
   if (boardWindow.isMinimized()) boardWindow.restore()
   boardWindow.show()
@@ -539,7 +589,10 @@ function showOverlayWindow(
   mode: DesktopOverlayMode,
   source: 'manual' | 'runtime' = 'manual'
 ): DesktopOverlayState {
-  syncMacosActivationPolicy('accessory')
+  if (source === 'manual') {
+    suppressedRuntimeOverlayControlKey = null
+  }
+
   const anchor = currentOverlayWindow && !currentOverlayWindow.isDestroyed()
     ? currentOverlayWindow.getBounds()
     : undefined
@@ -549,7 +602,7 @@ function showOverlayWindow(
   overlayWindow.setBounds(bounds)
 
   if (process.platform === 'darwin') {
-    overlayWindow.setVisibleOnAllWorkspaces(true, getOverlayWorkspaceVisibilityOptions())
+    applyOverlayWorkspaceVisibility(overlayWindow)
     overlayWindow.setAlwaysOnTop(true, 'screen-saver')
   }
   overlayWindow.showInactive()
@@ -557,6 +610,7 @@ function showOverlayWindow(
   if (source === 'runtime') {
     keepDesktopShellResident = true
   }
+  syncMacosActivationPolicyForCurrentWindows()
 
   nextOverlayState = saveDesktopOverlayState({
     ...nextOverlayState,
@@ -568,6 +622,8 @@ function showOverlayWindow(
 }
 
 function closeOverlayWindow(): void {
+  suppressedRuntimeOverlayControlKey = latestVisibleRuntimeOverlayControlKey
+
   if (currentOverlayWindow && !currentOverlayWindow.isDestroyed()) {
     currentOverlayWindow.close()
     return
@@ -737,7 +793,13 @@ app.whenReady().then(async () => {
   pendingLaunchIntent = null
 
   app.on('activate', function () {
-    showBoardWindow()
+    if (keepDesktopShellResident) {
+      return
+    }
+
+    if (getOpenDesktopWindows().length === 0) {
+      showBoardWindow()
+    }
   })
 })
 

@@ -182,6 +182,63 @@ function playFeedbackSound(): void {
   })
 }
 
+function useOverlayAutoResize(
+  containerRef: React.RefObject<HTMLDivElement | null>,
+  triggerKey: string
+): void {
+  const setOverlayState = useDesktopOverlayStore((state) => state.setOverlayState)
+  const lastSentHeight = useRef<number | null>(null)
+
+  useLayoutEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    let cancelled = false
+    let frameId: number | null = null
+
+    function sync(): void {
+      if (cancelled || !el) return
+
+      const nextHeight = Math.max(88, Math.ceil(el.getBoundingClientRect().height) + 20)
+      if (lastSentHeight.current === nextHeight) {
+        return
+      }
+
+      lastSentHeight.current = nextHeight
+      void window.desktop.resizeOverlay(nextHeight).then((nextState) => {
+        if (!cancelled) {
+          setOverlayState(nextState)
+        }
+      })
+    }
+
+    function scheduleSync(): void {
+      if (cancelled || frameId !== null) {
+        return
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null
+        sync()
+      })
+    }
+
+    scheduleSync()
+    const observer = new ResizeObserver(() => {
+      scheduleSync()
+    })
+    observer.observe(el)
+
+    return () => {
+      cancelled = true
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId)
+      }
+      observer.disconnect()
+    }
+  }, [containerRef, setOverlayState, triggerKey])
+}
+
 // ---------------------------------------------------------------------------
 // OverlayDebugStrip
 // ---------------------------------------------------------------------------
@@ -629,8 +686,14 @@ function EmptyOverlayCard({
   onClose: () => void
   onOpenBoard: () => void
 }): React.JSX.Element {
+  const cardRef = useRef<HTMLDivElement | null>(null)
+  useOverlayAutoResize(cardRef, 'empty')
+
   return (
-    <div className="animate-overlay-island-enter overlay-surface drag-region flex h-full flex-col overflow-hidden p-3 text-foreground shadow-xl">
+    <div
+      ref={cardRef}
+      className="animate-overlay-island-enter overlay-surface drag-region flex h-full flex-col overflow-hidden p-3 text-foreground shadow-xl"
+    >
       {SHOW_OVERLAY_DEBUG ? <OverlayDebugStrip /> : null}
 
       <div className="flex items-center gap-0.5">
@@ -683,7 +746,6 @@ function EmptyOverlayCard({
 
 function OverlayCard(): React.JSX.Element {
   const overlaySummary = useDesktopOverlayStore((state) => state.overlaySummary)
-  const setOverlayState = useDesktopOverlayStore((state) => state.setOverlayState)
   const cardRef = useRef<HTMLDivElement | null>(null)
   const [expanded, setExpanded] = useState(false)
 
@@ -718,34 +780,30 @@ function OverlayCard(): React.JSX.Element {
 
   const filteredSecondary = orderedSecondary
   const visibleSecondary = expanded ? filteredSecondary : []
-
-  // Resize window to match content
-  useLayoutEffect(() => {
-    const el = cardRef.current
-    if (!el) return
-    let cancelled = false
-    function sync(): void {
-      if (cancelled || !el) return
-      void window.desktop
-        .resizeOverlay(Math.ceil(el.getBoundingClientRect().height) + 20)
-        .then((s) => {
-          if (!cancelled) setOverlayState(s)
-        })
-    }
-    sync()
-    const ro = new ResizeObserver(sync)
-    ro.observe(el)
-    return () => {
-      cancelled = true
-      ro.disconnect()
-    }
-  }, [overlaySummary, setOverlayState])
+  const hiddenSecondaryCount = filteredSecondary.length
+  const resizeTriggerKey = [
+    primaryItem ? `${primaryItem.workspaceId}:${primaryItem.changeId}:${primaryItem.status}:${primaryItem.taskDone}/${primaryItem.taskTotal}` : 'no-primary',
+    filteredSecondary
+      .map((item) => `${item.workspaceId}:${item.changeId}:${item.status}:${item.taskDone}/${item.taskTotal}`)
+      .join('|'),
+    outroItems
+      .map((item) => `${item.workspaceId}:${item.changeId}:${item.status}:${item.taskDone}/${item.taskTotal}`)
+      .join('|'),
+    hiddenSecondaryCount,
+    expanded ? 'expanded' : 'collapsed',
+    overlaySummary?.activeChangeCount ?? 0,
+    overlaySummary?.needsFeedbackCount ?? 0,
+    overlaySummary?.runningCount ?? 0,
+    overlaySummary?.blockedCount ?? 0,
+    overlaySummary?.completedCount ?? 0
+  ].join('::')
+  useOverlayAutoResize(cardRef, resizeTriggerKey)
 
   const handleCollapseToChip = useCallback(async (): Promise<void> => {
     useDesktopOverlayStore.getState().setOverlayMode('chip')
     const nextState = await window.desktop.setOverlayMode('chip')
-    setOverlayState(nextState)
-  }, [setOverlayState])
+    useDesktopOverlayStore.getState().setOverlayState(nextState)
+  }, [])
 
   const handleOpenBoard = useCallback(async (): Promise<void> => {
     await window.desktop.openBoard()
@@ -808,7 +866,6 @@ function OverlayCard(): React.JSX.Element {
     )
   }
 
-  const hiddenSecondaryCount = filteredSecondary.length
   const hasOpenWork =
     overlaySummary.runningCount > 0 ||
     overlaySummary.needsFeedbackCount > 0 ||

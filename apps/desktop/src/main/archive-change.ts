@@ -1,8 +1,6 @@
 import * as fs from 'fs/promises'
-import * as os from 'os'
 import * as path from 'path'
-
-const GLOBAL_SUPERPLAN_DIR = path.join(os.homedir(), '.config', 'superplan')
+import { resolveProjectStateRoot } from '../../../../src/cli/project-identity'
 
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
@@ -14,8 +12,7 @@ async function pathExists(targetPath: string): Promise<boolean> {
 }
 
 export async function archiveChange(workspacePath: string, changeId: string): Promise<boolean> {
-  const workspaceName = path.basename(workspacePath).toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'workspace-root'
-  const workspaceSuperplanRoot = path.join(GLOBAL_SUPERPLAN_DIR, `workspace-${workspaceName}`)
+  const workspaceSuperplanRoot = resolveProjectStateRoot(workspacePath)
   const changesRoot = path.join(workspaceSuperplanRoot, 'changes')
   const changeRoot = path.join(changesRoot, changeId)
   const archiveRoot = path.join(changesRoot, '.archive')

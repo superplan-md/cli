@@ -113,6 +113,10 @@ function summarizeTrackedChange(
   }
 }
 
+function shouldRenderTrackedChange(change: RuntimeOverlayTrackedChange): boolean {
+  return change.status !== 'tracking'
+}
+
 function createEmptyOverlaySummary(): DesktopOverlaySummary {
   return {
     generatedAt: new Date().toISOString(),
@@ -139,7 +143,9 @@ export async function buildOverlaySummary(
   const items = (
     await Promise.all(
       snapshots.flatMap((snapshot) =>
-        snapshot.tracked_changes.map(async (change) => {
+        snapshot.tracked_changes
+          .filter(shouldRenderTrackedChange)
+          .map(async (change) => {
           let detailedSnapshot: DesktopChangeSnapshot | null = null
 
           try {
@@ -149,7 +155,7 @@ export async function buildOverlaySummary(
           }
 
           return summarizeTrackedChange(snapshot.workspace_path, change, detailedSnapshot)
-        })
+          })
       )
     )
   )

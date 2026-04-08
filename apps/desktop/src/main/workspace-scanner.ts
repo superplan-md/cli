@@ -10,6 +10,10 @@ import type {
   DesktopWorkspaceNavigationItem
 } from '../shared/desktop-contract'
 
+function shouldRenderTrackedChange(change: RuntimeOverlayTrackedChange): boolean {
+  return change.status !== 'tracking'
+}
+
 function toDesktopChangeStatus(
   status: RuntimeOverlayTrackedChange['status']
 ): 'active' | 'idle' | 'done' {
@@ -43,7 +47,8 @@ export function buildWorkspaceNavigation(
   const homeDir = os.homedir()
   const workspaces = snapshots.map((snapshot) => {
     const workspacePath = snapshot.workspace_path
-    const changes = [...snapshot.tracked_changes]
+    const changes = snapshot.tracked_changes
+      .filter(shouldRenderTrackedChange)
       .map(toDesktopChange)
       .sort((a, b) => b.lastActiveAt.localeCompare(a.lastActiveAt))
 
