@@ -12,6 +12,13 @@ import type {
   DesktopOverlaySummary
 } from '../shared/desktop-contract'
 
+interface CachedOverlayItem {
+  revision: string
+  item: DesktopOverlayItem | null
+}
+
+const overlayItemCache = new Map<string, CachedOverlayItem>()
+
 // Primary ordering rule:
 // 1. changes that need attention first
 // 2. active/running changes next
@@ -32,6 +39,21 @@ function primaryStatusPriority(status: DesktopOverlayItemStatus): number {
 
 function workspaceIdForPath(workspacePath: string): string {
   return path.basename(workspacePath).toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'workspace-root'
+}
+
+function getOverlayItemCacheKey(workspacePath: string, changeId: string): string {
+  return `${workspacePath}::${changeId}`
+}
+
+function getOverlayItemRevision(change: RuntimeOverlayTrackedChange): string {
+  return [
+    change.updated_at,
+    change.status,
+    change.task_done,
+    change.task_total,
+    change.agent_id ?? '',
+    change.agent_name ?? ''
+  ].join(':')
 }
 
 function previewForTrackedChange(
@@ -137,24 +159,40 @@ export async function buildOverlaySummary(
   snapshots: RuntimeOverlaySnapshot[]
 ): Promise<DesktopOverlaySummary> {
   if (snapshots.length === 0) {
+    overlayItemCache.clear()
     return createEmptyOverlaySummary()
   }
 
+  const seenCacheKeys = new Set<string>()
   const items = (
     await Promise.all(
       snapshots.flatMap((snapshot) =>
         snapshot.tracked_changes
           .filter(shouldRenderTrackedChange)
           .map(async (change) => {
-          let detailedSnapshot: DesktopChangeSnapshot | null = null
+            const cacheKey = getOverlayItemCacheKey(snapshot.workspace_path, change.change_id)
+            const nextRevision = getOverlayItemRevision(change)
+            const cached = overlayItemCache.get(cacheKey)
+            seenCacheKeys.add(cacheKey)
 
-          try {
-            detailedSnapshot = await getChangeSnapshot(snapshot.workspace_path, change.change_id)
-          } catch {
-            detailedSnapshot = null
-          }
+            if (cached && cached.revision === nextRevision) {
+              return cached.item
+            }
 
-          return summarizeTrackedChange(snapshot.workspace_path, change, detailedSnapshot)
+            let detailedSnapshot: DesktopChangeSnapshot | null = null
+
+            try {
+              detailedSnapshot = await getChangeSnapshot(snapshot.workspace_path, change.change_id)
+            } catch {
+              detailedSnapshot = null
+            }
+
+            const item = summarizeTrackedChange(snapshot.workspace_path, change, detailedSnapshot)
+            overlayItemCache.set(cacheKey, {
+              revision: nextRevision,
+              item
+            })
+            return item
           })
       )
     )
@@ -165,6 +203,12 @@ export async function buildOverlaySummary(
       if (priorityDelta !== 0) return priorityDelta
       return right.updatedAt.localeCompare(left.updatedAt)
     })
+
+  for (const cacheKey of overlayItemCache.keys()) {
+    if (!seenCacheKeys.has(cacheKey)) {
+      overlayItemCache.delete(cacheKey)
+    }
+  }
 
   return {
     generatedAt: new Date().toISOString(),

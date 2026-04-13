@@ -62,6 +62,7 @@ let lastOverlaySummarySerialized = ''
 let lastWorkspacesSerialized = JSON.stringify(currentWorkspaces)
 let runtimeRefreshTimer: NodeJS.Timeout | null = null
 let runtimeRefreshInFlight = false
+let queuedRuntimeRefreshMode: RuntimeRefreshMode | null = null
 let overlayWindowVisibilitySource: 'manual' | 'runtime' | null = null
 let latestVisibleRuntimeOverlayControlKey: string | null = null
 let suppressedRuntimeOverlayControlKey: string | null = null
@@ -70,11 +71,20 @@ let keepDesktopShellResident = false
 let isQuitting = false
 let currentActivationPolicy: 'regular' | 'accessory' | null = null
 
+const VISIBLE_RUNTIME_REFRESH_MS = 1000
+const IDLE_RUNTIME_CONTROL_REFRESH_MS = 3000
+
 type DesktopLaunchSurface = 'board' | 'overlay'
+type RuntimeRefreshMode = 'full' | 'controls-only'
 
 interface DesktopLaunchIntent {
   surface: DesktopLaunchSurface
   workspacePath: string | null
+}
+
+interface RuntimeRefreshPlan {
+  delayMs: number
+  mode: RuntimeRefreshMode
 }
 
 function readCliFlagValue(argv: string[], flag: string): string | null {
@@ -120,6 +130,73 @@ function getOpenDesktopWindows(): BrowserWindow[] {
   return [currentBoardWindow, currentOverlayWindow].filter(
     (window): window is BrowserWindow => Boolean(window && !window.isDestroyed())
   )
+}
+
+function isWindowActivelyVisible(window: BrowserWindow): boolean {
+  return window.isVisible() && !window.isMinimized()
+}
+
+function getRuntimeRefreshPlan(): RuntimeRefreshPlan | null {
+  const openWindows = getOpenDesktopWindows()
+
+  if (openWindows.some(isWindowActivelyVisible)) {
+    return {
+      delayMs: VISIBLE_RUNTIME_REFRESH_MS,
+      mode: 'full'
+    }
+  }
+
+  if (keepDesktopShellResident || openWindows.length > 0) {
+    return {
+      delayMs: IDLE_RUNTIME_CONTROL_REFRESH_MS,
+      mode: 'controls-only'
+    }
+  }
+
+  return null
+}
+
+function combineRuntimeRefreshModes(
+  current: RuntimeRefreshMode | null,
+  next: RuntimeRefreshMode
+): RuntimeRefreshMode {
+  return current === 'full' || next === 'full' ? 'full' : 'controls-only'
+}
+
+function clearRuntimeRefreshTimer(): void {
+  if (runtimeRefreshTimer) {
+    clearTimeout(runtimeRefreshTimer)
+    runtimeRefreshTimer = null
+  }
+}
+
+function scheduleRuntimeRefresh(): void {
+  clearRuntimeRefreshTimer()
+  if (isQuitting || runtimeRefreshInFlight) {
+    return
+  }
+
+  const plan = getRuntimeRefreshPlan()
+  if (!plan) {
+    return
+  }
+
+  runtimeRefreshTimer = setTimeout(() => {
+    runtimeRefreshTimer = null
+    void refreshDesktopRuntimeData(plan.mode)
+  }, plan.delayMs)
+  runtimeRefreshTimer.unref?.()
+}
+
+function requestRuntimeRefresh(mode: RuntimeRefreshMode = 'full'): void {
+  clearRuntimeRefreshTimer()
+
+  if (runtimeRefreshInFlight) {
+    queuedRuntimeRefreshMode = combineRuntimeRefreshModes(queuedRuntimeRefreshMode, mode)
+    return
+  }
+
+  void refreshDesktopRuntimeData(mode)
 }
 
 function getRendererUrl(hash: string): string {
@@ -200,46 +277,60 @@ function getRuntimeOverlayControlKey(control: RuntimeOverlayControlState | null)
   return `${control.workspace_path}:${control.updated_at}:${control.requested_action}:${control.visible ? '1' : '0'}`
 }
 
-async function refreshDesktopRuntimeData(): Promise<void> {
+async function refreshDesktopRuntimeData(mode: RuntimeRefreshMode = 'full'): Promise<void> {
   if (runtimeRefreshInFlight) {
+    queuedRuntimeRefreshMode = combineRuntimeRefreshModes(queuedRuntimeRefreshMode, mode)
     return
   }
 
   runtimeRefreshInFlight = true
   try {
-    const [snapshots, controls] = await Promise.all([
-      scanRuntimeOverlaySnapshots(),
-      scanRuntimeOverlayControls()
-    ])
-    const [nextOverlaySummary, nextWorkspaces] = await Promise.all([
-      buildOverlaySummary(snapshots),
-      Promise.resolve(buildWorkspaceNavigation(snapshots))
-    ])
-
-    const nextOverlaySummarySerialized = serializeOverlaySummaryForChangeDetection(nextOverlaySummary)
-    if (nextOverlaySummarySerialized !== lastOverlaySummarySerialized) {
-      currentOverlaySummary = nextOverlaySummary
-      lastOverlaySummarySerialized = nextOverlaySummarySerialized
-      emitOverlaySummaryChanged(nextOverlaySummary)
-    }
-
-    const nextWorkspacesSerialized = JSON.stringify(nextWorkspaces)
-    if (nextWorkspacesSerialized !== lastWorkspacesSerialized) {
-      currentWorkspaces = nextWorkspaces
-      lastWorkspacesSerialized = nextWorkspacesSerialized
-      emitWorkspacesChanged(nextWorkspaces)
-    } else {
-      currentWorkspaces = nextWorkspaces
-    }
-
+    const controls = await scanRuntimeOverlayControls()
     const latestVisibleControl = getLatestVisibleOverlayControl(controls)
+    const shouldRefreshVisibleData =
+      mode === 'full' ||
+      Boolean(latestVisibleControl) ||
+      getOpenDesktopWindows().some(isWindowActivelyVisible)
+
+    if (shouldRefreshVisibleData) {
+      const snapshots = await scanRuntimeOverlaySnapshots()
+      const [nextOverlaySummary, nextWorkspaces] = await Promise.all([
+        buildOverlaySummary(snapshots),
+        Promise.resolve(buildWorkspaceNavigation(snapshots))
+      ])
+
+      const nextOverlaySummarySerialized = serializeOverlaySummaryForChangeDetection(nextOverlaySummary)
+      if (nextOverlaySummarySerialized !== lastOverlaySummarySerialized) {
+        currentOverlaySummary = nextOverlaySummary
+        lastOverlaySummarySerialized = nextOverlaySummarySerialized
+        emitOverlaySummaryChanged(nextOverlaySummary)
+      }
+
+      const nextWorkspacesSerialized = JSON.stringify(nextWorkspaces)
+      if (nextWorkspacesSerialized !== lastWorkspacesSerialized) {
+        currentWorkspaces = nextWorkspaces
+        lastWorkspacesSerialized = nextWorkspacesSerialized
+        emitWorkspacesChanged(nextWorkspaces)
+      } else {
+        currentWorkspaces = nextWorkspaces
+      }
+    }
+
     const latestVisibleControlKey = getRuntimeOverlayControlKey(latestVisibleControl)
     latestVisibleRuntimeOverlayControlKey = latestVisibleControlKey
     if (latestVisibleControl) {
       if (suppressedRuntimeOverlayControlKey === latestVisibleControlKey) {
         return
       }
-      showOverlayWindow(getDesktopOverlayState().mode, 'runtime')
+      const overlayWindow = currentOverlayWindow
+      const overlayWindowVisible =
+        overlayWindow !== null &&
+        !overlayWindow.isDestroyed() &&
+        overlayWindow.isVisible()
+
+      if (!overlayWindowVisible || overlayWindowVisibilitySource !== 'runtime') {
+        showOverlayWindow(getDesktopOverlayState().mode, 'runtime')
+      }
     } else if (overlayWindowVisibilitySource === 'runtime') {
       closeOverlayWindow()
     }
@@ -249,6 +340,15 @@ async function refreshDesktopRuntimeData(): Promise<void> {
     }
   } finally {
     runtimeRefreshInFlight = false
+    const queuedMode = queuedRuntimeRefreshMode
+    queuedRuntimeRefreshMode = null
+
+    if (queuedMode) {
+      requestRuntimeRefresh(queuedMode)
+      return
+    }
+
+    scheduleRuntimeRefresh()
   }
 }
 
@@ -388,6 +488,19 @@ function createBoardWindow(): BrowserWindow {
   boardWindow.on('closed', () => {
     if (currentBoardWindow === boardWindow) currentBoardWindow = null
     syncMacosActivationPolicyForCurrentWindows()
+    scheduleRuntimeRefresh()
+  })
+
+  boardWindow.on('minimize', () => {
+    scheduleRuntimeRefresh()
+  })
+
+  boardWindow.on('hide', () => {
+    scheduleRuntimeRefresh()
+  })
+
+  boardWindow.on('restore', () => {
+    requestRuntimeRefresh('full')
   })
 
   boardWindow.on('focus', () => {
@@ -531,6 +644,11 @@ function createOverlayWindow(_mode: DesktopOverlayMode, bounds: DesktopBounds): 
     lastOverlayWorkspaceVisibilityKey = null
     overlayWindowVisibilitySource = null
     syncMacosActivationPolicyForCurrentWindows()
+    scheduleRuntimeRefresh()
+  })
+
+  overlayWindow.on('hide', () => {
+    scheduleRuntimeRefresh()
   })
 
   overlayWindow.on('moved', () => {
@@ -574,6 +692,7 @@ function showBoardWindow(): void {
   boardWindow.show()
   boardWindow.focus()
   syncMacosActivationPolicyForCurrentWindows()
+  requestRuntimeRefresh('full')
 }
 
 function handleDesktopLaunchIntent(intent: DesktopLaunchIntent): void {
@@ -611,6 +730,11 @@ function showOverlayWindow(
     keepDesktopShellResident = true
   }
   syncMacosActivationPolicyForCurrentWindows()
+  if (source === 'manual') {
+    requestRuntimeRefresh('full')
+  } else {
+    scheduleRuntimeRefresh()
+  }
 
   nextOverlayState = saveDesktopOverlayState({
     ...nextOverlayState,
@@ -631,6 +755,7 @@ function closeOverlayWindow(): void {
 
   overlayWindowVisibilitySource = null
   syncMacosActivationPolicyForCurrentWindows()
+  scheduleRuntimeRefresh()
 }
 
 function resizeOverlayWindow(height: number): DesktopOverlayState {
@@ -779,15 +904,12 @@ app.whenReady().then(async () => {
   ipcMain.handle(DESKTOP_IPC_CHANNELS.archiveChange, async (_event, workspacePath: string, changeId: string) => {
     const archived = await archiveChange(workspacePath, changeId)
     if (archived) {
-      await refreshDesktopRuntimeData()
+      await refreshDesktopRuntimeData('full')
     }
     return archived
   })
 
-  await refreshDesktopRuntimeData()
-  runtimeRefreshTimer = setInterval(() => {
-    void refreshDesktopRuntimeData()
-  }, 1000)
+  await refreshDesktopRuntimeData('full')
 
   handleDesktopLaunchIntent(pendingLaunchIntent ?? initialLaunchIntent)
   pendingLaunchIntent = null
@@ -816,8 +938,5 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isQuitting = true
-  if (runtimeRefreshTimer) {
-    clearInterval(runtimeRefreshTimer)
-    runtimeRefreshTimer = null
-  }
+  clearRuntimeRefreshTimer()
 })
