@@ -87,7 +87,7 @@ test('macOS bundle launch plan opens the app bundle without forcing a new instan
   assert.deepEqual(plan, {
     mode: 'open_bundle',
     command: '/usr/bin/open',
-    args: ['-a', '/Applications/Superplan Overlay Desktop.app', '--args', '--overlay', '--workspace', '/tmp/workspace'],
+    args: ['-a', '/Applications/Superplan Overlay Desktop.app', '--args', '--board', '--workspace', '/tmp/workspace'],
   });
   assert.equal(plan.args.includes('-n'), false);
 });
@@ -288,6 +288,10 @@ Show the current task description in the overlay
   assert.equal(ensurePayload.data.reason, 'disabled');
 
   const snapshot = await readJson(getOverlayRuntimePathsForSandbox(sandbox).snapshot_path);
+  assert.equal(snapshot.project_name, path.basename(realWorkspacePath));
+  assert.equal(snapshot.project_path, realWorkspacePath);
+  assert.equal(typeof snapshot.project_id, 'string');
+  assert.equal(snapshot.project_id.length, 10);
   assert.equal(snapshot.workspace_path, realWorkspacePath);
   assert.equal(snapshot.active_task, null);
   assert.deepEqual(snapshot.board.in_progress, []);

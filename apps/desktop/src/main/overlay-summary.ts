@@ -37,8 +37,8 @@ function primaryStatusPriority(status: DesktopOverlayItemStatus): number {
   }
 }
 
-function workspaceIdForPath(workspacePath: string): string {
-  return path.basename(workspacePath).toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'workspace-root'
+function workspaceIdForSnapshot(snapshot: RuntimeOverlaySnapshot): string {
+  return snapshot.project_id || path.basename(snapshot.project_path).toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'workspace-root'
 }
 
 function getOverlayItemCacheKey(workspacePath: string, changeId: string): string {
@@ -89,9 +89,9 @@ function previewForTrackedChange(
 }
 
 function summarizeTrackedChange(
-  workspacePath: string,
+  runtimeSnapshot: RuntimeOverlaySnapshot,
   change: RuntimeOverlayTrackedChange,
-  snapshot: DesktopChangeSnapshot | null
+  detailedSnapshot: DesktopChangeSnapshot | null
 ): DesktopOverlayItem | null {
   let status: DesktopOverlayItemStatus
   let statusLabel: string
@@ -119,14 +119,14 @@ function summarizeTrackedChange(
   }
 
   return {
-    workspaceId: workspaceIdForPath(workspacePath),
-    workspaceName: path.basename(workspacePath),
-    workspacePath,
+    workspaceId: workspaceIdForSnapshot(runtimeSnapshot),
+    workspaceName: runtimeSnapshot.project_name,
+    workspacePath: runtimeSnapshot.project_path,
     changeId: change.change_id,
     changeTitle: change.title,
     status,
     statusLabel,
-    preview: previewForTrackedChange(change, snapshot),
+    preview: previewForTrackedChange(change, detailedSnapshot),
     taskDone: change.task_done,
     taskTotal: change.task_total,
     updatedAt: change.updated_at,
@@ -164,13 +164,13 @@ export async function buildOverlaySummary(
   }
 
   const seenCacheKeys = new Set<string>()
-  const items = (
+  const rawItems = (
     await Promise.all(
       snapshots.flatMap((snapshot) =>
         snapshot.tracked_changes
           .filter(shouldRenderTrackedChange)
           .map(async (change) => {
-            const cacheKey = getOverlayItemCacheKey(snapshot.workspace_path, change.change_id)
+            const cacheKey = getOverlayItemCacheKey(snapshot.project_id, change.change_id)
             const nextRevision = getOverlayItemRevision(change)
             const cached = overlayItemCache.get(cacheKey)
             seenCacheKeys.add(cacheKey)
@@ -182,12 +182,12 @@ export async function buildOverlaySummary(
             let detailedSnapshot: DesktopChangeSnapshot | null = null
 
             try {
-              detailedSnapshot = await getChangeSnapshot(snapshot.workspace_path, change.change_id)
+              detailedSnapshot = await getChangeSnapshot(snapshot.project_path, change.change_id)
             } catch {
               detailedSnapshot = null
             }
 
-            const item = summarizeTrackedChange(snapshot.workspace_path, change, detailedSnapshot)
+            const item = summarizeTrackedChange(snapshot, change, detailedSnapshot)
             overlayItemCache.set(cacheKey, {
               revision: nextRevision,
               item
@@ -198,7 +198,17 @@ export async function buildOverlaySummary(
     )
   )
     .filter((item): item is DesktopOverlayItem => item !== null)
-    .sort((left, right) => {
+
+  const dedupedItems = new Map<string, DesktopOverlayItem>()
+  for (const item of rawItems) {
+    const dedupeKey = `${item.workspaceId}::${item.changeId}`
+    const existing = dedupedItems.get(dedupeKey)
+    if (!existing || item.updatedAt > existing.updatedAt) {
+      dedupedItems.set(dedupeKey, item)
+    }
+  }
+
+  const items = [...dedupedItems.values()].sort((left, right) => {
       const priorityDelta = primaryStatusPriority(left.status) - primaryStatusPriority(right.status)
       if (priorityDelta !== 0) return priorityDelta
       return right.updatedAt.localeCompare(left.updatedAt)

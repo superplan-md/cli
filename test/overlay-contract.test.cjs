@@ -16,23 +16,40 @@ test('overlay snapshot factory supplies stable defaults', () => {
     updated_at: '2026-03-19T21:30:00.000Z',
   });
 
-  assert.deepEqual(snapshot, {
-    workspace_path: '/tmp/workspace',
-    session_id: 'session-123',
-    updated_at: '2026-03-19T21:30:00.000Z',
-    tracked_changes: [],
-    focused_change: null,
-    active_task: null,
-    board: {
-      in_progress: [],
-      backlog: [],
-      done: [],
-      blocked: [],
-      needs_feedback: [],
+  assert.equal(snapshot.project_name, 'workspace');
+  assert.equal(snapshot.project_path, '/tmp/workspace');
+  assert.equal(typeof snapshot.project_id, 'string');
+  assert.equal(snapshot.project_id.length, 10);
+  assert.deepEqual(
+    {
+      workspace_path: snapshot.workspace_path,
+      session_id: snapshot.session_id,
+      updated_at: snapshot.updated_at,
+      tracked_changes: snapshot.tracked_changes,
+      focused_change: snapshot.focused_change,
+      active_task: snapshot.active_task,
+      board: snapshot.board,
+      attention_state: snapshot.attention_state,
+      events: snapshot.events,
     },
-    attention_state: 'normal',
-    events: [],
-  });
+    {
+      workspace_path: '/tmp/workspace',
+      session_id: 'session-123',
+      updated_at: '2026-03-19T21:30:00.000Z',
+      tracked_changes: [],
+      focused_change: null,
+      active_task: null,
+      board: {
+        in_progress: [],
+        backlog: [],
+        done: [],
+        blocked: [],
+        needs_feedback: [],
+      },
+      attention_state: 'normal',
+      events: [],
+    },
+  );
 });
 
 test('overlay snapshot factory preserves explicit event and board payloads', () => {
@@ -80,23 +97,39 @@ test('overlay snapshot factory preserves explicit event and board payloads', () 
     events: [feedbackEvent],
   });
 
-  assert.deepEqual(snapshot, {
-    workspace_path: '/tmp/workspace',
-    session_id: 'session-123',
-    updated_at: '2026-03-19T21:30:00.000Z',
-    tracked_changes: [focusedChange],
-    focused_change: focusedChange,
-    active_task: activeTask,
-    board: {
-      in_progress: [activeTask],
-      backlog: [],
-      done: [],
-      blocked: [],
-      needs_feedback: [],
+  assert.equal(snapshot.project_name, 'workspace');
+  assert.equal(snapshot.project_path, '/tmp/workspace');
+  assert.equal(typeof snapshot.project_id, 'string');
+  assert.deepEqual(
+    {
+      workspace_path: snapshot.workspace_path,
+      session_id: snapshot.session_id,
+      updated_at: snapshot.updated_at,
+      tracked_changes: snapshot.tracked_changes,
+      focused_change: snapshot.focused_change,
+      active_task: snapshot.active_task,
+      board: snapshot.board,
+      attention_state: snapshot.attention_state,
+      events: snapshot.events,
     },
-    attention_state: 'needs_feedback',
-    events: [feedbackEvent],
-  });
+    {
+      workspace_path: '/tmp/workspace',
+      session_id: 'session-123',
+      updated_at: '2026-03-19T21:30:00.000Z',
+      tracked_changes: [focusedChange],
+      focused_change: focusedChange,
+      active_task: activeTask,
+      board: {
+        in_progress: [activeTask],
+        backlog: [],
+        done: [],
+        blocked: [],
+        needs_feedback: [],
+      },
+      attention_state: 'needs_feedback',
+      events: [feedbackEvent],
+    },
+  );
 });
 
 test('overlay runtime paths live under global workspace-scoped runtime storage', () => {
