@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises'
 import * as os from 'os'
 import * as path from 'path'
+import { resolveProjectIdentity } from '../../../../src/cli/project-identity'
 
 export interface RuntimeOverlayTrackedChange {
   change_id: string
@@ -14,6 +15,9 @@ export interface RuntimeOverlayTrackedChange {
 }
 
 export interface RuntimeOverlaySnapshot {
+  project_id: string
+  project_name: string
+  project_path: string
   workspace_path: string
   updated_at: string
   tracked_changes: RuntimeOverlayTrackedChange[]
@@ -27,6 +31,19 @@ async function pathExists(targetPath: string): Promise<boolean> {
     return true
   } catch {
     return false
+  }
+}
+
+function deriveProjectIdentity(workspacePath: string): Pick<
+  RuntimeOverlaySnapshot,
+  'project_id' | 'project_name' | 'project_path'
+> {
+  const projectIdentity = resolveProjectIdentity(workspacePath)
+  const projectPath = projectIdentity.project_root
+  return {
+    project_id: projectIdentity.project_id,
+    project_name: path.basename(projectPath) || 'root',
+    project_path: projectPath
   }
 }
 
@@ -47,7 +64,19 @@ async function readOverlaySnapshot(runtimeEntryDir: string): Promise<RuntimeOver
       return null
     }
 
+    const projectIdentity =
+      typeof parsed.project_id === 'string' &&
+      typeof parsed.project_name === 'string' &&
+      typeof parsed.project_path === 'string'
+        ? {
+            project_id: parsed.project_id,
+            project_name: parsed.project_name,
+            project_path: parsed.project_path
+          }
+        : deriveProjectIdentity(parsed.workspace_path)
+
     return {
+      ...projectIdentity,
       workspace_path: parsed.workspace_path,
       updated_at: parsed.updated_at,
       tracked_changes: parsed.tracked_changes.filter(

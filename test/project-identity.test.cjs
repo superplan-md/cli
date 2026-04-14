@@ -6,6 +6,7 @@ const { spawnSync } = require('node:child_process');
 
 const {
   getSuperplanRoot,
+  loadDistModule,
   makeSandbox,
   parseCliJson,
   pathExists,
@@ -44,6 +45,12 @@ test('linked git worktrees share the same Superplan project state root', async (
   const mainRoot = getSuperplanRoot(sandbox, sandbox.cwd);
   const linkedRoot = getSuperplanRoot(sandbox, linkedWorktreePath);
   assert.equal(mainRoot, linkedRoot);
+
+  const { resolveProjectIdentity } = loadDistModule('cli/project-identity.js');
+  const mainIdentity = resolveProjectIdentity(sandbox.cwd);
+  const linkedIdentity = resolveProjectIdentity(linkedWorktreePath);
+  assert.equal(await fs.realpath(mainIdentity.project_root), await fs.realpath(sandbox.cwd));
+  assert.equal(await fs.realpath(linkedIdentity.project_root), await fs.realpath(sandbox.cwd));
 
   await fs.mkdir(path.join(mainRoot, 'changes'), { recursive: true });
   const payload = parseCliJson(await runCli([

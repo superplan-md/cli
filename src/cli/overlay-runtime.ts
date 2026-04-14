@@ -19,6 +19,7 @@ import {
 import { loadChangeGraph } from './graph';
 import { getTaskRef, toQualifiedTaskId } from './task-identity';
 import { formatTitleFromSlug } from './commands/scaffold';
+import { resolveProjectIdentity } from './project-identity';
 import { resolveSuperplanRoot, resolveWorkspaceRoot } from './workspace-root';
 
 type TaskPriority = 'high' | 'medium' | 'low';
@@ -371,6 +372,7 @@ export async function refreshOverlaySnapshot(
   options: RefreshOverlaySnapshotOptions = {},
 ): Promise<{ paths: OverlayRuntimePaths; snapshot: OverlaySnapshot }> {
   const workspacePath = options.workspacePath ?? resolveWorkspaceRoot();
+  const projectIdentity = resolveProjectIdentity(workspacePath);
   const paths = getOverlayRuntimePaths(workspacePath);
   const timestamp = new Date().toISOString();
   const previousSnapshot = await readOverlaySnapshot(paths);
@@ -389,6 +391,9 @@ export async function refreshOverlaySnapshot(
   };
 
   const snapshot = createOverlaySnapshot({
+    project_id: projectIdentity.project_id,
+    project_name: path.basename(projectIdentity.project_root) || path.basename(workspacePath) || 'root',
+    project_path: projectIdentity.project_root,
     workspace_path: workspacePath,
     session_id: `workspace:${workspacePath}`,
     updated_at: timestamp,

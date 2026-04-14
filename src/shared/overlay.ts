@@ -67,6 +67,9 @@ export interface OverlayEvent {
 }
 
 export interface OverlaySnapshot {
+  project_id: string;
+  project_name: string;
+  project_path: string;
   workspace_path: string;
   session_id: string;
   updated_at: string;
@@ -85,6 +88,9 @@ export interface OverlayRuntimePaths {
 }
 
 export interface CreateOverlaySnapshotInput {
+  project_id?: string;
+  project_name?: string;
+  project_path?: string;
   workspace_path: string;
   session_id: string;
   updated_at: string;
@@ -116,14 +122,16 @@ function sanitizeSegment(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 }
 
+function normalizeExistingPath(targetPath: string): string {
+  try {
+    return fs.realpathSync(targetPath);
+  } catch {
+    return path.resolve(targetPath);
+  }
+}
+
 export function getWorkspaceOverlayKey(workspacePath: string): string {
-  const normalizedWorkspacePath = (() => {
-    try {
-      return fs.realpathSync(workspacePath);
-    } catch {
-      return path.resolve(workspacePath);
-    }
-  })();
+  const normalizedWorkspacePath = normalizeExistingPath(workspacePath);
   const workspaceName = sanitizeSegment(path.basename(normalizedWorkspacePath)) || 'root';
   const workspaceHash = createHash('sha1').update(normalizedWorkspacePath).digest('hex').slice(0, 10);
   return `workspace-${workspaceName}-${workspaceHash}`;
@@ -157,8 +165,16 @@ function cloneTrackedChanges(trackedChanges: OverlayTrackedChange[] | undefined)
 
 export function createOverlaySnapshot(input: CreateOverlaySnapshotInput): OverlaySnapshot {
   const board = input.board ?? {};
+  const normalizedWorkspacePath = normalizeExistingPath(input.workspace_path);
+  const projectPath = normalizeExistingPath(input.project_path ?? normalizedWorkspacePath);
+  const projectName = input.project_name?.trim() || path.basename(projectPath) || path.basename(normalizedWorkspacePath) || 'root';
+  const projectId = input.project_id?.trim()
+    || createHash('sha1').update(projectPath).digest('hex').slice(0, 10);
 
   return {
+    project_id: projectId,
+    project_name: projectName,
+    project_path: projectPath,
     workspace_path: input.workspace_path,
     session_id: input.session_id,
     updated_at: input.updated_at,

@@ -41,28 +41,57 @@ function toDesktopChange(change: RuntimeOverlayTrackedChange): DesktopChangeNavi
   }
 }
 
+function getWorkspaceRootLabel(workspacePath: string, homeDir: string): string {
+  return workspacePath.startsWith(homeDir)
+    ? path.relative(homeDir, workspacePath)
+    : workspacePath
+}
+
 export function buildWorkspaceNavigation(
   snapshots: RuntimeOverlaySnapshot[]
 ): DesktopWorkspaceNavigationItem[] {
   const homeDir = os.homedir()
-  const workspaces = snapshots.map((snapshot) => {
-    const workspacePath = snapshot.workspace_path
-    const changes = snapshot.tracked_changes
-      .filter(shouldRenderTrackedChange)
-      .map(toDesktopChange)
-      .sort((a, b) => b.lastActiveAt.localeCompare(a.lastActiveAt))
+  const workspacesByProjectId = new Map<
+    string,
+    DesktopWorkspaceNavigationItem & { changeMap: Map<string, DesktopChangeNavigationItem> }
+  >()
 
-    return {
-      id: path.basename(workspacePath).toLowerCase().replace(/[^a-z0-9]/g, '-') || 'workspace-root',
-      name: path.basename(workspacePath),
-      rootLabel: workspacePath.startsWith(homeDir)
-        ? path.relative(homeDir, workspacePath)
-        : workspacePath,
-      path: workspacePath,
-      lastActiveAt: snapshot.updated_at,
-      changes
-    } satisfies DesktopWorkspaceNavigationItem
-  })
+  for (const snapshot of snapshots) {
+    const existingWorkspace = workspacesByProjectId.get(snapshot.project_id)
+    const nextWorkspace =
+      existingWorkspace
+      ?? {
+        id: snapshot.project_id,
+        name: snapshot.project_name,
+        rootLabel: getWorkspaceRootLabel(snapshot.project_path, homeDir),
+        path: snapshot.project_path,
+        lastActiveAt: snapshot.updated_at,
+        changes: [],
+        changeMap: new Map<string, DesktopChangeNavigationItem>()
+      }
+
+    if (snapshot.updated_at > nextWorkspace.lastActiveAt) {
+      nextWorkspace.lastActiveAt = snapshot.updated_at
+    }
+
+    for (const change of snapshot.tracked_changes.filter(shouldRenderTrackedChange).map(toDesktopChange)) {
+      const currentChange = nextWorkspace.changeMap.get(change.id)
+      if (!currentChange || change.lastActiveAt > currentChange.lastActiveAt) {
+        nextWorkspace.changeMap.set(change.id, change)
+      }
+    }
+
+    workspacesByProjectId.set(snapshot.project_id, nextWorkspace)
+  }
+
+  const workspaces = [...workspacesByProjectId.values()].map((workspace) => ({
+    id: workspace.id,
+    name: workspace.name,
+    rootLabel: workspace.rootLabel,
+    path: workspace.path,
+    lastActiveAt: workspace.lastActiveAt,
+    changes: [...workspace.changeMap.values()].sort((a, b) => b.lastActiveAt.localeCompare(a.lastActiveAt))
+  } satisfies DesktopWorkspaceNavigationItem))
 
   workspaces.sort((a, b) => b.lastActiveAt.localeCompare(a.lastActiveAt))
   return workspaces

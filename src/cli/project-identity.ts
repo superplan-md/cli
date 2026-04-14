@@ -89,6 +89,7 @@ function migrateLegacyProjectState(projectStateRoot: string, legacyStateRoot: st
 export interface ProjectIdentity {
   start_dir: string;
   workspace_root: string;
+  project_root: string;
   legacy_state_root: string;
   project_id: string;
   project_dir_name: string;
@@ -125,6 +126,9 @@ export function resolveProjectIdentity(startDir = process.cwd()): ProjectIdentit
   const gitCommonDir = resolveGitPath(workspaceRoot, '--git-common-dir');
   const isGitRepo = gitDir !== null && gitCommonDir !== null;
   const identitySource = gitCommonDir ?? workspaceRoot;
+  const projectRoot = gitCommonDir && path.basename(gitCommonDir) === '.git'
+    ? normalizeRealPath(path.dirname(gitCommonDir))
+    : workspaceRoot;
   const projectHash = createHash('sha1').update(identitySource).digest('hex').slice(0, 10);
   const projectName = getProjectNameFromIdentitySource(identitySource, workspaceRoot);
   const projectDirName = `project-${projectName}-${projectHash}`;
@@ -136,6 +140,7 @@ export function resolveProjectIdentity(startDir = process.cwd()): ProjectIdentit
   return {
     start_dir: resolveStartDir(startDir),
     workspace_root: workspaceRoot,
+    project_root: projectRoot,
     legacy_state_root: legacyStateRoot,
     project_id: projectHash,
     project_dir_name: projectDirName,
