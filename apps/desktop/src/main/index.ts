@@ -24,8 +24,7 @@ import {
   getDesktopOverlayState,
   saveDesktopLayoutState,
   saveDesktopOverlayState,
-  updateDesktopConfig,
-  updateDesktopOverlayMode
+  updateDesktopConfig
 } from './desktop-store'
 import {
   readGlobalOverlayPreference,
@@ -63,10 +62,8 @@ let lastWorkspacesSerialized = JSON.stringify(currentWorkspaces)
 let runtimeRefreshTimer: NodeJS.Timeout | null = null
 let runtimeRefreshInFlight = false
 let queuedRuntimeRefreshMode: RuntimeRefreshMode | null = null
-let overlayWindowVisibilitySource: 'manual' | 'runtime' | null = null
 let latestVisibleRuntimeOverlayControlKey: string | null = null
 let suppressedRuntimeOverlayControlKey: string | null = null
-let lastOverlayWorkspaceVisibilityKey: string | null = null
 let keepDesktopShellResident = false
 let isQuitting = false
 let currentActivationPolicy: 'regular' | 'accessory' | null = null
@@ -100,12 +97,10 @@ function readCliFlagValue(argv: string[], flag: string): string | null {
 
 function parseDesktopLaunchIntent(argv: string[]): DesktopLaunchIntent {
   const workspacePath = readCliFlagValue(argv, '--workspace')
-  let surface: DesktopLaunchSurface = workspacePath ? 'overlay' : 'board'
+  let surface: DesktopLaunchSurface = 'board'
 
   if (argv.includes('--board')) {
     surface = 'board'
-  } else if (argv.includes('--overlay')) {
-    surface = 'overlay'
   }
 
   return {
@@ -117,7 +112,7 @@ function parseDesktopLaunchIntent(argv: string[]): DesktopLaunchIntent {
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 const initialLaunchIntent = parseDesktopLaunchIntent(process.argv)
 let pendingLaunchIntent: DesktopLaunchIntent | null = initialLaunchIntent
-keepDesktopShellResident = initialLaunchIntent.surface === 'overlay'
+keepDesktopShellResident = false
 
 function serializeOverlaySummaryForChangeDetection(summary: DesktopOverlaySummary): string {
   return JSON.stringify({
@@ -322,16 +317,13 @@ async function refreshDesktopRuntimeData(mode: RuntimeRefreshMode = 'full'): Pro
       if (suppressedRuntimeOverlayControlKey === latestVisibleControlKey) {
         return
       }
-      const overlayWindow = currentOverlayWindow
-      const overlayWindowVisible =
-        overlayWindow !== null &&
-        !overlayWindow.isDestroyed() &&
-        overlayWindow.isVisible()
-
-      if (!overlayWindowVisible || overlayWindowVisibilitySource !== 'runtime') {
-        showOverlayWindow(getDesktopOverlayState().mode, 'runtime')
+      if (!currentBoardWindow || currentBoardWindow.isDestroyed() || !currentBoardWindow.isVisible()) {
+        showBoardWindow()
       }
-    } else if (overlayWindowVisibilitySource === 'runtime') {
+      if (currentOverlayWindow && !currentOverlayWindow.isDestroyed()) {
+        closeOverlayWindow()
+      }
+    } else if (currentOverlayWindow && !currentOverlayWindow.isDestroyed()) {
       closeOverlayWindow()
     }
 
@@ -397,53 +389,6 @@ function getDesiredMacosActivationPolicy(): 'regular' | 'accessory' {
 
 function syncMacosActivationPolicyForCurrentWindows(): void {
   syncMacosActivationPolicy(getDesiredMacosActivationPolicy())
-}
-
-function getOverlayWorkspaceVisibilityOptions() {
-  if (process.platform !== 'darwin') {
-    return undefined
-  }
-
-  const boardWindowOpen = Boolean(currentBoardWindow && !currentBoardWindow.isDestroyed())
-  const skipTransformProcessType = !boardWindowOpen && currentActivationPolicy === 'accessory'
-
-  return {
-    visibleOnFullScreen: true,
-    // Electron only allows skipping the process-type transform when the app is
-    // already operating as an accessory/UIElement app. When the board keeps the
-    // app in regular mode, the transform is required for fullscreen visibility.
-    skipTransformProcessType
-  }
-}
-
-function applyOverlayWorkspaceVisibility(overlayWindow: BrowserWindow): void {
-  if (process.platform !== 'darwin') {
-    return
-  }
-
-  const options = getOverlayWorkspaceVisibilityOptions()
-  if (!options) {
-    return
-  }
-
-  const visibilityKey = `${overlayWindow.id}:${options.skipTransformProcessType ? 'skip' : 'transform'}`
-  if (
-    lastOverlayWorkspaceVisibilityKey === visibilityKey &&
-    overlayWindow.isVisibleOnAllWorkspaces()
-  ) {
-    return
-  }
-
-  overlayWindow.setVisibleOnAllWorkspaces(true, options)
-  lastOverlayWorkspaceVisibilityKey = visibilityKey
-}
-
-function applyOverlayWindowLevel(overlayWindow: BrowserWindow): void {
-  // macOS: window level and workspace visibility are applied after show() in ready-to-show
-  // This is required for visibleOnFullScreen to work correctly
-  if (process.platform !== 'darwin') {
-    overlayWindow.setAlwaysOnTop(true)
-  }
 }
 
 function applyNativeThemeSource(): void {
@@ -545,130 +490,6 @@ function createBoardWindow(): BrowserWindow {
   return boardWindow
 }
 
-function cardSizeBounds(): DesktopBounds {
-  const area = screen.getPrimaryDisplay().workArea
-  return {
-    width: 336,
-    height: 150,
-    x: area.x + 20,
-    y: area.y + 20
-  }
-}
-
-function chipSizeBounds(): DesktopBounds {
-  const area = screen.getPrimaryDisplay().workArea
-  return {
-    width: 130,
-    height: 32,
-    x: area.x + 20,
-    y: area.y + 20
-  }
-}
-
-function overlayBoundsForMode(
-  state: DesktopOverlayState,
-  mode: DesktopOverlayMode,
-  anchor?: Pick<DesktopBounds, 'x' | 'y'>
-): DesktopBounds {
-  const persisted = mode === 'card' ? state.cardBounds : state.chipBounds
-  const fallback = mode === 'card' ? cardSizeBounds() : chipSizeBounds()
-  const sizedPersisted = persisted
-    ? {
-        ...persisted,
-        width: fallback.width,
-        height: mode === 'card' ? persisted.height : fallback.height
-      }
-    : null
-
-  if (anchor) {
-    return clampBounds({
-      ...fallback,
-      x: anchor.x,
-      y: anchor.y
-    })
-  }
-
-  return clampBounds(sizedPersisted ?? fallback)
-}
-
-function persistOverlayBounds(window: BrowserWindow, mode: DesktopOverlayMode): DesktopOverlayState {
-  const overlayState = getDesktopOverlayState()
-  const bounds = window.getBounds()
-
-  return saveDesktopOverlayState({
-    ...overlayState,
-    mode,
-    cardBounds: mode === 'card' ? bounds : overlayState.cardBounds,
-    chipBounds: mode === 'chip' ? bounds : overlayState.chipBounds
-  })
-}
-
-function createOverlayWindow(_mode: DesktopOverlayMode, bounds: DesktopBounds): BrowserWindow {
-  const overlayWindow = new BrowserWindow({
-    ...bounds,
-    show: false,
-    frame: false,
-    transparent: true,
-    backgroundColor: '#00000000',
-    resizable: false,
-    maximizable: false,
-    minimizable: false,
-    fullscreenable: false,
-    skipTaskbar: true,
-    hasShadow: false,
-    ...(process.platform === 'darwin'
-      ? {
-          type: 'floating' as const,
-          vibrancy: 'sidebar' as const,
-          visualEffectState: 'active' as const
-        }
-      : {}),
-    ...(process.platform === 'linux' ? { icon } : {}),
-    webPreferences: createCommonWebPreferences()
-  })
-
-  currentOverlayWindow = overlayWindow
-  applyOverlayWindowLevel(overlayWindow)
-
-  overlayWindow.on('ready-to-show', () => {
-    if (process.platform === 'darwin') {
-      syncMacosActivationPolicyForCurrentWindows()
-      applyOverlayWorkspaceVisibility(overlayWindow)
-      overlayWindow.setAlwaysOnTop(true, 'screen-saver')
-    }
-    overlayWindow.showInactive()
-  })
-
-  overlayWindow.on('closed', () => {
-    if (currentOverlayWindow === overlayWindow) currentOverlayWindow = null
-    lastOverlayWorkspaceVisibilityKey = null
-    overlayWindowVisibilitySource = null
-    syncMacosActivationPolicyForCurrentWindows()
-    scheduleRuntimeRefresh()
-  })
-
-  overlayWindow.on('hide', () => {
-    scheduleRuntimeRefresh()
-  })
-
-  overlayWindow.on('moved', () => {
-    if (currentOverlayWindow === overlayWindow) {
-      persistOverlayBounds(overlayWindow, getDesktopOverlayState().mode)
-    }
-  })
-
-  overlayWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
-
-  applyRendererUrl(overlayWindow, 'overlay')
-  overlayWindow.webContents.once('did-finish-load', () => {
-    emitCurrentDesktopData(overlayWindow)
-  })
-  return overlayWindow
-}
-
 function ensureBoardWindow(): BrowserWindow {
   if (currentBoardWindow && !currentBoardWindow.isDestroyed()) {
     return currentBoardWindow
@@ -677,16 +498,12 @@ function ensureBoardWindow(): BrowserWindow {
   return createBoardWindow()
 }
 
-function ensureOverlayWindow(mode: DesktopOverlayMode): BrowserWindow {
-  if (currentOverlayWindow && !currentOverlayWindow.isDestroyed()) {
-    return currentOverlayWindow
-  }
-
-  return createOverlayWindow(mode, overlayBoundsForMode(getDesktopOverlayState(), mode))
-}
-
 function showBoardWindow(): void {
   syncMacosActivationPolicy('regular')
+  if (currentOverlayWindow && !currentOverlayWindow.isDestroyed()) {
+    currentOverlayWindow.close()
+  }
+
   const boardWindow = ensureBoardWindow()
   if (boardWindow.isMinimized()) boardWindow.restore()
   boardWindow.show()
@@ -695,54 +512,8 @@ function showBoardWindow(): void {
   requestRuntimeRefresh('full')
 }
 
-function handleDesktopLaunchIntent(intent: DesktopLaunchIntent): void {
-  if (intent.surface === 'overlay') {
-    showOverlayWindow(getDesktopOverlayState().mode, 'runtime')
-    return
-  }
-
+function handleDesktopLaunchIntent(_intent: DesktopLaunchIntent): void {
   showBoardWindow()
-}
-
-function showOverlayWindow(
-  mode: DesktopOverlayMode,
-  source: 'manual' | 'runtime' = 'manual'
-): DesktopOverlayState {
-  if (source === 'manual') {
-    suppressedRuntimeOverlayControlKey = null
-  }
-
-  const anchor = currentOverlayWindow && !currentOverlayWindow.isDestroyed()
-    ? currentOverlayWindow.getBounds()
-    : undefined
-  let nextOverlayState = updateDesktopOverlayMode(mode)
-  const overlayWindow = ensureOverlayWindow(mode)
-  const bounds = overlayBoundsForMode(nextOverlayState, mode, anchor)
-  overlayWindow.setBounds(bounds)
-
-  if (process.platform === 'darwin') {
-    applyOverlayWorkspaceVisibility(overlayWindow)
-    overlayWindow.setAlwaysOnTop(true, 'screen-saver')
-  }
-  overlayWindow.showInactive()
-  overlayWindowVisibilitySource = source
-  if (source === 'runtime') {
-    keepDesktopShellResident = true
-  }
-  syncMacosActivationPolicyForCurrentWindows()
-  if (source === 'manual') {
-    requestRuntimeRefresh('full')
-  } else {
-    scheduleRuntimeRefresh()
-  }
-
-  nextOverlayState = saveDesktopOverlayState({
-    ...nextOverlayState,
-    mode,
-    cardBounds: mode === 'card' ? bounds : nextOverlayState.cardBounds,
-    chipBounds: mode === 'chip' ? bounds : nextOverlayState.chipBounds
-  })
-  return nextOverlayState
 }
 
 function closeOverlayWindow(): void {
@@ -753,7 +524,6 @@ function closeOverlayWindow(): void {
     return
   }
 
-  overlayWindowVisibilitySource = null
   syncMacosActivationPolicyForCurrentWindows()
   scheduleRuntimeRefresh()
 }
@@ -848,7 +618,10 @@ app.whenReady().then(async () => {
 
   ipcMain.handle(DESKTOP_IPC_CHANNELS.setOverlayMode, (_, mode) => {
     const nextMode = DesktopOverlayModeSchema.parse(mode)
-    return showOverlayWindow(nextMode, overlayWindowVisibilitySource ?? 'manual')
+    return saveDesktopOverlayState({
+      ...getDesktopOverlayState(),
+      mode: nextMode
+    })
   })
 
   ipcMain.handle(DESKTOP_IPC_CHANNELS.getOverlaySummary, () => {
@@ -856,7 +629,12 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.handle(DESKTOP_IPC_CHANNELS.openOverlay, (_, mode?: DesktopOverlayMode) => {
-    return showOverlayWindow(mode ?? getDesktopOverlayState().mode, 'manual')
+    const nextMode = mode ?? getDesktopOverlayState().mode
+    showBoardWindow()
+    return saveDesktopOverlayState({
+      ...getDesktopOverlayState(),
+      mode: nextMode
+    })
   })
 
   ipcMain.handle(DESKTOP_IPC_CHANNELS.closeOverlay, () => {

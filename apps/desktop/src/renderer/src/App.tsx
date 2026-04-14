@@ -255,6 +255,16 @@ function App(): React.JSX.Element {
     setActiveChangeId(changeId)
   }
 
+  function handleOpenBoardAtChange(workspaceId: string, changeId: string): void {
+    if (workspaceId !== config.activeWorkspaceId) {
+      mergeConfig({ activeWorkspaceId: workspaceId })
+      void window.desktop.updateConfig({ activeWorkspaceId: workspaceId })
+    }
+
+    setActiveChangeId(changeId)
+    void window.desktop.openBoardAtChange(workspaceId, changeId)
+  }
+
   function handleArchiveChange(workspaceId: string, changeId: string): void {
     const workspace = workspaces.find((item) => item.id === workspaceId)
     if (!workspace) return
@@ -313,6 +323,7 @@ function App(): React.JSX.Element {
                         layout="fullscreen"
                         onArchiveChange={handleArchiveChange}
                         onChangeSelected={handleChangeSelected}
+                        onOpenBoardAtChange={handleOpenBoardAtChange}
                         onWorkspaceSelected={handleWorkspaceSelected}
                         topControl={
                           renderSidebarToggleButton({
@@ -345,6 +356,7 @@ function App(): React.JSX.Element {
                           activeWorkspaceId={activeWorkspace?.id ?? null}
                           onArchiveChange={handleArchiveChange}
                           onChangeSelected={handleChangeSelected}
+                          onOpenBoardAtChange={handleOpenBoardAtChange}
                           onWorkspaceSelected={handleWorkspaceSelected}
                           workspaces={workspaces}
                         />

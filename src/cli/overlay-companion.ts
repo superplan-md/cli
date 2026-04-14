@@ -444,7 +444,7 @@ export function getMacosOverlayBundleLaunchPlan(input: {
   return {
     mode: 'open_bundle',
     command: '/usr/bin/open',
-    args: ['-a', input.appBundlePath, '--args', '--overlay', '--workspace', input.workspacePath],
+    args: ['-a', input.appBundlePath, '--args', '--board', '--workspace', input.workspacePath],
   };
 }
 
@@ -636,7 +636,7 @@ export async function launchInstalledOverlayCompanion(
       ? {
           mode: 'handoff_existing_instance' as const,
           command: companionStatus.executable_path,
-          args: ['--overlay', '--workspace', resolvedWorkspacePath],
+          args: ['--board', '--workspace', resolvedWorkspacePath],
         }
       : macosAppBundlePath
         ? (runningProcesses
@@ -649,11 +649,11 @@ export async function launchInstalledOverlayCompanion(
           : {
               mode: 'handoff_existing_instance' as const,
               command: companionStatus.executable_path,
-              args: ['--overlay', '--workspace', resolvedWorkspacePath],
+              args: ['--board', '--workspace', resolvedWorkspacePath],
             })
         : {
             command: companionStatus.executable_path,
-            args: ['--overlay', '--workspace', resolvedWorkspacePath],
+            args: ['--board', '--workspace', resolvedWorkspacePath],
           };
 
     if (!launchPlan.command) {
