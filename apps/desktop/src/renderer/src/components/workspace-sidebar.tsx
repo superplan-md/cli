@@ -4,8 +4,8 @@ import {
   IconChevronDown,
   IconChevronRight,
   IconFolder,
-  IconLayoutCards,
   IconLoader2,
+  IconLayoutBoard,
   IconPin,
   IconPinFilled,
   IconPointFilled,
@@ -14,7 +14,6 @@ import {
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { SettingsDialog } from '@/components/settings-dialog'
-import { useDesktopConfigStore } from '@/stores/use-desktop-config-store'
 import type { DesktopWorkspaceNavigationItem } from '../../../shared/desktop-contract'
 
 interface WorkspaceSidebarProps {
@@ -24,6 +23,7 @@ interface WorkspaceSidebarProps {
   layout?: 'windowed' | 'fullscreen'
   onWorkspaceSelected: (workspaceId: string) => void
   onChangeSelected: (workspaceId: string, changeId: string) => void
+  onOpenBoardAtChange?: (workspaceId: string, changeId: string) => void
   onArchiveChange?: (workspaceId: string, changeId: string) => void
   topControl?: React.ReactNode
 }
@@ -35,12 +35,14 @@ export function WorkspaceSidebar({
   layout = 'windowed',
   onWorkspaceSelected,
   onChangeSelected,
+  onOpenBoardAtChange,
   onArchiveChange,
   topControl
 }: WorkspaceSidebarProps): React.JSX.Element {
   const isFullscreen = layout === 'fullscreen'
-  const overlayEnabled = useDesktopConfigStore((state) => state.config.overlayEnabled)
-  const mergeConfig = useDesktopConfigStore((state) => state.mergeConfig)
+  // const overlayEnabled = useDesktopConfigStore((state) => state.config.overlayEnabled)
+  // TODO: enable overlay toggle once the feature is stable.
+  // const mergeConfig = useDesktopConfigStore((state) => state.mergeConfig)
   const [openWorkspaces, setOpenWorkspaces] = useState<Set<string>>(new Set())
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set())
   const [hoveredId, setHoveredId] = useState<string | null>(null)
@@ -90,13 +92,14 @@ export function WorkspaceSidebar({
     })
   }
 
-  function handleOpenOverlay(): void {
-    if (!overlayEnabled) {
-      mergeConfig({ overlayEnabled: true })
-      void window.desktop.updateConfig({ overlayEnabled: true })
-    }
+  const selectedChange =
+    workspaces.find((workspace) => workspace.id === activeWorkspaceId)?.changes.find(
+      (change) => change.id === activeChangeId
+    ) ?? null
 
-    void window.desktop.openOverlay('card')
+  function handleOpenBoardAtChange(): void {
+    if (!activeWorkspaceId || !activeChangeId) return
+    onOpenBoardAtChange?.(activeWorkspaceId, activeChangeId)
   }
 
   return (
@@ -211,7 +214,7 @@ export function WorkspaceSidebar({
                               <IconLoader2
                                 style={{ width: 11, height: 11, animationDuration: '3s' }}
                                 className="animate-spin opacity-40"
-stroke={2.5}
+                                stroke={2.5}
                               />
                             ) : change.unread ? (
                               <IconPointFilled
@@ -269,13 +272,14 @@ stroke={2.5}
 
       <div className="mt-3 border-t border-foreground/[0.06] pt-2">
         <Button
-          className="mb-1 h-7 w-full justify-start gap-1.5 rounded px-2 text-foreground/60 hover:bg-foreground/[0.03] hover:text-foreground/80"
-          onClick={handleOpenOverlay}
+          className="mb-1 h-7 w-full justify-start gap-1.5 rounded px-2 text-foreground/50 hover:bg-foreground/[0.03] hover:text-foreground/70"
+          disabled={!selectedChange}
+          onClick={handleOpenBoardAtChange}
           style={{ fontSize: '12px' }}
           variant="ghost"
         >
-          <IconLayoutCards style={{ width: 12, height: 12 }} stroke={1.8} />
-          {overlayEnabled ? 'Open overlay' : 'Enable overlay'}
+          <IconLayoutBoard style={{ width: 12, height: 12 }} stroke={1.8} />
+          {selectedChange ? 'Open board at change' : 'Select a change first'}
         </Button>
 
         <SettingsDialog
