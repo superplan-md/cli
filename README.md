@@ -17,7 +17,7 @@ Most work fails because:
 * progress is unclear
 * AI agents lose direction
 
-Superplan fixes this by making work **explicit and structured**.
+Superplan fixes this by making work **explicit, structured, and never lost even if you switch agents or resume later.**.
 
 ---
 
