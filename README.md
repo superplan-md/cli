@@ -128,7 +128,9 @@ superplan task approve <id>
 
 Superplan is not a planning tool.
 
-It is an execution system.
+It is an **execution system for AI agents**.
+
+The CLI is designed for agents to follow, not for humans to run manually. You define the work; your agent executes it through Superplan's structured runtime.
 
 It ensures:
 
