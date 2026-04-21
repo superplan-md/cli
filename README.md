@@ -1,227 +1,169 @@
 # Superplan CLI
 
-Superplan is a CLI that turns planning into execution.
+Superplan is a CLI that turns planning into actual execution inside your repository.
 
-It gives your repo a structured runtime for work.
-Tasks are explicit. State is tracked. Progress is real.
+Instead of vague plans, chat history, or TODO lists, Superplan forces work into clear, step-by-step tasks that can be executed, tracked, and resumed at any time.
 
-No drift. No guesswork. No lost context.
+---
 
-Runs locally. Open source. Plug and play.
+## Why use Superplan?
 
-Your agent doesn’t decide what to do next.
-Superplan does.
+Most work fails because:
 
-<br/>
+* plans drift across chats and notes
+* steps get skipped
+* progress is unclear
+* AI agents lose direction
 
-![Visual Selection](src/assets/visual_selection.png)
+Superplan fixes this by making work **explicit and structured**.
 
-> Planning tells you what to do.
-> Superplan makes sure it actually gets done.
+---
+
+## Installation
+
+### macOS / Linux
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.sh | sh
+```
+
+### Windows (PowerShell)
+
+```powershell
+curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd; if ($LASTEXITCODE -eq 0) { .\install-superplan.cmd }
+```
+
+### Windows (Command Prompt)
+
+```cmd
+curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && install-superplan.cmd
+```
+
+After install, Superplan will ask if you want to run `superplan init`.
+
+---
 
 ## Quick Start
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.sh | sh
-```
-
-That uses a stable installer URL and resolves the latest published GitHub release tag automatically before installing the CLI and matching overlay artifact.
-After install, Superplan asks whether you want to run `superplan init` immediately in the directory you launched from.
-
-Windows PowerShell:
-
-```powershell
-curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd; if ($LASTEXITCODE -eq 0) { .\install-superplan.cmd }
-```
-
-Windows Command Prompt:
-
-```bat
-curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && install-superplan.cmd
-```
-
-The Windows installer now installs the CLI and the packaged overlay companion when a matching Windows release artifact has been published to the repo's GitHub release.
-
-## How it works
-
-Superplan sits inside your repo and takes control of execution.
-
-You define a change.
-Superplan turns it into a graph of tasks.
-The agent executes one task at a time through a runtime loop.
-
-State is tracked. Progress is explicit. Nothing is lost.
-
-Another agent can resume at any point without guessing.
-
-This isn’t planning.
-It’s controlled execution.
-
-## Why Superplan?
-
-Normal planning drifts. Superplan adds runtime truth.
-
-| Normal planning                    | Superplan planning                              |
-| ---------------------------------- | ----------------------------------------------- |
-| Notes and plans drift across chats | Task contracts live under `.superplan/changes/` |
-| The next step is often guessed     | `superplan run --json` continues the next task  |
-| “Done” is often ambiguous          | `complete` and `approve` make review explicit   |
-| Handoffs depend on chat memory     | Durable context makes work resumable            |
-
-## What's Inside: The Skills Library
-
-Superplan is powered by a set of composable skills that guide the full lifecycle:
-
-* shaping work into task graphs
-* executing tasks through a runtime loop
-* validating against acceptance criteria
-* handling failures, handoffs, and documentation
-
-Each skill enforces structure so the agent doesn’t drift.
-
-### 🛡️ Entry & Routing
-
-* **superplan-entry**: The mandatory gatekeeper. Decides if Superplan should engage.
-* **superplan-route**: Decides the structure depth (direct, task, slice, or program).
-* **superplan-context**: Bootstrap and sync durable workspace context.
-
-### 🎨 Shaping & Planning
-
-* **superplan-brainstorm**: Use for design clarification when expectations are ambiguous.
-* **superplan-shape**: Turns rough ideas into a validated graph and task contracts.
-* **superplan-plan**: Produces implementation plans or execution sequences.
-* **superplan-tdd**: Defines a task contract via tests before broad code changes.
-
-### 🏗️ Execution & Handoff
-
-* **superplan-execute**: The main runtime loop. Manages task pickup and resumption.
-* **superplan-debug**: Systematic troubleshooting for stalled or failing work.
-* **superplan-handoff**: Creates high-signal checkpoints for context loss or transfer.
-* **superplan-postmortem**: Captures actionable learning after completion or failure.
-
-### 🧪 Quality & Verification
-
-* **superplan-review**: Validates implementation against specific acceptance criteria.
-* **superplan-verify**: Gathers real evidence from the workspace before claiming success.
-* **superplan-guard**: Adds the smallest durable guard to prevent silent regressions.
-* **superplan-release**: Final discipline check before shipping or recommending as ready.
-* **superplan-docs**: Syncs READMEs, help, and context with code and behavior changes.
-
-## Get Started
-
-### 1. Install Latest version
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.sh | sh
-```
-
-That uses a stable installer URL and resolves the latest published GitHub release tag automatically before installing the CLI and matching overlay artifact.
-
-For Windows PowerShell:
-
-```powershell
-curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd; if ($LASTEXITCODE -eq 0) { .\install-superplan.cmd }
-```
-
-For Windows Command Prompt:
-
-```bat
-curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && install-superplan.cmd
-```
-
-The Windows installer resolves the latest published GitHub release tag for the CLI source when `SUPERPLAN_REF` is not pinned, and it installs the Windows overlay companion when the matching release artifact has been published for that release tag.
-After install, Superplan asks whether you want to run `superplan init` immediately in the directory you launched from.
-
-If you want the direct PowerShell installer instead, this still works:
-
-```powershell
-irm https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.ps1 | iex
-```
-
-**Note on Overlay:** The Superplan desktop companion is optional. The installer can enable or disable it as your machine default, and you can always change that later with `superplan overlay enable --global` or `superplan overlay disable --global`.
-
-If you want to pin a specific release instead, keep the same installer URL and set `SUPERPLAN_REF` explicitly:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.sh | SUPERPLAN_REF=<version-tag> sh
-```
-
-```powershell
-$env:SUPERPLAN_REF='<version-tag>'; curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd; if ($LASTEXITCODE -eq 0) { .\install-superplan.cmd }
-```
-
-```bat
-set SUPERPLAN_REF=<version-tag> && curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && install-superplan.cmd
-```
-
-### 2. Initialize
 
 ```bash
 superplan init
 ```
 
-### 3. Track a Change
+![Superplan Init](src/assets/superplan_init.png)
 
-```bash
-superplan change new my-feature --json
-# author .superplan/changes/my-feature/tasks.md using the exact graph syntax:
-# - `T-001` First task title
-#   - depends_on_all: []
-#   - depends_on_any: []
-# - `T-002` Follow-up task title
-#   - depends_on_all: [T-001]
-#   - depends_on_any: []
-superplan validate my-feature --json
-superplan task scaffold batch my-feature --stdin --json
-```
-
-## The Workflow Loop
-
-Stay in the flow with narrow, JSON-first commands:
-
-```bash
-superplan status --json  # See what's next
-superplan run --json     # Start/continue the next task
-```
-
-| Lifecycle   | Command                                    |
-| ----------- | ------------------------------------------ |
-| **Review**  | `superplan task complete <id>`             |
-| **Signoff** | `superplan task approve <id>`              |
-| **Blocker** | `superplan task block <id> --reason "..."` |
-| **Fix**     | `superplan task fix --json`                |
+![Agent Selection](src/assets/agent_selection.png)
 
 ---
 
-## Core Philosophy
+## How it works
 
-1. **Mandatory First Contact**: Every repo-work request must pass through `superplan-entry`.
-2. **CLI as Control Plane**: Once engaged, the CLI is the absolute source of truth for runtime state. Never edit lifecycle metadata in task files by hand.
-3. **Durable over Ephemeral**: Plans belong in the repo, not in chat memory.
-4. **Fastest Path to Init**: If a repo needs Superplan, `init` should be automatic and invisible whenever possible.
+Superplan lives inside your repo and controls execution.
 
-For advanced setup, internal specs, and development details, see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
+1. You define a change
+2. Superplan converts it into tasks
+3. Tasks are executed one by one
+4. Progress is saved and tracked
 
-## Overlay Releases
+Everything is stored in:
 
-Use the local packaging command when you only need the current machine's overlay artifact:
-
-```bash
-npm run overlay:release
+```
+.superplan/changes/
 ```
 
-Use the GitHub-backed release path when you need published native artifacts for macOS, Linux, and Windows from one command:
+This means:
+
+* no lost context
+* no guessing what's next
+* work can be resumed anytime
+
+---
+
+## Example Workflow
+
+Create a change:
 
 ```bash
-npm run overlay:release:github -- --tag <release-tag> --repo superplan-md/superplan-plugin
+superplan change new my-feature --json
 ```
 
-That dispatches a GitHub Actions matrix build and uploads the packaged overlay artifacts to the requested GitHub release tag.
-For the end-to-end maintainer flow, including tagging, publication, checksums, and post-release verification, see [docs/release-checklist.md](docs/release-checklist.md).
+Define tasks inside:
 
-## Credits
+```
+.superplan/changes/my-feature/tasks.md
+```
 
-Inspired by **Superpowers** and its approach to structured agentic workflows.
+Run execution:
+
+```bash
+superplan run --json
+```
+
+Track progress:
+
+```bash
+superplan status --json
+```
+
+Complete tasks:
+
+```bash
+superplan task complete <id>
+superplan task approve <id>
+```
+
+---
+
+## What makes it different?
+
+| Normal planning            | Superplan                 |
+| -------------------------- | ------------------------- |
+| Notes scattered everywhere | Tasks stored in repo      |
+| Next step is guessed       | CLI tells you what's next |
+| Progress unclear           | State is tracked          |
+| Hard to resume             | Fully resumable           |
+
+---
+
+## Core idea
+
+Superplan is not a planning tool.
+
+It is an execution system.
+
+It ensures:
+
+* every step is defined
+* every task is tracked
+* nothing is skipped
+
+---
+
+## Who is this for?
+
+* Developers who want structured execution
+* Teams working on complex features
+* Anyone using AI agents and tired of drift
+
+---
+
+## Skills System (Advanced)
+
+Superplan uses internal "skills" to manage execution:
+
+* planning and task creation
+* execution loop
+* debugging and recovery
+* validation and review
+
+You don't need to learn these to get started, but they enforce structure behind the scenes.
+
+---
+
+## Summary
+
+Superplan helps you stop guessing what to do next and actually finish work.
+
+---
 
 ## License
 
