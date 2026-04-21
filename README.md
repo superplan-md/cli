@@ -1,8 +1,10 @@
 # Superplan CLI
 
-Superplan is a CLI that turns planning into actual execution inside your repository.
+Superplan is an **execution system for AI agents**.
 
-Instead of vague plans, chat history, or TODO lists, Superplan forces work into clear, step-by-step tasks that can be executed, tracked, and resumed at any time.
+It turns planning into actual execution inside your repository. Instead of vague plans, chat history, or TODO lists, Superplan forces work into clear, step-by-step tasks that agents can execute, track, and resume at any time.
+
+The CLI is designed for agents to follow, not for humans to run manually. You define the work; your agent executes it through Superplan's structured runtime.
 
 ---
 
@@ -126,13 +128,7 @@ superplan task approve <id>
 
 ## Core idea
 
-Superplan is not a planning tool.
-
-It is an **execution system for AI agents**.
-
-The CLI is designed for agents to follow, not for humans to run manually. You define the work; your agent executes it through Superplan's structured runtime.
-
-It ensures:
+Superplan ensures:
 
 * every step is defined
 * every task is tracked
