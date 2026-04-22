@@ -52,6 +52,11 @@ interface StopManagedProcessesResult {
   stopped: ManagedProcessInfo[];
 }
 
+interface ProgressOutput {
+  isTTY?: boolean;
+  write(chunk: string): boolean;
+}
+
 export type UpdateResult =
   | {
       ok: true;
@@ -389,6 +394,47 @@ async function runCommand(
   });
 }
 
+function formatProgressMessage(progressPercent: number, message: string): string {
+  const width = 20;
+  const bounded = Math.max(0, Math.min(100, Math.round(progressPercent)));
+  const filled = Math.round((bounded / 100) * width);
+  const bar = `${'#'.repeat(filled)}${'-'.repeat(width - filled)}`;
+  const percent = String(bounded).padStart(3, ' ');
+  return `[${bar}] ${percent}% ${message}`;
+}
+
+function createProgressWriter(output: ProgressOutput): {
+  update(progressPercent: number, message: string): void;
+  finish(progressPercent: number, message: string): void;
+} {
+  let lastRenderedLength = 0;
+
+  const render = (progressPercent: number, message: string, done: boolean): void => {
+    const formatted = formatProgressMessage(progressPercent, message);
+    if (output.isTTY) {
+      const padded = formatted.padEnd(lastRenderedLength, ' ');
+      output.write(`\r${padded}`);
+      lastRenderedLength = padded.length;
+      if (done) {
+        output.write('\n');
+        lastRenderedLength = 0;
+      }
+      return;
+    }
+
+    output.write(`${formatted}\n`);
+  };
+
+  return {
+    update(progressPercent: number, message: string) {
+      render(progressPercent, message, false);
+    },
+    finish(progressPercent: number, message: string) {
+      render(progressPercent, message, true);
+    },
+  };
+}
+
 export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDeps> = {}): Promise<UpdateResult> {
   const installerPath = deps.installerPath ?? getBundledInstallerPath();
   if (!await pathExists(installerPath)) {
@@ -425,7 +471,9 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
   const runner = deps.runInstaller ?? runCommand;
   const refreshSkills = deps.refreshSkills ?? refreshInstalledSkills;
   const installerLaunch = getBundledInstallerCommand();
-  const emitProgress = (message: string): void => {
+  const progressWriter = createProgressWriter(process.stderr);
+  const useInteractiveProgressBar = !options.quiet && !deps.reportProgress && Boolean(process.stderr.isTTY);
+  const emitProgress = (progressPercent: number, message: string, done = false): void => {
     if (options.quiet) {
       return;
     }
@@ -435,11 +483,20 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
       return;
     }
 
-    process.stderr.write(`[superplan update] ${message}\n`);
+    if (useInteractiveProgressBar) {
+      if (done) {
+        progressWriter.finish(progressPercent, message);
+      } else {
+        progressWriter.update(progressPercent, message);
+      }
+      return;
+    }
+
+    process.stderr.write(`${formatProgressMessage(progressPercent, message)}\n`);
   };
 
   try {
-    emitProgress('Checking latest available Superplan source...');
+    emitProgress(10, 'Checking latest available Superplan source...');
     const latestRelease = installerRefOverride
       ? {
           tag: installerRefOverride,
@@ -457,13 +514,13 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
           : ''
       )
       || '';
-    emitProgress(`Preparing update from ${ref}${latestRelease.commitish && latestRelease.commitish !== ref ? ` (${latestRelease.commitish.slice(0, 12)})` : ''}...`);
-    emitProgress('Stopping running Superplan processes...');
+    emitProgress(25, `Preparing update from ${ref}${latestRelease.commitish && latestRelease.commitish !== ref ? ` (${latestRelease.commitish.slice(0, 12)})` : ''}...`);
+    emitProgress(40, 'Stopping running Superplan processes...');
     const stopResult = await stopProcesses({
       installBinDir: installMetadata?.install_bin || (installPrefix ? path.join(installPrefix, 'bin') : null),
       overlayExecutablePath: installMetadata?.overlay?.executable_path || null,
     });
-    emitProgress('Running installer...');
+    emitProgress(65, 'Running installer...');
     const installResult = await runner(installerLaunch.command, [...installerLaunch.args, installerPath], {
       env: {
         ...process.env,
@@ -476,7 +533,7 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
         ...(overlayInstallDir ? { SUPERPLAN_OVERLAY_INSTALL_DIR: overlayInstallDir } : {}),
         SUPERPLAN_RUN_SETUP_AFTER_INSTALL: '0',
       },
-      streamOutput: !options.quiet,
+      streamOutput: !options.quiet && !useInteractiveProgressBar,
     });
 
     if (installResult.code !== 0) {
@@ -490,7 +547,7 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
       };
     }
 
-    emitProgress('Refreshing installed skills...');
+    emitProgress(85, 'Refreshing installed skills...');
     const refreshResult = await refreshSkills();
     if (!refreshResult.ok) {
       return {
@@ -503,7 +560,7 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
       };
     }
 
-    emitProgress('Update complete.');
+    emitProgress(100, 'Update complete.', true);
 
     return {
       ok: true,

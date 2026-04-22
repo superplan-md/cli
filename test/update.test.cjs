@@ -251,6 +251,78 @@ test('update emits progress messages and streams installer output when not quiet
   });
 });
 
+test('update renders an in-place progress bar on interactive terminals', async () => {
+  const sandbox = await makeSandbox('superplan-update-progress-bar-');
+
+  await withSandboxEnv(sandbox, async () => {
+    const { update } = loadDistModule('cli/commands/update.js');
+    const calls = [];
+    let stderrOutput = '';
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    const originalIsTTY = process.stderr.isTTY;
+
+    Object.defineProperty(process.stderr, 'isTTY', {
+      configurable: true,
+      value: true,
+    });
+    process.stderr.write = ((chunk) => {
+      stderrOutput += String(chunk);
+      return true;
+    });
+
+    try {
+      const result = await update({ quiet: false }, {
+        readInstallMetadata: async () => ({
+          install_method: 'remote_repo',
+          repo_url: 'https://github.com/example/custom-superplan.git',
+          ref: 'main',
+          install_prefix: path.join(sandbox.root, 'prefix'),
+        }),
+        resolveLatestRelease: async () => ({
+          tag: 'main',
+          commitish: 'f00dbabe1234567890abcdef1234567890abcd',
+          url: 'https://github.com/example/custom-superplan/commit/f00dbabe1234567890abcdef1234567890abcd',
+        }),
+        stopManagedProcesses: async () => ({
+          stopped: [],
+        }),
+        runInstaller: async (command, args, options) => {
+          calls.push({ command, args, env: options.env, streamOutput: options.streamOutput });
+          return {
+            code: 0,
+            stdout: 'Installed Superplan',
+            stderr: '',
+          };
+        },
+        refreshSkills: async () => ({
+          ok: true,
+          data: {
+            scope: 'skip',
+            refreshed: false,
+            agents: [],
+            verified: true,
+          },
+        }),
+      });
+
+      assert.equal(result.ok, true);
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].streamOutput, false);
+      assert.match(stderrOutput, /\[##------------------\]\s+10% Checking latest available Superplan source\.\.\./);
+      assert.match(stderrOutput, /\[#############-------\]\s+65% Running installer\.\.\./);
+      assert.match(stderrOutput, /\[####################\]\s+100% Update complete\./);
+      assert.match(stderrOutput, /\r/);
+      assert.match(stderrOutput, /\n$/);
+    } finally {
+      process.stderr.write = originalWrite;
+      Object.defineProperty(process.stderr, 'isTTY', {
+        configurable: true,
+        value: originalIsTTY,
+      });
+    }
+  });
+});
+
 test('update pins moving refs to the latest commit and does not reuse stale overlay release urls', async () => {
   const sandbox = await makeSandbox('superplan-update-main-branch-');
 
