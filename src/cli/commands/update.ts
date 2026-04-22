@@ -8,6 +8,7 @@ import { commandNextAction, type NextAction } from '../next-action';
 
 const DEFAULT_REPO_URL = 'https://github.com/superplan-md/superplan-plugin.git';
 const DEFAULT_REF = 'main';
+const MOVING_REFS = new Set(['main', 'dev']);
 
 interface UpdateOptions {
   json?: boolean;
@@ -108,6 +109,10 @@ function getBundledInstallerCommand(platform = process.platform): { command: str
 
 function buildReleaseBaseUrl(repoUrl: string, tag: string): string {
   return `${repoUrl.replace(/\.git$/, '')}/releases/download/${tag}`;
+}
+
+function isMovingRef(ref: string): boolean {
+  return MOVING_REFS.has(ref);
 }
 
 function parseGitHubRepo(repoUrl: string): { owner: string; repo: string } | null {
@@ -418,8 +423,7 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
       : await resolveLatestRelease(repoUrl);
     const ref = latestRelease.tag || installMetadata?.ref || DEFAULT_REF;
     const overlayReleaseBaseUrl = process.env.SUPERPLAN_OVERLAY_RELEASE_BASE_URL
-      || (ref === 'main' || ref === 'dev' ? installMetadata?.overlay?.release_base_url : undefined)
-      || buildReleaseBaseUrl(repoUrl, ref);
+      || (isMovingRef(ref) ? '' : buildReleaseBaseUrl(repoUrl, ref));
     const overlaySourcePath = process.env.SUPERPLAN_OVERLAY_SOURCE_PATH
       || (
         installMetadata?.overlay?.install_method === 'copied_prebuilt'

@@ -12,6 +12,7 @@ set -eu
 # Optional environment variables:
 # - SUPERPLAN_REPO_URL: git repository to install from
 # - SUPERPLAN_REF: git ref to check out after clone
+# - SUPERPLAN_LATEST_COMMITISH: exact commit to check out after clone
 # - SUPERPLAN_SOURCE_DIR: local source directory to copy instead of cloning
 # - SUPERPLAN_INSTALL_PREFIX: custom npm global prefix for the install
 # - SUPERPLAN_OVERLAY_SOURCE_PATH: prebuilt overlay bundle or executable to install
@@ -22,6 +23,7 @@ set -eu
 
 SUPERPLAN_REPO_URL="${SUPERPLAN_REPO_URL:-https://github.com/superplan-md/superplan-plugin.git}"
 SUPERPLAN_REF="${SUPERPLAN_REF:-}"
+SUPERPLAN_LATEST_COMMITISH="${SUPERPLAN_LATEST_COMMITISH:-}"
 SUPERPLAN_SOURCE_DIR="${SUPERPLAN_SOURCE_DIR:-}"
 SUPERPLAN_INSTALL_PREFIX="${SUPERPLAN_INSTALL_PREFIX:-}"
 SUPERPLAN_OVERLAY_SOURCE_PATH="${SUPERPLAN_OVERLAY_SOURCE_PATH:-}"
@@ -606,8 +608,12 @@ else
   git clone "$SUPERPLAN_REPO_URL" "$SOURCE_WORKTREE" >/dev/null 2>&1
   (
     cd "$SOURCE_WORKTREE"
-    git checkout "$SUPERPLAN_RESOLVED_REF" >/dev/null 2>&1
-  ) || fail "failed to check out ref: $SUPERPLAN_RESOLVED_REF"
+    if [ -n "$SUPERPLAN_LATEST_COMMITISH" ]; then
+      git checkout "$SUPERPLAN_LATEST_COMMITISH" >/dev/null 2>&1
+    else
+      git checkout "$SUPERPLAN_RESOLVED_REF" >/dev/null 2>&1
+    fi
+  ) || fail "failed to check out ref: ${SUPERPLAN_LATEST_COMMITISH:-$SUPERPLAN_RESOLVED_REF}"
 fi
 
 [ -f "$SOURCE_WORKTREE/package.json" ] || fail "package.json not found in installer worktree"

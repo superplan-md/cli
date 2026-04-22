@@ -1,6 +1,8 @@
 import * as fs from 'fs/promises'
 import * as path from 'path'
 import { resolveProjectStateRoot } from '../../../../src/cli/project-identity'
+import { refreshOverlaySnapshot } from '../../../../src/cli/overlay-runtime'
+import { loadTasks } from '../../../../src/cli/commands/task'
 
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
@@ -9,6 +11,25 @@ async function pathExists(targetPath: string): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+async function withWorkingDirectory<T>(targetDir: string, fn: () => Promise<T>): Promise<T> {
+  const previousCwd = process.cwd()
+  process.chdir(targetDir)
+
+  try {
+    return await fn()
+  } finally {
+    process.chdir(previousCwd)
+  }
+}
+
+async function refreshWorkspaceOverlayState(workspacePath: string): Promise<void> {
+  await withWorkingDirectory(workspacePath, async () => {
+    const tasksResult = await loadTasks({ skipInvariant: true })
+    const tasks = tasksResult.ok ? tasksResult.data.tasks : []
+    await refreshOverlaySnapshot(tasks, { workspacePath })
+  })
 }
 
 export async function archiveChange(workspacePath: string, changeId: string): Promise<boolean> {
@@ -46,6 +67,12 @@ export async function archiveChange(workspacePath: string, changeId: string): Pr
     } catch {
       // best-effort cleanup only
     }
+  }
+
+  try {
+    await refreshWorkspaceOverlayState(workspacePath)
+  } catch {
+    // best-effort refresh only
   }
 
   return true

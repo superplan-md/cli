@@ -46,6 +46,9 @@ test('update reruns the bundled installer with recorded install metadata', async
           stderr: '',
         };
       },
+      stopManagedProcesses: async () => ({
+        stopped: [],
+      }),
       refreshSkills: async () => ({
         ok: true,
         data: {
@@ -187,6 +190,60 @@ test('update resolves and installs the latest published release before refreshin
   });
 });
 
+test('update pins moving refs to the latest commit and does not reuse stale overlay release urls', async () => {
+  const sandbox = await makeSandbox('superplan-update-main-branch-');
+
+  await withSandboxEnv(sandbox, async () => {
+    const { update } = loadDistModule('cli/commands/update.js');
+    const calls = [];
+
+    const result = await update({ json: true, quiet: true }, {
+      readInstallMetadata: async () => ({
+        install_method: 'remote_repo',
+        repo_url: 'https://github.com/example/custom-superplan.git',
+        ref: 'alpha.25',
+        install_prefix: path.join(sandbox.root, 'prefix'),
+        overlay: {
+          install_method: 'downloaded_prebuilt',
+          release_base_url: 'https://github.com/example/custom-superplan/releases/download/alpha.25',
+          install_dir: path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay'),
+        },
+      }),
+      resolveLatestRelease: async () => ({
+        tag: 'main',
+        commitish: 'f00dbabe1234567890abcdef1234567890abcd',
+        url: 'https://github.com/example/custom-superplan/commit/f00dbabe1234567890abcdef1234567890abcd',
+      }),
+      runInstaller: async (command, args, options) => {
+        calls.push({ command, args, env: options.env });
+        return {
+          code: 0,
+          stdout: 'Installed Superplan',
+          stderr: '',
+        };
+      },
+      stopManagedProcesses: async () => ({
+        stopped: [],
+      }),
+      refreshSkills: async () => ({
+        ok: true,
+        data: {
+          scope: 'skip',
+          refreshed: false,
+          agents: [],
+          verified: true,
+        },
+      }),
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].env.SUPERPLAN_REF, 'main');
+    assert.equal(calls[0].env.SUPERPLAN_LATEST_COMMITISH, 'f00dbabe1234567890abcdef1234567890abcd');
+    assert.equal('SUPERPLAN_OVERLAY_RELEASE_BASE_URL' in calls[0].env, false);
+  });
+});
+
 test('update fails cleanly when latest commit resolution fails', async () => {
   const sandbox = await makeSandbox('superplan-update-latest-commit-fails-');
 
@@ -248,6 +305,9 @@ test('update refreshes installed skills for existing global and local setups', a
         tag: 'release',
         commitish: 'release',
         url: 'https://github.com/example/custom-superplan/releases/tag/release',
+      }),
+      stopManagedProcesses: async () => ({
+        stopped: [],
       }),
       runInstaller: async () => ({
         code: 0,

@@ -2,6 +2,7 @@ $ErrorActionPreference = 'Stop'
 
 $SuperplanRepoUrl = if ($env:SUPERPLAN_REPO_URL) { $env:SUPERPLAN_REPO_URL } else { 'https://github.com/superplan-md/superplan-plugin.git' }
 $SuperplanRef = if ($env:SUPERPLAN_REF) { $env:SUPERPLAN_REF } else { '' }
+$SuperplanLatestCommitish = if ($env:SUPERPLAN_LATEST_COMMITISH) { $env:SUPERPLAN_LATEST_COMMITISH } else { '' }
 $SuperplanSourceDir = if ($env:SUPERPLAN_SOURCE_DIR) { $env:SUPERPLAN_SOURCE_DIR } else { '' }
 $SuperplanInstallPrefix = if ($env:SUPERPLAN_INSTALL_PREFIX) { $env:SUPERPLAN_INSTALL_PREFIX } else { '' }
 $SuperplanOverlaySourcePath = if ($env:SUPERPLAN_OVERLAY_SOURCE_PATH) { $env:SUPERPLAN_OVERLAY_SOURCE_PATH } else { '' }
@@ -428,9 +429,14 @@ try {
 
     Push-Location $sourceWorktree
     try {
-      & git checkout $SuperplanResolvedRef | Out-Null
+      if (-not [string]::IsNullOrWhiteSpace($SuperplanLatestCommitish)) {
+        & git checkout $SuperplanLatestCommitish | Out-Null
+      } else {
+        & git checkout $SuperplanResolvedRef | Out-Null
+      }
       if ($LASTEXITCODE -ne 0) {
-        Fail "failed to check out ref: $SuperplanResolvedRef"
+        $targetRef = if (-not [string]::IsNullOrWhiteSpace($SuperplanLatestCommitish)) { $SuperplanLatestCommitish } else { $SuperplanResolvedRef }
+        Fail "failed to check out ref: $targetRef"
       }
     } finally {
       Pop-Location
