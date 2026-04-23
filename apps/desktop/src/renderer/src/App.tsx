@@ -1,5 +1,14 @@
 import { WorkspaceSidebar } from '@/components/workspace-sidebar'
 import { ChangeRightPanel } from '@/components/change-right-panel'
+import { Button } from '@/components/ui/button'
+import {
+  DialogBackdrop,
+  DialogDescription,
+  DialogPopup,
+  DialogPortal,
+  DialogRoot,
+  DialogTitle
+} from '@/components/ui/dialog'
 import { useDesktopBootstrap } from '@/hooks/use-desktop-bootstrap'
 import { useDesktopConfigStore } from '@/stores/use-desktop-config-store'
 import { useDesktopLayoutStore } from '@/stores/use-desktop-layout-store'
@@ -33,6 +42,12 @@ function App(): React.JSX.Element {
   // Workspaces loaded from real filesystem via IPC
   const [workspaces, setWorkspaces] = useState<DesktopWorkspaceNavigationItem[]>([])
   const [workspaceFeedVersion, setWorkspaceFeedVersion] = useState(0)
+  const [pendingArchive, setPendingArchive] = useState<{
+    workspaceId: string
+    changeId: string
+    changeTitle: string
+  } | null>(null)
+  const [archiveSubmitting, setArchiveSubmitting] = useState(false)
 
   async function refreshWorkspaces(): Promise<DesktopWorkspaceNavigationItem[]> {
     const loaded = await window.desktop.getWorkspaces()
@@ -269,6 +284,33 @@ function App(): React.JSX.Element {
     const workspace = workspaces.find((item) => item.id === workspaceId)
     if (!workspace) return
 
+    const change = workspace.changes.find((item) => item.id === changeId)
+    if (!change) return
+
+    setPendingArchive({
+      workspaceId,
+      changeId,
+      changeTitle: change.title
+    })
+  }
+
+  function handleArchiveDialogOpenChange(open: boolean): void {
+    if (open || archiveSubmitting) return
+    setPendingArchive(null)
+  }
+
+  function confirmArchiveChange(): void {
+    if (!pendingArchive || archiveSubmitting) return
+
+    const { workspaceId, changeId } = pendingArchive
+    const workspace = workspaces.find((item) => item.id === workspaceId)
+    if (!workspace) {
+      setPendingArchive(null)
+      return
+    }
+
+    setArchiveSubmitting(true)
+
     void window.desktop.archiveChange(workspace.path, changeId).then(async (archived) => {
       if (!archived) return
 
@@ -287,6 +329,9 @@ function App(): React.JSX.Element {
       if (activeWorkspace?.id === workspaceId && activeChangeId === changeId) {
         setActiveChangeId(nextWorkspace.changes[0]?.id ?? null)
       }
+    }).finally(() => {
+      setArchiveSubmitting(false)
+      setPendingArchive(null)
     })
   }
 
@@ -402,6 +447,43 @@ function App(): React.JSX.Element {
           </Group>
         </section>
       </div>
+      <DialogRoot open={pendingArchive !== null} onOpenChange={handleArchiveDialogOpenChange}>
+        <DialogPortal>
+          <DialogBackdrop />
+          <DialogPopup className="w-full max-w-md flex-col gap-0 overflow-hidden">
+            <div className="flex flex-col gap-3 px-5 py-5">
+              <div className="space-y-1">
+                <DialogTitle>Delete change?</DialogTitle>
+                <DialogDescription className="leading-relaxed">
+                  {pendingArchive
+                    ? `"${pendingArchive.changeTitle}" will be archived from the overlay. Its history will still be preserved.`
+                    : ''}
+                </DialogDescription>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  disabled={archiveSubmitting}
+                  onClick={() => setPendingArchive(null)}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  disabled={archiveSubmitting}
+                  onClick={confirmArchiveChange}
+                  size="sm"
+                  type="button"
+                  variant="destructive"
+                >
+                  {archiveSubmitting ? 'Deleting...' : 'Delete'}
+                </Button>
+              </div>
+            </div>
+          </DialogPopup>
+        </DialogPortal>
+      </DialogRoot>
     </main>
   )
 }
