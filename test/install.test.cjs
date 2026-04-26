@@ -272,6 +272,21 @@ test('windows powershell installer resolves the latest release and overlay artif
   assert.match(installerSource, /Installation successful\./);
 });
 
+test('windows powershell installer bootstraps node and downloads github source archives when prerequisites are missing', async () => {
+  const installerSource = await fs.readFile(path.join(REPO_ROOT, 'scripts', 'install.ps1'), 'utf-8');
+
+  assert.match(installerSource, /Ensure-NodeToolchain/);
+  assert.match(installerSource, /latest-v20\.x\/SHASUMS256\.txt/);
+  assert.match(installerSource, /Node\.js not found on PATH\. Bootstrapping a portable Node runtime for installation\./);
+  assert.match(installerSource, /superplan-overlay-windows-\$\(\$script:OverlayArch\)\.exe/);
+  assert.match(installerSource, /Download-GitHubSourceSnapshot/);
+  assert.match(installerSource, /https:\/\/codeload\.github\.com\/\$\(.*\)\/zip\/\$Ref/);
+  assert.match(installerSource, /GitHub archive download failed; falling back to git checkout/);
+  assert.match(installerSource, /& \$script:NpmCommand install/);
+  assert.match(installerSource, /& \$script:NpmCommand run build/);
+  assert.match(installerSource, /& \$script:NpmCommand install --global/);
+});
+
 test('windows cmd installer delegates to powershell', async () => {
   const installerSource = await fs.readFile(path.join(REPO_ROOT, 'scripts', 'install.cmd'), 'utf-8');
 
