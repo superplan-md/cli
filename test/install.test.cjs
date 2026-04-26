@@ -287,6 +287,14 @@ test('windows powershell installer bootstraps node and downloads github source a
   assert.match(installerSource, /& \$script:NpmCommand install --global/);
 });
 
+test('windows powershell installer ignores native stderr notices and relies on exit codes in quiet command execution', async () => {
+  const installerSource = await fs.readFile(path.join(REPO_ROOT, 'scripts', 'install.ps1'), 'utf-8');
+
+  assert.match(installerSource, /\$script:ErrorActionPreference = 'Continue'/);
+  assert.match(installerSource, /\$global:PSNativeCommandUseErrorActionPreference = \$false/);
+  assert.match(installerSource, /\$script:ErrorActionPreference = \$previousErrorActionPreference/);
+});
+
 test('windows cmd installer delegates to powershell', async () => {
   const installerSource = await fs.readFile(path.join(REPO_ROOT, 'scripts', 'install.cmd'), 'utf-8');
 

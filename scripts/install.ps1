@@ -63,8 +63,17 @@ function Invoke-QuietCommand {
   )
 
   $logPath = Join-Path $workDir "$Label.log"
+  $previousErrorActionPreference = $ErrorActionPreference
+  $nativePreferenceVariable = Get-Variable -Name PSNativeCommandUseErrorActionPreference -Scope Global -ErrorAction SilentlyContinue
+  $previousNativeErrorPreference = $null
 
   try {
+    $script:ErrorActionPreference = 'Continue'
+    if ($nativePreferenceVariable) {
+      $previousNativeErrorPreference = $global:PSNativeCommandUseErrorActionPreference
+      $global:PSNativeCommandUseErrorActionPreference = $false
+    }
+
     & $Command *> $logPath
     if ($LASTEXITCODE -ne 0) {
       if (Test-Path -LiteralPath $logPath) {
@@ -73,6 +82,10 @@ function Invoke-QuietCommand {
       Fail "$Label failed"
     }
   } finally {
+    $script:ErrorActionPreference = $previousErrorActionPreference
+    if ($nativePreferenceVariable) {
+      $global:PSNativeCommandUseErrorActionPreference = $previousNativeErrorPreference
+    }
     Remove-Item -LiteralPath $logPath -Force -ErrorAction SilentlyContinue
   }
 }
