@@ -20,6 +20,8 @@ $OverlayPlatform = ''
 $OverlayArch = ''
 $NodeCommand = 'node'
 $NpmCommand = 'npm'
+$BundledNodeRuntimeRoot = Join-Path $HOME '.config\superplan\node-runtime'
+$UsingBundledNodeRuntime = $false
 $SetupCompleted = $false
 $OriginalLocation = Get-Location
 
@@ -182,10 +184,52 @@ function Resolve-WindowsArch {
   }
 }
 
+function Resolve-BundledNodeRuntimeHome {
+  if (-not (Test-Path -LiteralPath $BundledNodeRuntimeRoot -PathType Container)) {
+    return $null
+  }
+
+  $directNodePath = Join-Path $BundledNodeRuntimeRoot 'node.exe'
+  $directNpmPath = Join-Path $BundledNodeRuntimeRoot 'npm.cmd'
+  if ((Test-Path -LiteralPath $directNodePath -PathType Leaf) -and (Test-Path -LiteralPath $directNpmPath -PathType Leaf)) {
+    return $BundledNodeRuntimeRoot
+  }
+
+  $nodeHomes = Get-ChildItem -LiteralPath $BundledNodeRuntimeRoot -Directory -ErrorAction SilentlyContinue |
+    Sort-Object Name -Descending
+
+  foreach ($nodeHome in $nodeHomes) {
+    $candidateNodePath = Join-Path $nodeHome.FullName 'node.exe'
+    $candidateNpmPath = Join-Path $nodeHome.FullName 'npm.cmd'
+    if ((Test-Path -LiteralPath $candidateNodePath -PathType Leaf) -and (Test-Path -LiteralPath $candidateNpmPath -PathType Leaf)) {
+      return $nodeHome.FullName
+    }
+  }
+
+  return $null
+}
+
+function Use-BundledNodeRuntime {
+  param([string] $NodeHome)
+
+  $script:NodeCommand = Join-Path $NodeHome 'node.exe'
+  $script:NpmCommand = Join-Path $NodeHome 'npm.cmd'
+  $script:UsingBundledNodeRuntime = $true
+  $env:PATH = "$NodeHome;$($env:PATH)"
+}
+
 function Ensure-NodeToolchain {
   if ((Get-Command node -ErrorAction SilentlyContinue) -and (Get-Command npm -ErrorAction SilentlyContinue)) {
     $script:NodeCommand = 'node'
     $script:NpmCommand = 'npm'
+    $script:UsingBundledNodeRuntime = $false
+    return
+  }
+
+  $existingBundledNodeHome = Resolve-BundledNodeRuntimeHome
+  if (-not [string]::IsNullOrWhiteSpace($existingBundledNodeHome)) {
+    Say "Using bundled Superplan Node runtime from $existingBundledNodeHome"
+    Use-BundledNodeRuntime -NodeHome $existingBundledNodeHome
     return
   }
 
@@ -215,23 +259,25 @@ function Ensure-NodeToolchain {
   New-Item -ItemType Directory -Force -Path $portableRoot | Out-Null
   Expand-Archive -Path $archivePath -DestinationPath $portableRoot -Force
 
-  $nodeHome = Get-ChildItem -LiteralPath $portableRoot -Directory | Select-Object -First 1
-  if (-not $nodeHome) {
+  $downloadedNodeHome = Get-ChildItem -LiteralPath $portableRoot -Directory | Select-Object -First 1
+  if (-not $downloadedNodeHome) {
     Fail 'failed to extract portable Node.js runtime'
   }
 
-  $script:NodeCommand = Join-Path $nodeHome.FullName 'node.exe'
-  $script:NpmCommand = Join-Path $nodeHome.FullName 'npm.cmd'
-
-  if (-not (Test-Path -LiteralPath $script:NodeCommand -PathType Leaf)) {
-    Fail 'bootstrapped portable Node.js runtime did not contain node.exe'
+  Say "Persisting bundled Superplan Node runtime to $BundledNodeRuntimeRoot"
+  Remove-Item -LiteralPath $BundledNodeRuntimeRoot -Recurse -Force -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Force -Path $BundledNodeRuntimeRoot | Out-Null
+  Get-ChildItem -LiteralPath $portableRoot -Force | ForEach-Object {
+    $targetPath = Join-Path $BundledNodeRuntimeRoot $_.Name
+    Copy-Item -LiteralPath $_.FullName -Destination $targetPath -Recurse -Force
   }
 
-  if (-not (Test-Path -LiteralPath $script:NpmCommand -PathType Leaf)) {
-    Fail 'bootstrapped portable Node.js runtime did not contain npm.cmd'
+  $bundledNodeHome = Resolve-BundledNodeRuntimeHome
+  if ([string]::IsNullOrWhiteSpace($bundledNodeHome)) {
+    Fail 'bootstrapped portable Node.js runtime could not be persisted'
   }
 
-  $env:PATH = "$($nodeHome.FullName);$($env:PATH)"
+  Use-BundledNodeRuntime -NodeHome $bundledNodeHome
 }
 
 function Resolve-LatestReleaseTagFromGitHub {
@@ -458,6 +504,60 @@ function Ensure-WritablePrefix {
   $script:SuperplanInstallPrefix = $fallbackPrefix
 }
 
+function Write-SuperplanWindowsShims {
+  param(
+    [string] $InstallBinDir
+  )
+
+  if (-not $script:UsingBundledNodeRuntime) {
+    return
+  }
+
+  $bundledNodeHome = Resolve-BundledNodeRuntimeHome
+  if ([string]::IsNullOrWhiteSpace($bundledNodeHome)) {
+    Fail 'bundled Superplan Node runtime was expected but not found'
+  }
+
+  $bundledNodeExe = Join-Path $bundledNodeHome 'node.exe'
+  $cmdShimPath = Join-Path $InstallBinDir 'superplan.cmd'
+  $ps1ShimPath = Join-Path $InstallBinDir 'superplan.ps1'
+  $escapedNodeExe = $bundledNodeExe -replace "'", "''"
+
+  $cmdShimContent = @"
+@echo off
+setlocal
+set "SUPERPLAN_NODE_EXE=$bundledNodeExe"
+set "SUPERPLAN_ENTRY=%~dp0node_modules\superplan\dist\cli\main.js"
+if not exist "%SUPERPLAN_NODE_EXE%" (
+  echo error: missing bundled Superplan Node runtime at %SUPERPLAN_NODE_EXE% 1>&2
+  exit /b 1
+)
+if not exist "%SUPERPLAN_ENTRY%" (
+  echo error: missing Superplan CLI entrypoint at %SUPERPLAN_ENTRY% 1>&2
+  exit /b 1
+)
+"%SUPERPLAN_NODE_EXE%" "%SUPERPLAN_ENTRY%" %*
+exit /b %ERRORLEVEL%
+"@
+
+  $ps1ShimContent = @"
+`$ErrorActionPreference = 'Stop'
+`$nodeExe = '$escapedNodeExe'
+`$entryPath = Join-Path `$PSScriptRoot 'node_modules\superplan\dist\cli\main.js'
+if (-not (Test-Path -LiteralPath `$nodeExe -PathType Leaf)) {
+  throw "error: missing bundled Superplan Node runtime at `$nodeExe"
+}
+if (-not (Test-Path -LiteralPath `$entryPath -PathType Leaf)) {
+  throw "error: missing Superplan CLI entrypoint at `$entryPath"
+}
+& `$nodeExe `$entryPath @args
+exit `$LASTEXITCODE
+"@
+
+  Set-Content -Path $cmdShimPath -Value $cmdShimContent -Encoding ascii
+  Set-Content -Path $ps1ShimPath -Value $ps1ShimContent -Encoding ascii
+}
+
 function Should-EnableOverlayByDefault {
   $override = To-Lower ([string] $SuperplanEnableOverlay)
 
@@ -637,6 +737,12 @@ try {
 
   if (-not (Test-Path -LiteralPath $superplanCommandPath -PathType Leaf)) {
     Fail "superplan binary was not installed to $installBinDir"
+  }
+
+  if ($script:UsingBundledNodeRuntime) {
+    Say 'Rewriting Windows Superplan launchers to use the bundled Node runtime'
+    Write-SuperplanWindowsShims -InstallBinDir $installBinDir
+    $superplanCommandPath = Join-Path $installBinDir 'superplan.cmd'
   }
 
   if (-not [string]::IsNullOrWhiteSpace($SuperplanOverlaySourcePath)) {

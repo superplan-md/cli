@@ -16,7 +16,7 @@
     "superplan": "./dist/cli/main.js"
   },
   "scripts": {
-    "build": "tsc && node ./scripts/copy-skills.js && ./scripts/generate-outputs.sh",
+    "build": "tsc && node ./scripts/copy-skills.js && node ./scripts/generate-outputs.js",
     "desktop:build": "pnpm --dir apps/desktop build",
     "desktop:dev": "pnpm --dir apps/desktop dev",
     "overlay:bundle": "node ./scripts/overlay-release.js build",

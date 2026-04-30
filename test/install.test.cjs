@@ -256,6 +256,17 @@ test('windows installer scripts are packaged and documented', async () => {
   assert.match(readme, /Windows installer now installs the CLI and the packaged overlay companion/i);
 });
 
+test('build script uses the cross-platform output generator entrypoint', async () => {
+  const packageJson = JSON.parse(await fs.readFile(path.join(REPO_ROOT, 'package.json'), 'utf-8'));
+  const outputScript = await fs.readFile(path.join(REPO_ROOT, 'scripts', 'generate-outputs.sh'), 'utf-8');
+
+  assert.equal(
+    packageJson.scripts.build,
+    'tsc && node ./scripts/copy-skills.js && node ./scripts/generate-outputs.js',
+  );
+  assert.match(outputScript, /node "\$SCRIPT_DIR\/generate-outputs\.js"/);
+});
+
 test('windows powershell installer resolves the latest release and overlay artifact metadata', async () => {
   const installerSource = await fs.readFile(path.join(REPO_ROOT, 'scripts', 'install.ps1'), 'utf-8');
 
@@ -276,8 +287,13 @@ test('windows powershell installer bootstraps node and downloads github source a
   const installerSource = await fs.readFile(path.join(REPO_ROOT, 'scripts', 'install.ps1'), 'utf-8');
 
   assert.match(installerSource, /Ensure-NodeToolchain/);
+  assert.match(installerSource, /Resolve-BundledNodeRuntimeHome/);
+  assert.match(installerSource, /\.config\\superplan\\node-runtime/);
+  assert.match(installerSource, /Use-BundledNodeRuntime/);
   assert.match(installerSource, /latest-v20\.x\/SHASUMS256\.txt/);
   assert.match(installerSource, /Node\.js not found on PATH\. Bootstrapping a portable Node runtime for installation\./);
+  assert.match(installerSource, /Using bundled Superplan Node runtime from/);
+  assert.match(installerSource, /Persisting bundled Superplan Node runtime to/);
   assert.match(installerSource, /superplan-overlay-windows-\$\(\$script:OverlayArch\)\.exe/);
   assert.match(installerSource, /Download-GitHubSourceSnapshot/);
   assert.match(installerSource, /https:\/\/codeload\.github\.com\/\$\(.*\)\/zip\/\$Ref/);
@@ -285,9 +301,12 @@ test('windows powershell installer bootstraps node and downloads github source a
   assert.match(installerSource, /& \$script:NpmCommand install/);
   assert.match(installerSource, /& \$script:NpmCommand run build/);
   assert.match(installerSource, /& \$script:NpmCommand install --global/);
-  assert.match(installerSource, /\$env:PATH = "\$\(\$nodeHome\.FullName\);\$\(\$env:PATH\)"/);
+  assert.match(installerSource, /\$env:PATH = "\$NodeHome;\$\(\$env:PATH\)"/);
   assert.match(installerSource, /\$env:npm_config_prefix = \$SuperplanInstallPrefix/);
   assert.match(installerSource, /\$env:npm_config_prefix = \$fallbackPrefix/);
+  assert.match(installerSource, /Write-SuperplanWindowsShims/);
+  assert.match(installerSource, /Rewriting Windows Superplan launchers to use the bundled Node runtime/);
+  assert.match(installerSource, /superplan\.ps1/);
 });
 
 test('windows powershell installer ignores native stderr notices and relies on exit codes in quiet command execution', async () => {
