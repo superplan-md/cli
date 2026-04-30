@@ -417,6 +417,18 @@ test('update renders an in-place progress bar on interactive terminals', async (
   await withSandboxEnv(sandbox, async () => {
     const { update } = loadDistModule('cli/commands/update.js');
     const calls = [];
+<<<<<<< HEAD
+    let stderrOutput = '';
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    const originalIsTTY = process.stderr.isTTY;
+
+    Object.defineProperty(process.stderr, 'isTTY', {
+      configurable: true,
+      value: true,
+    });
+    process.stderr.write = ((chunk) => {
+      stderrOutput += String(chunk);
+=======
     let stdoutOutput = '';
     const originalWrite = process.stdout.write.bind(process.stdout);
     const originalIsTTY = process.stdout.isTTY;
@@ -427,6 +439,7 @@ test('update renders an in-place progress bar on interactive terminals', async (
     });
     process.stdout.write = ((chunk) => {
       stdoutOutput += String(chunk);
+>>>>>>> fd2110acbd9ee7654a8f2be078802af20924c678
       return true;
     });
 
@@ -468,6 +481,16 @@ test('update renders an in-place progress bar on interactive terminals', async (
       assert.equal(result.ok, true);
       assert.equal(calls.length, 1);
       assert.equal(calls[0].streamOutput, false);
+<<<<<<< HEAD
+      assert.match(stderrOutput, /\[##------------------\]\s+10% Checking latest available Superplan source\.\.\./);
+      assert.match(stderrOutput, /\[#############-------\]\s+65% Running installer\.\.\./);
+      assert.match(stderrOutput, /\[####################\]\s+100% Update complete\./);
+      assert.match(stderrOutput, /\r/);
+      assert.match(stderrOutput, /\n$/);
+    } finally {
+      process.stderr.write = originalWrite;
+      Object.defineProperty(process.stderr, 'isTTY', {
+=======
       assert.match(stdoutOutput, /\[##------------------\]\s+10% Checking latest available Superplan source\.\.\./);
       assert.match(stdoutOutput, /\[#############-------\]\s+65% Running installer\.\.\./);
       assert.match(stdoutOutput, /\[####################\]\s+100% Update complete\./);
@@ -476,6 +499,7 @@ test('update renders an in-place progress bar on interactive terminals', async (
     } finally {
       process.stdout.write = originalWrite;
       Object.defineProperty(process.stdout, 'isTTY', {
+>>>>>>> fd2110acbd9ee7654a8f2be078802af20924c678
         configurable: true,
         value: originalIsTTY,
       });

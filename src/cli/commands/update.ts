@@ -58,6 +58,11 @@ interface ProgressOutput {
   write(chunk: string): boolean;
 }
 
+interface ProgressOutput {
+  isTTY?: boolean;
+  write(chunk: string): boolean;
+}
+
 export type UpdateResult =
   | {
       ok: true;
